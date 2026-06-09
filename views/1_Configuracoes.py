@@ -20,7 +20,7 @@ st.title("⚙️ Painel de Controle e Configurações")
 st.markdown("Gerencie seu perfil, aprove cadastros da equipe e configure as regras do motor inteligente.")
 
 # Define quais abas o usuário tem acesso
-nomes_abas = ["👤 Meu Perfil"]
+nomes_abas = ["👤 Meu Perfil", "🔗 Meus Links Úteis"]
 
 if role == "Admin":
     nomes_abas.append("🛡️ Aprovação de Equipe")
@@ -40,7 +40,57 @@ with abas[0]:
     st.markdown("*(A alteração de senha individual estará disponível em breve).*")
 
 # ==========================================
-# ABA 2: APROVAÇÃO DE EQUIPE (ADMIN)
+# ABA 2: LINKS ÚTEIS (TODOS)
+# ==========================================
+if "🔗 Meus Links Úteis" in nomes_abas:
+    aba_idx = nomes_abas.index("🔗 Meus Links Úteis")
+    with abas[aba_idx]:
+        st.subheader("Meus Links e Atalhos Rápidos")
+        st.markdown("Cadastre aqui os links que você mais usa. Eles aparecerão na barra lateral para acesso rápido!")
+        
+        with st.form("form_novo_link", clear_on_submit=True):
+            c1, c2, c3 = st.columns([2, 3, 1])
+            with c1:
+                link_titulo = st.text_input("Título do Link", placeholder="Ex: Portal TUSS")
+            with c2:
+                link_url = st.text_input("URL (Endereço)", placeholder="Ex: https://...")
+            with c3:
+                st.write("")
+                st.write("")
+                submeteu = st.form_submit_button("Salvar Link", type="primary", use_container_width=True)
+            
+            if submeteu:
+                if link_titulo and link_url:
+                    # Usamos a tabela de textos_prestadores para salvar os links (gambiarra oficial)
+                    if db.inserir_texto_prestador(link_titulo, "__LINK__", link_url, st.session_state.get("usuario_id", "")):
+                        st.success("Link salvo com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error("Erro ao salvar link.")
+                else:
+                    st.warning("Preencha o título e a URL.")
+                    
+        st.divider()
+        st.markdown("### Links Cadastrados")
+        
+        textos_db = db.carregar_textos_prestador()
+        meus_links = [t for t in textos_db if t.get("glosas_relacionadas") == "__LINK__" and t.get("updated_by") == st.session_state.get("usuario_id", "")]
+        
+        if not meus_links:
+            st.info("Você ainda não possui links cadastrados.")
+        else:
+            for link in meus_links:
+                with st.container(border=True):
+                    col_btn, col_del = st.columns([6, 1])
+                    with col_btn:
+                        st.markdown(f"**{link.get('titulo')}** — [{link.get('texto')}]({link.get('texto')})")
+                    with col_del:
+                        if st.button("🗑️ Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
+                            if db.deletar_texto_prestador(link.get('id')):
+                                st.rerun()
+
+# ==========================================
+# ABA 3: APROVAÇÃO DE EQUIPE (ADMIN)
 # ==========================================
 if "🛡️ Aprovação de Equipe" in nomes_abas:
     aba_idx = nomes_abas.index("🛡️ Aprovação de Equipe")
@@ -347,8 +397,9 @@ if "🤖 Textos Padrões (Motor)" in nomes_abas:
         st.subheader("Textos para os Prestadores")
         st.markdown("Cadastre os textos descritivos que aparecerão para as glosas no final do relatório.")
         
-        # Carrega textos da base
-        textos = db.carregar_textos_prestador()
+        # Carrega textos da base (ignorando os links)
+        textos_brutos = db.carregar_textos_prestador()
+        textos = [t for t in textos_brutos if t.get("glosas_relacionadas") != "__LINK__"]
         
         # Controles Superiores
         c_busca, c_add = st.columns([4, 1])

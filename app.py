@@ -184,6 +184,22 @@ else:
             import streamlit.components.v1 as components
             components.html(html_sidebar, height=95)
             st.divider()
+            
+    # Expansível de Links Úteis (Disponível para todos)
+    with st.sidebar.expander("🔗 Links", expanded=False):
+        textos_db = db.carregar_textos_prestador()
+        meus_links = [t for t in textos_db if t.get("glosas_relacionadas") == "__LINK__" and t.get("updated_by") == st.session_state.get("usuario_id", "")]
+        
+        if meus_links:
+            for link in meus_links:
+                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('texto'), use_container_width=True)
+        else:
+            st.caption("Nenhum link cadastrado.")
+            
+        st.page_link("views/1_Configuracoes.py", label="➕ Adicionar Link")
+        
+    st.sidebar.divider()
+    
     if st.sidebar.button("Sair", use_container_width=True):
         # Limpa cookie
         cookie_controller.remove("sia_auth")
