@@ -814,14 +814,20 @@ if pdf_file is not None:
                     
                 st.text_area("Texto Final (Pronto para copiar):", texto_pronto, height=180)
                 
-                # Cópia automática apenas quando o botão acabou de ser clicado
-                if btn_gerar and "Nenhuma glosa" not in texto_gerado:
-                    try:
-                        import pyperclip
-                        pyperclip.copy(texto_pronto)
-                        st.toast("📋 Texto copiado automaticamente para a Área de Transferência!")
-                    except Exception:
-                        pass  # pyperclip não disponível no ambiente web (Streamlit Cloud)
+                # Botão de Copiar via Componente HTML (funciona no Streamlit Cloud)
+                import streamlit.components.v1 as components
+                texto_seguro_final = texto_pronto.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                components.html(f"""
+                <script>
+                function copyText() {{
+                    navigator.clipboard.writeText(`{texto_seguro_final}`).then(function() {{
+                        document.getElementById('btn_copiar').innerText = '✅ Copiado!';
+                        setTimeout(() => document.getElementById('btn_copiar').innerText = '📋 Copiar Texto', 2000);
+                    }});
+                }}
+                </script>
+                <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500;">📋 Copiar Texto</button>
+                """, height=45)
                 
                 if "Nenhuma glosa" not in texto_gerado:
                     if st.button("💾 Salvar Análise no Supabase"):
@@ -853,6 +859,19 @@ if pdf_file is not None:
                     if textos_sugeridos:
                         texto_mixado = mixar_textos_inteligente(textos_sugeridos)
                         st.text_area("Mensagem Combinada (Copie e cole):", texto_mixado, height=150)
+                        
+                        texto_seguro_mixado = texto_mixado.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                        components.html(f"""
+                        <script>
+                        function copyTextMix() {{
+                            navigator.clipboard.writeText(`{texto_seguro_mixado}`).then(function() {{
+                                document.getElementById('btn_copiar_mix').innerText = '✅ Copiado!';
+                                setTimeout(() => document.getElementById('btn_copiar_mix').innerText = '📋 Copiar Mensagem', 2000);
+                            }});
+                        }}
+                        </script>
+                        <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500;">📋 Copiar Mensagem</button>
+                        """, height=45)
                     else:
                         st.info("Nenhum texto adicional mapeado para as glosas detectadas.")
             else:
