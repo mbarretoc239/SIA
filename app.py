@@ -136,6 +136,21 @@ if not st.session_state.get("logado", False):
 else:
     role = st.session_state.get("role_interno", "Contas")
     
+    # Expansível de Links Úteis (Disponível para todos)
+    with st.sidebar.expander("🔗 Links", expanded=False):
+        textos_db = db.carregar_textos_prestador()
+        meus_links = [t for t in textos_db if t.get("glosas_relacionadas") == "__LINK__" and t.get("updated_by") == st.session_state.get("usuario_id", "")]
+        
+        if meus_links:
+            for link in meus_links:
+                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('texto'), use_container_width=True)
+        else:
+            st.caption("Nenhum link cadastrado.")
+            
+        st.page_link("views/1_Configuracoes.py", label="➕ Adicionar Link")
+        
+    st.sidebar.divider()
+    
     st.sidebar.title(f"Olá, {st.session_state.get('auditor_nome', 'Auditor')}")
     st.sidebar.caption(f"Cargo: {role}")
     
@@ -157,21 +172,6 @@ else:
     pg = st.navigation(paginas)
     pg.run()
     
-    st.sidebar.divider()
-    
-    # Expansível de Links Úteis (Disponível para todos)
-    with st.sidebar.expander("🔗 Links", expanded=False):
-        textos_db = db.carregar_textos_prestador()
-        meus_links = [t for t in textos_db if t.get("glosas_relacionadas") == "__LINK__" and t.get("updated_by") == st.session_state.get("usuario_id", "")]
-        
-        if meus_links:
-            for link in meus_links:
-                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('texto'), use_container_width=True)
-        else:
-            st.caption("Nenhum link cadastrado.")
-            
-        st.page_link("views/1_Configuracoes.py", label="➕ Adicionar Link")
-        
     st.sidebar.divider()
     
     if role in ["Auditor", "CISO", "Gestor", "Admin"]:
