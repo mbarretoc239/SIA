@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import io
 from shared.database import DatabaseManager
-from core.settings import CLASSIFICACAO_GLOSAS_PADRAO
 
 st.set_page_config(page_title="Configurações", page_icon="⚙️", layout="wide")
 
@@ -117,12 +116,14 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                     st.error(f"Erro ao ler CSV: {e}")
                     
         with tab_interna2:
-            st.markdown("Navegue pelas glosas carregadas do arquivo local (CSV Legado).")
-            df_glosas = pd.read_csv(io.StringIO(CLASSIFICACAO_GLOSAS_PADRAO), sep=';', dtype=str).fillna("")
+            st.markdown("Navegue pelas glosas cadastradas no banco de dados.")
+            rows = db._get("glosas_padrao?select=codigo,descricao,tipo_glosa,nivel,sub_glosa,descricao_sub_glosa&order=codigo")
+            df_glosas = pd.DataFrame(rows)
 
-            filtro_tipo = st.selectbox("Filtrar por Tipo:", ["Todos"] + list(df_glosas["TIPO DE GLOSA"].unique()))
-            if filtro_tipo != "Todos":
-                df_glosas = df_glosas[df_glosas["TIPO DE GLOSA"] == filtro_tipo]
+            if not df_glosas.empty:
+                filtro_tipo = st.selectbox("Filtrar por Tipo:", ["Todos"] + list(df_glosas["tipo_glosa"].dropna().unique()))
+                if filtro_tipo != "Todos":
+                    df_glosas = df_glosas[df_glosas["tipo_glosa"] == filtro_tipo]
 
             st.dataframe(df_glosas, use_container_width=True)
                 
@@ -130,7 +131,8 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             st.markdown("Pesquise glosas existentes para editar sua classificação, ou adicione novas.")
             
             # 1. Carrega todas as glosas (Base + Customizadas)
-            df_base = pd.read_csv(io.StringIO(CLASSIFICACAO_GLOSAS_PADRAO), sep=';', dtype=str).fillna("")
+            rows = db._get("glosas_padrao?select=codigo,descricao,tipo_glosa,nivel,sub_glosa,descricao_sub_glosa")
+            df_base = pd.DataFrame(rows).fillna("")
             
             criticas_base = set()
             try:
@@ -149,9 +151,9 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             # Monta dicionário master
             dict_glosas = {}
             for _, row in df_base.iterrows():
-                cod = str(row.get('CÓDIGO DE GLOSA', row.iloc[0])).strip()
-                desc = str(row.get('DESCRIÇÃO OFICIAL DA GLOSA', row.iloc[1])).strip()
-                tipo = str(row.get('TIPO DE GLOSA', row.iloc[2] if len(row)>2 else "Técnica")).strip()
+                cod = str(row.get('codigo', "")).strip()
+                desc = str(row.get('descricao', "")).strip()
+                tipo = str(row.get('tipo_glosa', "Técnica")).strip()
                 dict_glosas[cod] = {"codigo": cod, "descricao": desc, "tipo": tipo, "is_critica": (cod in criticas_base), "origem": "Base"}
                 
             # Sobrepõe customizadas
@@ -233,16 +235,14 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             if em_edicao != "NOVA":
                 codigo_pai = em_edicao
 
-                # Sub-glosas do CSV base (linhas repetidas com SUB GL0SA preenchido)
-                df_todas = pd.read_csv(io.StringIO(CLASSIFICACAO_GLOSAS_PADRAO), sep=';', dtype=str).fillna("")
-                col_glosa   = df_todas.columns[0]  # "Glosa"
-                col_sub_num = df_todas.columns[4]  # "SUB GL0SA" (zero, não letra O)
-                col_sub_desc= df_todas.columns[5]  # "DESCRIÇÃO SUB GLOSA"
+                # Sub-glosas do banco (linhas com sub_glosa preenchido)
+                rows = db._get("glosas_padrao?select=codigo,sub_glosa,descricao_sub_glosa")
+                df_todas = pd.DataFrame(rows).fillna("")
 
                 subs_csv = df_todas[
-                    (df_todas[col_glosa].str.strip() == str(codigo_pai)) &
-                    (df_todas[col_sub_num].str.strip() != "")
-                ][[col_sub_num, col_sub_desc]].copy()
+                    (df_todas["codigo"].astype(str).str.strip() == str(codigo_pai)) &
+                    (df_todas["sub_glosa"].astype(str).str.strip() != "")
+                ][["sub_glosa", "descricao_sub_glosa"]].copy()
 
                 # Sub-glosas customizadas do Supabase (código "438.X")
                 subs_custom = sorted(
@@ -256,8 +256,8 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                 if not subs_csv.empty:
                     st.caption("📋 Da base (CSV)")
                     for _, sg_row in subs_csv.iterrows():
-                        num  = sg_row[col_sub_num].strip()
-                        desc = sg_row[col_sub_desc].strip()
+                        num  = str(sg_row["sub_glosa"]).strip()
+                        desc = str(sg_row["descricao_sub_glosa"]).strip()
                         sg_c1, sg_c2 = st.columns([1, 6])
                         sg_c1.markdown(f"Sub **{num}**")
                         sg_c2.markdown(desc if desc else "*sem descrição*")

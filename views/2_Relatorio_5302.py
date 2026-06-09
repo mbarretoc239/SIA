@@ -16,20 +16,7 @@ if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
     st.stop()
 
-MENSAGENS_DB_PATH = r'C:\Users\matheus.cardoso\AppData\Roaming\AuditoriaOdonto\mensagens_prestador.json'
 
-def carregar_mensagens():
-    if os.path.exists(MENSAGENS_DB_PATH):
-        try:
-            with open(MENSAGENS_DB_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            return []
-    return []
-
-def salvar_mensagens(mensagens):
-    with open(MENSAGENS_DB_PATH, 'w', encoding='utf-8') as f:
-        json.dump(mensagens, f, ensure_ascii=False, indent=4)
 
 def salvar_no_supabase(arquivo_origem, texto_gerado, df_final, meta):
     import requests
@@ -145,46 +132,36 @@ def mixar_textos_inteligente(textos):
             
     return saudacao_final + "\n" + texto_combinado + despedida_final
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def carregar_mapa_glosas():
-    from core.settings import CLASSIFICACAO_GLOSAS_PADRAO
-    import io, csv
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
     mapa = {}
     try:
-        with io.StringIO(CLASSIFICACAO_GLOSAS_PADRAO) as f:
-            reader = csv.reader(f, delimiter=';')
-            next(reader, None) # header
-            for row in reader:
-                if len(row) >= 2:
-                    mapa[str(row[0]).strip()] = row[1].strip()
-    except Exception as e:
-        st.error(f"Erro ao carregar glosas_base: {e}")
-        
-    # Integração com Glosas Customizadas (Nuvem)
+        rows = db._get("glosas_padrao?select=codigo,descricao")
+        for r in rows:
+            mapa[r['codigo'].strip()] = r['descricao'].strip()
+    except Exception:
+        pass
+    # Merge com customizadas (override)
     try:
-        from shared.database import DatabaseManager
-        db = DatabaseManager()
-        glosas_banco = db.carregar_glosas_customizadas()
-        for gb in glosas_banco:
+        for gb in db.carregar_glosas_customizadas():
             mapa[str(gb['codigo_glosa']).strip()] = str(gb['descricao']).strip()
-    except Exception as e:
-        pass # Falha silenciosa no banco, mantém apenas o CSV
-        
+    except Exception:
+        pass
     return mapa
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def carregar_mapa_procedimentos():
-    caminho = r'C:\Users\matheus.cardoso\AppData\Roaming\AuditoriaOdonto\procedimentos_base.csv'
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
     mapa = {}
     try:
-        with open(caminho, 'r', encoding='utf-8-sig', errors='ignore') as f:
-            reader = csv.reader(f, delimiter=';')
-            next(reader, None) # header
-            for row in reader:
-                if len(row) >= 2:
-                    mapa[str(row[0]).strip()] = row[1].strip()
-    except Exception as e:
-        st.error(f"Erro ao carregar procedimentos_base.csv: {e}")
+        rows = db._get("tabela_procedimentos?select=codigo_tuss,descricao")
+        for r in rows:
+            mapa[str(r['codigo_tuss']).strip()] = r['descricao'].strip()
+    except Exception:
+        pass
     return mapa
 
 @st.cache_data(ttl=60)
@@ -222,19 +199,17 @@ def carregar_glosas_criticas():
         pass
     return criticas
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def carregar_mapa_subglosas():
-    from core.settings import CLASSIFICACAO_GLOSAS_PADRAO
-    import io, csv
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
     mapa = {}
     try:
-        with io.StringIO(CLASSIFICACAO_GLOSAS_PADRAO) as f:
-            reader = csv.reader(f, delimiter=';')
-            next(reader, None)
-            for row in reader:
-                if len(row) > 5 and str(row[4]).strip() and str(row[5]).strip():
-                    mapa[(str(row[0]).strip(), str(row[4]).strip())] = str(row[5]).strip()
-    except Exception as e:
+        rows = db._get("glosas_padrao?select=codigo,sub_glosa,descricao_sub_glosa&sub_glosa=neq.")
+        for r in rows:
+            if r.get('sub_glosa') and r.get('descricao_sub_glosa'):
+                mapa[(r['codigo'].strip(), r['sub_glosa'].strip())] = r['descricao_sub_glosa'].strip()
+    except Exception:
         pass
     return mapa
 

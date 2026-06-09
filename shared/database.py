@@ -20,6 +20,11 @@ class DatabaseManager:
             "Prefer": "return=representation"
         }
 
+    def _get(self, endpoint: str) -> list:
+        url = f"{self.supabase_url}/rest/v1/{endpoint}"
+        r = requests.get(url, headers=self.headers)
+        return r.json() if r.ok else []
+
     # --- Segurança e Hashing ---
     def criptografar(self, texto: str) -> str:
         if not texto: return ""
