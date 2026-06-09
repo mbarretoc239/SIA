@@ -13,6 +13,10 @@ st.set_page_config(
 db = DatabaseManager()
 st.session_state.db = db
 
+# Inicializa o controlador de cookies
+from streamlit_cookies_controller import CookieController
+cookie_controller = CookieController()
+
 def validar_senha(senha):
     if len(senha) < 6: return False, "A senha deve ter pelo menos 6 caracteres."
     if not re.search(r"[A-Z]", senha): return False, "A senha deve conter pelo menos uma letra maiúscula."
@@ -48,6 +52,12 @@ def tela_login():
                             st.session_state["auditor_nome"] = "Administrador"
                             st.session_state["role_interno"] = "Admin"
                             st.session_state["usuario_id"] = "000-000-000"
+                            st.session_state["equipe"] = "Gestor"
+                            
+                            from core.auth import criar_token_sessao
+                            token = criar_token_sessao("000-000-000", "Administrador", "Admin", "Gestor")
+                            cookie_controller.set("sia_auth", token, max_age=2592000)
+                            
                             st.rerun()
                         else:
                             with st.spinner("Autenticando..."):
@@ -65,6 +75,11 @@ def tela_login():
                                         st.session_state["role_interno"] = user_data["role_interno"]
                                         st.session_state["equipe"] = user_data["equipe"]
                                         st.session_state["usuario_id"] = user_data["id"]
+                                        
+                                        from core.auth import criar_token_sessao
+                                        token = criar_token_sessao(user_data["id"], primeiro_nome, user_data["role_interno"], user_data["equipe"])
+                                        cookie_controller.set("sia_auth", token, max_age=2592000)
+                                        
                                         st.rerun()
                                 else:
                                     st.error("Usuário ou senha incorretos.")
@@ -100,6 +115,20 @@ def tela_login():
                                     st.success("✅ Aguarde aprovação do seu cadastro. Em breve será feito contato.")
                                 else:
                                     st.error("Erro ao cadastrar. O usuário SIGO já existe?")
+
+# --- AUTO LOGIN (Via Cookies) ---
+if not st.session_state.get("logado", False):
+    token = cookie_controller.get("sia_auth")
+    if token:
+        from core.auth import decifrar_token_sessao
+        dados = decifrar_token_sessao(token)
+        if dados:
+            st.session_state["logado"] = True
+            st.session_state["usuario_id"] = dados.get("id")
+            st.session_state["auditor_nome"] = dados.get("nome")
+            st.session_state["role_interno"] = dados.get("role")
+            st.session_state["equipe"] = dados.get("equipe")
+            st.rerun()
 
 # --- CONTROLE DE ROTAS (RBAC) ---
 if not st.session_state.get("logado", False):
@@ -156,6 +185,8 @@ else:
             components.html(html_sidebar, height=95)
             st.divider()
     if st.sidebar.button("Sair", use_container_width=True):
+        # Limpa cookie
+        cookie_controller.remove("sia_auth")
         # Limpa sessão
         st.session_state.clear()
         st.rerun()
