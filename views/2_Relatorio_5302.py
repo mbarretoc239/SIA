@@ -88,11 +88,12 @@ def mixar_textos_inteligente(textos):
     if not textos: return ""
     if len(textos) == 1: return textos[0]
     
+    # Regex melhorado para capturar as diversas formas de despedida e saudações
     padrao_saudacao = re.compile(r"^(CARO PRESTADOR,|PREZADO\(A\) PRESTADOR\(A\),?|Prezado\(a\) Prestador\(a\),?)\s*", re.IGNORECASE)
-    padrao_despedida = re.compile(r"(EM CASO[S]? DE DÚVIDA[S]?.*?4002[^\d]*2722\.?)", re.IGNORECASE | re.DOTALL)
+    padrao_despedida = re.compile(r"(EM CASO[S]? DE DÚVIDA[S]?.*?(?:4002[\W_]*2722)\.?)", re.IGNORECASE | re.DOTALL)
     
     saudacao_final = "CARO PRESTADOR,\n"
-    despedida_final = "\n\nEM CASOS DE DÚVIDAS, ENTRAR EM CONTATO COM A CAP, PELO TELEFONE 4002-2722."
+    despedida_final = "\n\nEM CASO DE DÚVIDAS, ENTRE EM CONTATO COM A CAP, PELO TELEFONE 4002-2722."
     
     corpos = []
     for t in textos:
@@ -125,9 +126,15 @@ def mixar_textos_inteligente(textos):
         if is_upper:
             conectivo = conectivo.upper()
         else:
-            if paragrafo and paragrafo[0].isupper() and (len(paragrafo) == 1 or paragrafo[1].islower()):
-                paragrafo = paragrafo[0].lower() + paragrafo[1:]
+            if paragrafo:
+                primeira_palavra = paragrafo.split()[0]
+                # Só reduzimos a primeira letra se:
+                # 1. A primeira palavra não for totalmente maiúscula (ex: não reduzimos "RX", "PANORÂMICA")
+                # 2. OU a primeira palavra for de uma única letra (ex: "A", "O")
+                if not primeira_palavra.isupper() or len(primeira_palavra) == 1:
+                    paragrafo = paragrafo[0].lower() + paragrafo[1:]
                 
+        # Junta em texto corrido (mantendo parágrafos simples, sem bullets)
         texto_combinado += "\n\n" + conectivo + paragrafo
             
     return saudacao_final + "\n" + texto_combinado + despedida_final
@@ -172,24 +179,9 @@ def carregar_mapa_procedimentos():
 
 @st.cache_data(ttl=60)
 def carregar_glosas_criticas():
-    caminho = r'C:\Users\matheus.cardoso\AppData\Roaming\AuditoriaOdonto\CLASSIFICACAO_GLOSAS.csv'
-    criticas = set()
-    try:
-        with open(caminho, 'r', encoding='utf-8-sig', errors='ignore') as f:
-            reader = csv.reader(f, delimiter=';')
-            headers = next(reader, None)
-            tipo_idx = headers.index('TIPO') if headers and 'TIPO' in headers else -1
-            if tipo_idx != -1:
-                for row in reader:
-                    if len(row) > tipo_idx and str(row[tipo_idx]).strip().upper() == 'CRITICA':
-                        criticas.add(str(row[0]).strip())
-    except Exception:
-        criticas = {'438', '450', '463', '480'}
+    criticas = {'438', '450', '463', '480'} # Fallback mínimo
     
-    if not criticas:
-        criticas = {'438', '450', '463', '480'}
-        
-    # Integração com Nuvem (Override)
+    # Busca todas as definições no Supabase
     try:
         from shared.database import DatabaseManager
         db = DatabaseManager()
@@ -203,6 +195,7 @@ def carregar_glosas_criticas():
                     criticas.remove(cod)
     except Exception as e:
         pass
+        
     return criticas
 
 @st.cache_data(ttl=300)

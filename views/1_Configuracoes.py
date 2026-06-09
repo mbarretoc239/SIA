@@ -134,19 +134,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             rows = db._get("glosas_padrao?select=codigo,descricao,tipo_glosa,nivel,sub_glosa,descricao_sub_glosa")
             df_base = pd.DataFrame(rows).fillna("")
             
-            criticas_base = set()
-            try:
-                caminho_c = r'C:\Users\matheus.cardoso\AppData\Roaming\AuditoriaOdonto\CLASSIFICACAO_GLOSAS.csv'
-                import csv
-                with open(caminho_c, 'r', encoding='utf-8-sig', errors='ignore') as f:
-                    reader = csv.reader(f, delimiter=';')
-                    headers = next(reader, None)
-                    if headers and 'TIPO' in headers:
-                        t_idx = headers.index('TIPO')
-                        for row in reader:
-                            if len(row) > t_idx and str(row[t_idx]).strip().upper() == 'CRITICA':
-                                criticas_base.add(str(row[0]).strip())
-            except: pass
+            criticas_base = {'438', '450', '463', '480'} # Fallback mínimo
             
             # Monta dicionário master
             dict_glosas = {}
