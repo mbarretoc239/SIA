@@ -1,0 +1,70 @@
+# --- Python Defaults ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- PyInstaller ---
+*.manifest
+*.spec
+
+# --- Virtual Environments ---
+venv/
+env/
+.env
+.streamlit/secrets.toml
+.venv
+ENV/
+
+# --- IDEs / Editores ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# --- Banco de Dados e Caches locais ---
+*.sqlite3
+*.db
+temp/
+
+# --- Arquivos temporários e de Teste do Projeto SIA ---
+# Scripts de scratch criados durante o desenvolvimento
+scratch/
+shoot*.py
+test*.py
+# Logs e outputs textuais soltos
+*.log
+*.txt
+!requirements.txt
+# Imagens geradas temporariamente para testes
+*.png
+*.jpg
+*.jpeg
+
+# --- Scripts de dev/automação com caminhos locais hardcoded ---
+dump.py
+dump2.py
+automacao_hapvida.py
+main.py
+
+# --- Arquivos de dados locais que não devem ir pro repo ---
+CHANGELOG_GLOSAS.md
+*.jsonl
