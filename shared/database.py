@@ -206,3 +206,55 @@ class DatabaseManager:
         
         response = requests.post(url, headers=self.headers, json=data)
         return response.status_code in [200, 201]
+
+    # --- Operações de Banco (Links Úteis Relacionais) ---
+    def inserir_link_util(self, usuario_id, titulo, url):
+        # 1. Upsert na tabela links para garantir que a URL exista de forma única
+        url_links = f"{self.supabase_url}/rest/v1/links"
+        headers_upsert = self.headers.copy()
+        headers_upsert["Prefer"] = "return=representation, resolution=merge-duplicates"
+        data_link = {"url": url}
+        
+        r_link = requests.post(url_links, headers=headers_upsert, json=data_link)
+        if r_link.status_code not in [200, 201]:
+            return False
+            
+        try:
+            link_id = r_link.json()[0]["id"]
+        except (IndexError, KeyError):
+            return False
+            
+        # 2. Inserir a relação na tabela usuario_links
+        url_usr = f"{self.supabase_url}/rest/v1/usuario_links"
+        data_usr = {
+            "usuario_id": usuario_id,
+            "link_id": link_id,
+            "titulo": titulo
+        }
+        # Ignora se já existir essa relação exata
+        headers_usr = self.headers.copy()
+        headers_usr["Prefer"] = "resolution=ignore-duplicates"
+        r_usr = requests.post(url_usr, headers=headers_usr, json=data_usr)
+        return r_usr.status_code in [200, 201]
+
+    def carregar_meus_links(self, usuario_id):
+        # O PostgREST suporta Joins através de foreign keys:
+        url = f"{self.supabase_url}/rest/v1/usuario_links?usuario_id=eq.{usuario_id}&select=id,titulo,link_id,links(url)"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            dados = response.json()
+            resultados = []
+            for d in dados:
+                url_real = d.get('links', {}).get('url', '') if d.get('links') else ''
+                resultados.append({
+                    "id": d["id"],
+                    "titulo": d["titulo"],
+                    "url": url_real
+                })
+            return resultados
+        return []
+
+    def deletar_link_util(self, id_relacao):
+        url = f"{self.supabase_url}/rest/v1/usuario_links?id=eq.{id_relacao}"
+        response = requests.delete(url, headers=self.headers)
+        return response.status_code in [200, 204]

@@ -138,12 +138,11 @@ else:
     
     # Expansível de Links Úteis (Disponível para todos)
     with st.sidebar.expander("🔗 Links", expanded=False):
-        textos_db = db.carregar_textos_prestador()
-        meus_links = [t for t in textos_db if t.get("glosas_relacionadas") == "__LINK__" and t.get("updated_by") == st.session_state.get("usuario_id", "")]
+        meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
         
         if meus_links:
             for link in meus_links:
-                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('texto'), use_container_width=True)
+                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('url'), use_container_width=True)
         else:
             st.caption("Nenhum link cadastrado.")
             

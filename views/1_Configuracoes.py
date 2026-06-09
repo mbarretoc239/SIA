@@ -61,8 +61,7 @@ if "🔗 Meus Links Úteis" in nomes_abas:
             
             if submeteu:
                 if link_titulo and link_url:
-                    # Usamos a tabela de textos_prestadores para salvar os links (gambiarra oficial)
-                    if db.inserir_texto_prestador(link_titulo, "__LINK__", link_url, st.session_state.get("usuario_id", "")):
+                    if db.inserir_link_util(st.session_state.get("usuario_id", ""), link_titulo, link_url):
                         st.success("Link salvo com sucesso!")
                         st.rerun()
                     else:
@@ -73,8 +72,7 @@ if "🔗 Meus Links Úteis" in nomes_abas:
         st.divider()
         st.markdown("### Links Cadastrados")
         
-        textos_db = db.carregar_textos_prestador()
-        meus_links = [t for t in textos_db if t.get("glosas_relacionadas") == "__LINK__" and t.get("updated_by") == st.session_state.get("usuario_id", "")]
+        meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
         
         if not meus_links:
             st.info("Você ainda não possui links cadastrados.")
@@ -83,10 +81,10 @@ if "🔗 Meus Links Úteis" in nomes_abas:
                 with st.container(border=True):
                     col_btn, col_del = st.columns([6, 1])
                     with col_btn:
-                        st.markdown(f"**{link.get('titulo')}** — [{link.get('texto')}]({link.get('texto')})")
+                        st.markdown(f"**{link.get('titulo')}** — [{link.get('url')}]({link.get('url')})")
                     with col_del:
                         if st.button("🗑️ Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
-                            if db.deletar_texto_prestador(link.get('id')):
+                            if db.deletar_link_util(link.get('id')):
                                 st.rerun()
 
 # ==========================================
@@ -397,7 +395,7 @@ if "🤖 Textos Padrões (Motor)" in nomes_abas:
         st.subheader("Textos para os Prestadores")
         st.markdown("Cadastre os textos descritivos que aparecerão para as glosas no final do relatório.")
         
-        # Carrega textos da base (ignorando os links)
+        # Carrega textos da base (não tem mais a gambiarra do link, mas por segurança filtramos)
         textos_brutos = db.carregar_textos_prestador()
         textos = [t for t in textos_brutos if t.get("glosas_relacionadas") != "__LINK__"]
         
