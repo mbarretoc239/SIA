@@ -829,7 +829,7 @@ if pdf_file is not None:
                     }}
                     </script>
                     <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;">📋 Copiar Texto</button>
-                    """, height=45)
+                    """, height=65)
                 
                 with col_btn_save:
                     if "Nenhuma glosa" not in texto_gerado:
@@ -874,7 +874,7 @@ if pdf_file is not None:
                         }}
                         </script>
                         <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500;">📋 Copiar Mensagem</button>
-                        """, height=45)
+                        """, height=65)
                     else:
                         st.info("Nenhum texto adicional mapeado para as glosas detectadas.")
             else:
