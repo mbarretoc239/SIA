@@ -129,6 +129,32 @@ else:
     pg.run()
     
     st.sidebar.divider()
+    
+    if role in ["Auditor", "CISO", "Gestor", "Admin"]:
+        st.sidebar.markdown("**Cópia Rápida (Cabeçalhos)**")
+        
+        texto_com = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS"
+        texto_sem = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS"
+        
+        html_sidebar = f"""
+        <script>
+        function copyFast(txt, id, original_text) {{
+            navigator.clipboard.writeText(txt).then(function() {{
+                var btn = document.getElementById(id);
+                btn.innerText = '✅ Copiado!';
+                setTimeout(() => btn.innerText = original_text, 2000);
+            }});
+        }}
+        </script>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button id="btn_f1" onclick="copyFast(`{texto_com}`, 'btn_f1', '📋 Com especialidades')" style="background-color: #2b2b36; color: white; border: 1px solid rgba(250,250,250,0.2); padding: 0.4rem 0.6rem; border-radius: 0.4rem; cursor: pointer; font-family: sans-serif; font-size: 14px; text-align: left;">📋 Com especialidades</button>
+            <button id="btn_f2" onclick="copyFast(`{texto_sem}`, 'btn_f2', '📋 Sem especialidades')" style="background-color: #2b2b36; color: white; border: 1px solid rgba(250,250,250,0.2); padding: 0.4rem 0.6rem; border-radius: 0.4rem; cursor: pointer; font-family: sans-serif; font-size: 14px; text-align: left;">📋 Sem especialidades</button>
+        </div>
+        """
+        with st.sidebar:
+            import streamlit.components.v1 as components
+            components.html(html_sidebar, height=95)
+            st.divider()
     if st.sidebar.button("Sair", use_container_width=True):
         # Limpa sessão
         st.session_state.clear()
