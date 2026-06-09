@@ -140,7 +140,10 @@ def carregar_mapa_glosas():
     try:
         rows = db._get("glosas_padrao?select=codigo,descricao")
         for r in rows:
-            mapa[r['codigo'].strip()] = r['descricao'].strip()
+            codigo = str(r.get('codigo', '')).strip()
+            descricao = str(r.get('descricao', '')).strip()
+            if codigo:
+                mapa[codigo] = descricao
     except Exception:
         pass
     # Merge com customizadas (override)
@@ -159,7 +162,10 @@ def carregar_mapa_procedimentos():
     try:
         rows = db._get("tabela_procedimentos?select=codigo_tuss,descricao")
         for r in rows:
-            mapa[str(r['codigo_tuss']).strip()] = r['descricao'].strip()
+            codigo = str(r.get('codigo_tuss', '')).strip()
+            descricao = str(r.get('descricao', '')).strip()
+            if codigo:
+                mapa[codigo] = descricao
     except Exception:
         pass
     return mapa
@@ -207,8 +213,11 @@ def carregar_mapa_subglosas():
     try:
         rows = db._get("glosas_padrao?select=codigo,sub_glosa,descricao_sub_glosa&sub_glosa=neq.")
         for r in rows:
-            if r.get('sub_glosa') and r.get('descricao_sub_glosa'):
-                mapa[(r['codigo'].strip(), r['sub_glosa'].strip())] = r['descricao_sub_glosa'].strip()
+            cod = str(r.get('codigo', '')).strip()
+            sub = str(r.get('sub_glosa', '')).strip()
+            desc = str(r.get('descricao_sub_glosa', '')).strip()
+            if cod and sub and desc:
+                mapa[(cod, sub)] = desc
     except Exception:
         pass
     return mapa
@@ -786,7 +795,7 @@ if pdf_file is not None:
                 
             if st.session_state.get("mostrar_texto", False):
                 # O tipo de geracao passado dita a regra interna
-                tipo = "Versão Resumida" if "Resumida" in opcao_agrupamento else "Versão Completa"
+                tipo = opcao_agrupamento
                 
                 # Vamos injetar "Só Glosas Críticas" como flag temporaria na hora de chamar
                 if "Somente" in opcao_filtro:
