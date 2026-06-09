@@ -33,7 +33,7 @@ def decifrar_token_sessao(token: str) -> dict:
         return None
     f = get_fernet()
     try:
-        dados_bytes = f.decrypt(token.encode('utf-8'), ttl=2592000) # Expira em 30 dias (30 * 24 * 60 * 60)
+        dados_bytes = f.decrypt(token.encode('utf-8'), ttl=28800) # Expira em 8 horas (8 * 60 * 60)
         dados = json.loads(dados_bytes.decode('utf-8'))
         return dados
     except Exception:

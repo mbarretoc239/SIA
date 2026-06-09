@@ -56,7 +56,7 @@ def tela_login():
                             
                             from core.auth import criar_token_sessao
                             token = criar_token_sessao("000-000-000", "Administrador", "Admin", "Gestor")
-                            cookie_controller.set("sia_auth", token, max_age=2592000)
+                            cookie_controller.set("sia_auth", token, max_age=28800)
                             
                             st.rerun()
                         else:
@@ -78,7 +78,7 @@ def tela_login():
                                         
                                         from core.auth import criar_token_sessao
                                         token = criar_token_sessao(user_data["id"], primeiro_nome, user_data["role_interno"], user_data["equipe"])
-                                        cookie_controller.set("sia_auth", token, max_age=2592000)
+                                        cookie_controller.set("sia_auth", token, max_age=28800)
                                         
                                         st.rerun()
                                 else:
