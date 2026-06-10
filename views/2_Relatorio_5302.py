@@ -12,11 +12,22 @@ import os
 import uuid
 
 from core.glass_design_system import render_glass_table
+from core.settings import tem_acesso_modulo
+from shared.database import DatabaseManager
 
 st.set_page_config(page_title="Relatório 5302", page_icon="", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
+    st.stop()
+
+if "db" not in st.session_state:
+    st.session_state.db = DatabaseManager()
+
+_role = st.session_state.get("role_interno", "Contas")
+_permissoes = st.session_state.db.carregar_permissoes_modulos()
+if not tem_acesso_modulo(_permissoes, _role, "relatorio_5302"):
+    st.error("Você não tem permissão para acessar este módulo.")
     st.stop()
 
 

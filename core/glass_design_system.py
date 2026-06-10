@@ -807,7 +807,7 @@ def glass_banner(text: str, color: str = "#4a9eff", icon: str = "ℹ️") -> Non
     """, unsafe_allow_html=True)
 
 
-def render_glass_table(df, fmt: dict = None, max_height: int = 440, html_cols=None, footer_html: str = None) -> None:
+def render_glass_table(df, fmt: dict = None, max_height: int = 440, html_cols=None, footer_html: str = None, wrap_cols=None) -> None:
     """
     Renderiza uma tabela somente-leitura com o visual glass (header escuro fixo,
     linhas com hover, ordenação por coluna e filtro por valores via dropdown).
@@ -827,6 +827,8 @@ def render_glass_table(df, fmt: dict = None, max_height: int = 440, html_cols=No
         max_height  altura máxima da tabela (px) antes de rolar.
         html_cols   colunas cujo conteúdo já é HTML (não será escapado).
         footer_html HTML opcional exibido em uma barra de rodapé.
+        wrap_cols   colunas que devem quebrar linha (texto longo) em vez de
+                    truncar em uma linha só.
 
     Exemplo:
         render_glass_table(df, fmt={"Reaj. (%)": "{:.4f}%"})
@@ -841,6 +843,7 @@ def render_glass_table(df, fmt: dict = None, max_height: int = 440, html_cols=No
                 )
 
     _html_cols = set(html_cols) if html_cols else set()
+    _wrap_cols = set(wrap_cols) if wrap_cols else set()
     n_cols = len(df_display.columns)
     headers_html = ''.join(
         f'<th class="hd" onclick="sortBy({i})">'
@@ -850,7 +853,9 @@ def render_glass_table(df, fmt: dict = None, max_height: int = 440, html_cols=No
     )
 
     def _cell(col, v):
-        return f'<td>{str(v)}</td>' if col in _html_cols else f'<td>{html_lib.escape(str(v))}</td>'
+        cls = ' class="wrap"' if col in _wrap_cols else ''
+        content = str(v) if col in _html_cols else html_lib.escape(str(v))
+        return f'<td{cls}>{content}</td>'
 
     rows_html = ''.join(
         f'<tr style="--delay: {i};" data-orig="{i}">' +
@@ -889,6 +894,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}}
 .hd.on .arr{{opacity:1;color:#5aafff}}
 .hd.srt .arr{{opacity:1;color:#a78bfa}}
 td{{padding:9px 12px;color:rgba(255,255,255,0.88);border-bottom:1px solid rgba(255,255,255,0.05);white-space:nowrap}}
+td.wrap{{white-space:normal;word-break:break-word;min-width:160px;max-width:380px;line-height:1.5}}
 tbody tr:last-child td{{border-bottom:none}}
 tbody tr:hover{{background:rgba(255,255,255,0.04)}}
 .dd{{position:fixed;background:rgba(5,14,36,0.98);backdrop-filter:blur(28px);
@@ -984,8 +990,11 @@ document.addEventListener('mousedown',function(e){{
 }});
 var SORT={{ci:-1,dir:0}};
 function parseVal(s){{
-  var n=parseFloat(String(s).replace(/[R$%+\\s]/g,'').replace(/,/g,''));
-  return isNaN(n)?String(s):n;
+  var t=String(s).trim();
+  var dm=t.match(/^(\\d{{2}})\\/(\\d{{2}})\\/(\\d{{4}})$/);
+  if(dm)return parseInt(dm[3]+dm[2]+dm[1],10);
+  var n=parseFloat(t.replace(/[R$%+\\s]/g,'').replace(/,/g,''));
+  return isNaN(n)?t:n;
 }}
 function sortBy(ci){{
   if(SORT.ci===ci){{SORT.dir=(SORT.dir+1)%3;}}else{{SORT.ci=ci;SORT.dir=1;}}

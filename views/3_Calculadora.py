@@ -1,6 +1,22 @@
 import streamlit as st
 
+from core.settings import tem_acesso_modulo
+from shared.database import DatabaseManager
+
 st.set_page_config(page_title="Calculadora de Glosa", page_icon="", layout="centered")
+
+if not st.session_state.get("logado", False):
+    st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
+    st.stop()
+
+if "db" not in st.session_state:
+    st.session_state.db = DatabaseManager()
+
+_role = st.session_state.get("role_interno", "Contas")
+_permissoes = st.session_state.db.carregar_permissoes_modulos()
+if not tem_acesso_modulo(_permissoes, _role, "calculadora_glosa"):
+    st.error("Você não tem permissão para acessar este módulo.")
+    st.stop()
 
 st.title(" Calculadora de Glosa")
 st.markdown("Calcule rapidamente o percentual glosado através dos valores cobrados e pagos.")

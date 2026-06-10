@@ -25,10 +25,12 @@ nomes_abas = [" Meu Perfil", " Meus Links Úteis"]
 
 if role == "Admin":
     nomes_abas.append("️ Aprovação de Equipe")
-    
+    nomes_abas.append(" Debug/Testes")
+
 if role in ["Admin", "Gestor"]:
     nomes_abas.append(" Tabelas Base e Glosas")
     nomes_abas.append(" Textos Padrões (Motor)")
+    nomes_abas.append(" Permissões de Acesso")
 
 abas = st.tabs(nomes_abas)
 
@@ -129,6 +131,80 @@ if "️ Aprovação de Equipe" in nomes_abas:
             st.divider()
             st.markdown(f"**Usuários Ativos e Bloqueados ({len(ativos) + len(df_users[df_users['status'] == 'Bloqueado'])})**")
             render_glass_table(df_users[df_users["status"] != "Pendente"][["usuario_sigo", "nome_completo", "equipe", "role_interno", "status", "created_at"]])
+
+# ==========================================
+# ABA: DEBUG/TESTES (ADMIN)
+# ==========================================
+if " Debug/Testes" in nomes_abas:
+    aba_idx = nomes_abas.index(" Debug/Testes")
+    with abas[aba_idx]:
+        st.subheader("Ferramentas de Teste")
+        st.caption("Disponível apenas para Admin. Use para validar alinhamentos, popups de ciência e notificações ao vivo.")
+
+        usuario_id_admin = st.session_state.get("usuario_id")
+
+        # --- 1. Registrar alinhamento de teste ---
+        st.markdown("### 1. Registrar Alinhamento de Teste")
+        st.caption("Cria um alinhamento com prefixo [TESTE] — fácil de identificar e remover depois.")
+        with st.form("form_alinhamento_teste", clear_on_submit=True):
+            t_titulo = st.text_input("Título", value="Alinhamento de teste")
+            t_conteudo = st.text_area("Conteúdo", value="Conteúdo de teste para validar o fluxo de notificação.", height=80)
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                t_categoria = st.selectbox("Categoria", ["Geral", "Técnico", "Administrativo", "CAP"], key="debug_categoria")
+            with col_t2:
+                t_nivel = st.selectbox("Nível mínimo", ["Contas", "Auditor", "CISO", "Gestor"], index=0, key="debug_nivel")
+
+            if st.form_submit_button("Registrar Alinhamento de Teste", type="primary"):
+                titulo_final = f"[TESTE] {t_titulo}" if not t_titulo.startswith("[TESTE]") else t_titulo
+                if db.inserir_alinhamento(titulo_final, t_conteudo, t_categoria, t_nivel, usuario_id_admin):
+                    st.success("Alinhamento de teste registrado!")
+                    st.rerun()
+                else:
+                    st.error("Erro ao registrar alinhamento de teste.")
+
+        st.divider()
+
+        # --- 2. Testar notificação (popup "Estou Ciente") ---
+        st.markdown("### 2. Testar Notificação ao Vivo")
+        st.caption("Remove sua confirmação de ciência de um alinhamento, fazendo o popup \"Estou Ciente\" reaparecer em até 45s.")
+
+        todos_alinhamentos = db.carregar_alinhamentos()
+        if not todos_alinhamentos:
+            st.info("Nenhum alinhamento cadastrado.")
+        else:
+            opcoes = {f"[{a.get('categoria', 'Geral')}] {a.get('titulo', '')}": a["id"] for a in todos_alinhamentos}
+            escolha = st.selectbox("Alinhamento", list(opcoes.keys()), key="debug_notif_select")
+            if st.button("Resetar minha ciência e forçar popup", type="primary"):
+                aid_escolhido = opcoes[escolha]
+                if db.remover_leitura_alinhamento(aid_escolhido, usuario_id_admin):
+                    st.session_state.pop("_dialog_alinhamento_id", None)
+                    st.session_state.pop("alinhamentos_pendentes", None)
+                    st.success("Ciência removida! O popup deve aparecer na próxima checagem (até 45s).")
+                else:
+                    st.error("Erro ao remover a confirmação de ciência.")
+
+        st.divider()
+
+        # --- 3. Limpar alinhamentos de teste ---
+        st.markdown("### 3. Limpar Alinhamentos de Teste")
+        st.caption("Remove permanentemente os alinhamentos com prefixo [TESTE] (e suas confirmações de ciência associadas).")
+
+        teste_alinhamentos = [a for a in todos_alinhamentos if a.get("titulo", "").startswith("[TESTE]")]
+        if not teste_alinhamentos:
+            st.info("Nenhum alinhamento de teste encontrado.")
+        else:
+            for a in teste_alinhamentos:
+                with st.container(border=True):
+                    col_info, col_del = st.columns([5, 1])
+                    with col_info:
+                        st.markdown(f"**{a.get('titulo')}** — {a.get('categoria', 'Geral')} — {a.get('nivel_minimo', 'Auditor')}")
+                    with col_del:
+                        if st.button("️ Excluir", key=f"del_teste_{a['id']}", use_container_width=True):
+                            if db.excluir_alinhamento(a["id"]):
+                                st.rerun()
+                            else:
+                                st.error("Erro ao excluir.")
 
 # ==========================================
 # ABA 3: TABELAS BASE E GLOSAS (ADMIN/GESTOR)
@@ -485,3 +561,47 @@ if " Textos Padrões (Motor)" in nomes_abas:
                     if b_del.button("", key=f"del_txt_{t['id']}", help="Excluir Definitivamente"):
                         if db.deletar_texto_prestador(t['id']):
                             st.rerun()
+
+# ==========================================
+# ABA 5: PERMISSÕES DE ACESSO (ADMIN/GESTOR)
+# ==========================================
+if " Permissões de Acesso" in nomes_abas:
+    aba_idx = nomes_abas.index(" Permissões de Acesso")
+    with abas[aba_idx]:
+        from core.settings import MODULOS_CONTROLADOS, ROLES_PERMISSAO
+
+        st.subheader("Acesso aos Módulos por Função")
+        st.markdown("Marque quais funções podem acessar cada módulo. **Admin** sempre tem acesso a tudo, independente da configuração abaixo.")
+
+        permissoes_atuais = db.carregar_permissoes_modulos()
+        mapa_permissoes = {(p["modulo"], p["role"]): bool(p["habilitado"]) for p in permissoes_atuais}
+
+        with st.form("form_permissoes"):
+            header_cols = st.columns([3] + [1] * len(ROLES_PERMISSAO))
+            header_cols[0].markdown("**Módulo**")
+            for i, r in enumerate(ROLES_PERMISSAO):
+                header_cols[i + 1].markdown(f"**{r}**")
+
+            valores = {}
+            for modulo, label in MODULOS_CONTROLADOS.items():
+                cols = st.columns([3] + [1] * len(ROLES_PERMISSAO))
+                cols[0].markdown(label)
+                for i, r in enumerate(ROLES_PERMISSAO):
+                    valores[(modulo, r)] = cols[i + 1].checkbox(
+                        label=f"{label} - {r}",
+                        value=mapa_permissoes.get((modulo, r), False),
+                        key=f"perm_{modulo}_{r}",
+                        label_visibility="collapsed",
+                    )
+
+            if st.form_submit_button("Salvar Permissões", type="primary"):
+                erros = 0
+                for (modulo, r), habilitado in valores.items():
+                    if mapa_permissoes.get((modulo, r), False) != habilitado:
+                        if not db.atualizar_permissao_modulo(modulo, r, habilitado):
+                            erros += 1
+                if erros == 0:
+                    st.success("Permissões atualizadas!")
+                    st.rerun()
+                else:
+                    st.error(f"{erros} permissões falharam ao salvar.")

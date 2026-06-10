@@ -1,5 +1,6 @@
 import streamlit as st
 import re
+import time
 from shared.database import DatabaseManager
 
 # Configuração da Página principal (deve ser a primeira coisa)
@@ -20,6 +21,18 @@ st.session_state.db = db
 # Inicializa o controlador de cookies
 from streamlit_cookies_controller import CookieController
 cookie_controller = CookieController()
+
+@st.dialog("Alinhamento Importante", width="large")
+def mostrar_alinhamento_dialog(alinhamento, usuario_id):
+    st.caption(f"Categoria: {alinhamento.get('categoria', 'Geral')}")
+    st.subheader(alinhamento["titulo"])
+    st.markdown(alinhamento["conteudo"])
+    st.divider()
+    if st.button("Estou Ciente", type="primary", use_container_width=True):
+        db.marcar_alinhamento_lido(alinhamento["id"], usuario_id)
+        st.session_state["alinhamentos_pendentes"].pop(0)
+        st.rerun()
+
 
 def validar_senha(senha):
     if len(senha) < 6: return False, "A senha deve ter pelo menos 6 caracteres."
@@ -139,19 +152,40 @@ if not st.session_state.get("logado", False):
     tela_login()
 else:
     role = st.session_state.get("role_interno", "Contas")
-    
+    permissoes = db.carregar_permissoes_modulos()
+
+    # --- ALINHAMENTOS PENDENTES (pop-up obrigatório "Estou Ciente", com checagem ao vivo) ---
+    from core.settings import ROLES_CIENCIA_OBRIGATORIA
+
+    if role in ROLES_CIENCIA_OBRIGATORIA:
+        @st.fragment(run_every=45)
+        def _checar_alinhamentos_pendentes():
+            pendentes = db.carregar_alinhamentos_pendentes(st.session_state.get("usuario_id"), role)
+            st.session_state["alinhamentos_pendentes"] = pendentes
+            if pendentes and st.session_state.get("_dialog_alinhamento_id") != pendentes[0]["id"]:
+                st.session_state["_dialog_alinhamento_id"] = pendentes[0]["id"]
+                mostrar_alinhamento_dialog(pendentes[0], st.session_state.get("usuario_id"))
+
+        _checar_alinhamentos_pendentes()
+
     # Construção Dinâmica do Menu baseada no Cargo
     paginas = []
     
     # Todos (Dashboard de Entrada/Bem vindo)
     paginas.append(st.Page("views/0_Dashboard.py", title="Painel Principal"))
     
-    # Permissões Módulos Clínicos (Auditor, CISO, Gestor, Admin)
-    if role in ["Auditor", "CISO", "Gestor", "Admin"]:
+    # Permissões Módulos Clínicos (configurável por role em Configurações)
+    from core.settings import tem_acesso_modulo
+    if tem_acesso_modulo(permissoes, role, "relatorio_5302"):
         paginas.append(st.Page("views/2_Relatorio_5302.py", title="Relatório 5302"))
+    if tem_acesso_modulo(permissoes, role, "calculadora_glosa"):
         paginas.append(st.Page("views/3_Calculadora.py", title="Calculadora de Glosa"))
+    if tem_acesso_modulo(permissoes, role, "producao"):
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
-        
+
+    # Alinhamentos: visível para todos, conteúdo se ajusta por nível dentro da tela
+    paginas.append(st.Page("views/5_Alinhamentos.py", title="Alinhamentos"))
+
     # Todos podem ver a TELA de Configuração, mas o CONTEÚDO lá dentro se protege sozinho
     paginas.append(st.Page("views/1_Configuracoes.py", title="Configurações"))
     
@@ -185,7 +219,7 @@ else:
     
     st.sidebar.divider()
     
-    if role in ["Auditor", "CISO", "Gestor", "Admin"]:
+    if tem_acesso_modulo(permissoes, role, "copia_rapida"):
         st.sidebar.markdown("**Cópia Rápida (Cabeçalhos)**")
         
         texto_com = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS"
@@ -246,8 +280,12 @@ else:
             st.divider()
     
     if st.sidebar.button("Sair", use_container_width=True):
-        # Limpa cookie
+        # Limpa cookie (o componente roda no navegador via iframe; precisa de um
+        # instante para o JS de remoção ser entregue antes do rerun, senão o
+        # cookie ainda existe na próxima execução e o auto-login via cookie
+        # loga o usuário de volta)
         cookie_controller.remove("sia_auth")
+        time.sleep(0.5)
         # Limpa sessão
         st.session_state.clear()
         st.rerun()

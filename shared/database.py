@@ -46,13 +46,14 @@ class DatabaseManager:
     def criar_usuario(self, usuario_sigo, nome_completo, senha, equipe):
         url = f"{self.supabase_url}/rest/v1/usuarios"
         
-        # Define o role_interno inicial baseado na equipe, mas tudo nasce 'Pendente'
+        # Define o role_interno inicial baseado na equipe, mas tudo nasce 'Pendente'.
+        # "Admin" não é uma opção de auto-cadastro: só um Admin existente pode
+        # promover alguém na aba "Aprovação de Equipe".
         role_map = {
             "Contas": "Contas",
             "Auditoria": "Auditor",
             "CISO": "CISO",
             "Gestor": "Gestor",
-            "Admin": "Admin" # Pode ser forçado via código depois se necessário
         }
         
         data = {
@@ -65,8 +66,30 @@ class DatabaseManager:
         }
         
         response = requests.post(url, headers=self.headers, json=data)
+        if response.status_code not in [200, 201]:
+            return False
+
+        try:
+            novo_id = response.json()[0]["id"]
+            self.marcar_todos_alinhamentos_lidos(novo_id)
+        except (IndexError, KeyError):
+            pass
+        return True
+
+    def marcar_todos_alinhamentos_lidos(self, usuario_id):
+        """Marca todo o histórico de alinhamentos existente como lido para um usuário,
+        para que apenas alinhamentos publicados após este momento gerem popup obrigatório."""
+        existentes = self.carregar_alinhamentos()
+        if not existentes:
+            return True
+
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos"
+        headers_upsert = self.headers.copy()
+        headers_upsert["Prefer"] = "resolution=ignore-duplicates"
+        data = [{"alinhamento_id": a["id"], "usuario_id": usuario_id} for a in existentes]
+        response = requests.post(url, headers=headers_upsert, json=data)
         return response.status_code in [200, 201]
-        
+
     def autenticar_usuario(self, usuario_sigo, senha):
         url = f"{self.supabase_url}/rest/v1/usuarios?usuario_sigo=eq.{usuario_sigo}&select=*"
         response = requests.get(url, headers=self.headers)
@@ -256,5 +279,136 @@ class DatabaseManager:
 
     def deletar_link_util(self, id_relacao):
         url = f"{self.supabase_url}/rest/v1/usuario_links?id=eq.{id_relacao}"
+        response = requests.delete(url, headers=self.headers)
+        return response.status_code in [200, 204]
+
+    # --- Operações de Banco (Alinhamentos Internos) ---
+    def carregar_alinhamentos(self):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?select=*&order=created_at.desc"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def carregar_alinhamentos_visiveis(self, role):
+        from core.settings import NIVEL_HIERARQUIA
+        nivel_usuario = NIVEL_HIERARQUIA.get(role, 1)
+        niveis_visiveis = [n for n, v in NIVEL_HIERARQUIA.items() if v <= nivel_usuario]
+        niveis_filtro = ",".join(niveis_visiveis)
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?nivel_minimo=in.({niveis_filtro})&select=*&order=created_at.desc"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def carregar_alinhamentos_pendentes(self, usuario_id, role):
+        from core.settings import NIVEL_HIERARQUIA, ROLES_CIENCIA_OBRIGATORIA
+        if role not in ROLES_CIENCIA_OBRIGATORIA:
+            return []
+
+        nivel_usuario = NIVEL_HIERARQUIA.get(role, 1)
+        niveis_visiveis = [n for n, v in NIVEL_HIERARQUIA.items() if v <= nivel_usuario]
+        niveis_filtro = ",".join(niveis_visiveis)
+
+        url = (
+            f"{self.supabase_url}/rest/v1/alinhamentos"
+            f"?ativo=eq.true&nivel_minimo=in.({niveis_filtro})&select=*&order=created_at.asc"
+        )
+        response = requests.get(url, headers=self.headers)
+        if response.status_code != 200:
+            return []
+        ativos = response.json()
+        if not ativos:
+            return []
+
+        url_lidos = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?usuario_id=eq.{usuario_id}&select=alinhamento_id"
+        response_lidos = requests.get(url_lidos, headers=self.headers)
+        lidos_ids = {item["alinhamento_id"] for item in response_lidos.json()} if response_lidos.status_code == 200 else set()
+
+        return [a for a in ativos if a["id"] not in lidos_ids]
+
+    def inserir_alinhamento(self, titulo, conteudo, categoria, nivel_minimo, autor_id):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos"
+        data = {
+            "titulo": titulo,
+            "conteudo": conteudo,
+            "categoria": categoria,
+            "nivel_minimo": nivel_minimo,
+            "autor_id": autor_id,
+        }
+        response = requests.post(url, headers=self.headers, json=data)
+        if response.status_code not in [200, 201]:
+            return False
+
+        try:
+            novo_id = response.json()[0]["id"]
+            self.marcar_alinhamento_lido(novo_id, autor_id)
+        except (IndexError, KeyError):
+            pass
+        return True
+
+    def atualizar_alinhamento(self, alinhamento_id, titulo, conteudo, categoria, nivel_minimo, created_at=None):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
+        data = {
+            "titulo": titulo,
+            "conteudo": conteudo,
+            "categoria": categoria,
+            "nivel_minimo": nivel_minimo,
+        }
+        if created_at:
+            data["created_at"] = created_at
+        response = requests.patch(url, headers=self.headers, json=data)
+        return response.status_code in [200, 204]
+
+    def toggle_ativo_alinhamento(self, alinhamento_id, ativo):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
+        response = requests.patch(url, headers=self.headers, json={"ativo": ativo})
+        return response.status_code in [200, 204]
+
+    # --- Operações de Banco (Permissões de Módulos por Role) ---
+    def carregar_permissoes_modulos(self):
+        url = f"{self.supabase_url}/rest/v1/permissoes_modulos?select=*"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def atualizar_permissao_modulo(self, modulo, role, habilitado):
+        url = f"{self.supabase_url}/rest/v1/permissoes_modulos?on_conflict=modulo,role"
+        headers_upsert = self.headers.copy()
+        headers_upsert["Prefer"] = "resolution=merge-duplicates"
+        data = {"modulo": modulo, "role": role, "habilitado": habilitado}
+        response = requests.post(url, headers=headers_upsert, json=data)
+        return response.status_code in [200, 201]
+
+    def marcar_alinhamento_lido(self, alinhamento_id, usuario_id):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos"
+        headers_upsert = self.headers.copy()
+        headers_upsert["Prefer"] = "resolution=ignore-duplicates"
+        data = {"alinhamento_id": alinhamento_id, "usuario_id": usuario_id}
+        response = requests.post(url, headers=headers_upsert, json=data)
+        return response.status_code in [200, 201]
+
+    def carregar_usuarios_ativos(self):
+        url = f"{self.supabase_url}/rest/v1/usuarios?status=eq.Ativo&select=id,nome_completo,role_interno"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def carregar_todas_leituras(self):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?select=alinhamento_id,usuario_id,lido_em"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def remover_leitura_alinhamento(self, alinhamento_id, usuario_id):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?alinhamento_id=eq.{alinhamento_id}&usuario_id=eq.{usuario_id}"
+        response = requests.delete(url, headers=self.headers)
+        return response.status_code in [200, 204]
+
+    def excluir_alinhamento(self, alinhamento_id):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
         response = requests.delete(url, headers=self.headers)
         return response.status_code in [200, 204]
