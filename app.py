@@ -47,16 +47,30 @@ def _expirar_cookie_sessao():
         height=0,
     )
 
-@st.dialog("Alinhamento Importante", width="large")
+@st.dialog("Aviso do Sistema", width="large")
 def mostrar_alinhamento_dialog(alinhamento, usuario_id):
+    is_inativacao = not alinhamento.get("ativo", True)
+    
     st.caption(f"Categoria: {alinhamento.get('categoria', 'Geral')}")
-    st.subheader(alinhamento["titulo"])
-    st.markdown(alinhamento["conteudo"])
-    st.divider()
-    if st.button("Estou Ciente", type="primary", use_container_width=True):
-        db.marcar_alinhamento_lido(alinhamento["id"], usuario_id)
-        st.session_state["alinhamentos_pendentes"].pop(0)
-        st.rerun()
+    
+    if is_inativacao:
+        st.error("⚠️ **AVISO DE REVOGAÇÃO DE REGRA**")
+        st.markdown(f"~~{alinhamento['titulo']}~~")
+        st.markdown(alinhamento["conteudo"])
+        st.warning(f"**Motivo da Inativação:**\n{alinhamento.get('justificativa_inativacao', 'Sem justificativa fornecida.')}")
+        st.divider()
+        if st.button("Estou ciente de que esta regra NÃO vale mais", type="primary", use_container_width=True):
+            db.marcar_inativacao_lida(alinhamento["id"], usuario_id)
+            st.session_state["alinhamentos_pendentes"].pop(0)
+            st.rerun()
+    else:
+        st.subheader(alinhamento["titulo"])
+        st.markdown(alinhamento["conteudo"])
+        st.divider()
+        if st.button("Estou Ciente", type="primary", use_container_width=True):
+            db.marcar_alinhamento_lido(alinhamento["id"], usuario_id)
+            st.session_state["alinhamentos_pendentes"].pop(0)
+            st.rerun()
 
 
 def validar_senha(senha):

@@ -193,6 +193,10 @@ if pode_gerenciar:
                         st.write("")
                         st.write("")
                         e_ativo = st.checkbox("Ativo", value=a.get("ativo", True), key=f"ativo_{aid}")
+                    
+                    justificativa_inativacao = ""
+                    if not e_ativo and a.get("ativo", True):
+                        justificativa_inativacao = st.text_area("Justificativa para inativação (obrigatória)", key=f"just_{aid}")
 
                     nivel_min_valor = NIVEL_HIERARQUIA.get(a.get("nivel_minimo", "Auditor"), 1)
                     obrigados = [
@@ -223,18 +227,26 @@ if pode_gerenciar:
                     col_b1, col_b2 = st.columns(2)
                     with col_b1:
                         if st.button("Salvar Alterações", key=f"salvar_{aid}", type="primary", use_container_width=True):
-                            nova_data = e_data.strftime("%Y-%m-%d") if e_data != data_atual else None
-                            sucesso_dados = db.atualizar_alinhamento(aid, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data)
-                            sucesso_status = db.toggle_ativo_alinhamento(aid, e_ativo) if e_ativo != a.get("ativo", True) else True
-                            if sucesso_dados and sucesso_status:
-                                st.success("Alinhamento atualizado!")
-                                st.rerun()
+                            if not e_ativo and a.get("ativo", True) and not justificativa_inativacao.strip():
+                                st.error("A justificativa de inativação é obrigatória.")
                             else:
-                                st.error("Erro ao atualizar o alinhamento.")
+                                nova_data = e_data.strftime("%Y-%m-%d") if e_data != data_atual else None
+                                sucesso_dados = db.atualizar_alinhamento(aid, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data)
+                                
+                                se_mudou_status = (e_ativo != a.get("ativo", True))
+                                sucesso_status = True
+                                if se_mudou_status:
+                                    sucesso_status = db.toggle_ativo_alinhamento(aid, e_ativo, justificativa=justificativa_inativacao.strip())
+                                    
+                                if sucesso_dados and sucesso_status:
+                                    st.success("Alinhamento atualizado!")
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao atualizar o alinhamento.")
                     with col_b2:
-                        toggle_label = "Desativar" if a.get("ativo", True) else "Reativar"
-                        if st.button(toggle_label, key=f"toggle_{aid}", use_container_width=True):
-                            if db.toggle_ativo_alinhamento(aid, not a.get("ativo", True)):
-                                st.rerun()
-                            else:
-                                st.error("Erro ao alterar status.")
+                        if not a.get("ativo", True):
+                            if st.button("Reativar", key=f"toggle_{aid}", use_container_width=True):
+                                if db.toggle_ativo_alinhamento(aid, True):
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao alterar status.")

@@ -312,20 +312,33 @@ class DatabaseManager:
 
         url = (
             f"{self.supabase_url}/rest/v1/alinhamentos"
-            f"?ativo=eq.true&nivel_minimo=in.({niveis_filtro})&select=*&order=created_at.asc"
+            f"?nivel_minimo=in.({niveis_filtro})&select=*&order=created_at.asc"
         )
         response = requests.get(url, headers=self.headers)
         if response.status_code != 200:
             return []
-        ativos = response.json()
-        if not ativos:
+        todos_visiveis = response.json()
+        if not todos_visiveis:
             return []
 
         url_lidos = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?usuario_id=eq.{usuario_id}&select=alinhamento_id"
         response_lidos = requests.get(url_lidos, headers=self.headers)
         lidos_ids = {item["alinhamento_id"] for item in response_lidos.json()} if response_lidos.status_code == 200 else set()
 
-        return [a for a in ativos if a["id"] not in lidos_ids]
+        url_inativacoes = f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?usuario_id=eq.{usuario_id}&select=alinhamento_id"
+        response_inat = requests.get(url_inativacoes, headers=self.headers)
+        inativacoes_lidas_ids = {item["alinhamento_id"] for item in response_inat.json()} if response_inat.status_code == 200 else set()
+
+        pendentes = []
+        for a in todos_visiveis:
+            if a.get("ativo", True):
+                if a["id"] not in lidos_ids:
+                    pendentes.append(a)
+            else:
+                if a.get("justificativa_inativacao") and a["id"] not in inativacoes_lidas_ids:
+                    pendentes.append(a)
+
+        return pendentes
 
     def inserir_alinhamento(self, titulo, conteudo, categoria, nivel_minimo, autor_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos"
@@ -360,10 +373,20 @@ class DatabaseManager:
         response = requests.patch(url, headers=self.headers, json=data)
         return response.status_code in [200, 204]
 
-    def toggle_ativo_alinhamento(self, alinhamento_id, ativo):
+    def toggle_ativo_alinhamento(self, alinhamento_id, ativo, justificativa=None):
         url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
-        response = requests.patch(url, headers=self.headers, json={"ativo": ativo})
-        return response.status_code in [200, 204]
+        data = {"ativo": ativo}
+        if not ativo:
+            data["justificativa_inativacao"] = justificativa
+        else:
+            data["justificativa_inativacao"] = None
+            
+        response = requests.patch(url, headers=self.headers, json=data)
+        if response.status_code in [200, 204]:
+            if ativo:
+                requests.delete(f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?alinhamento_id=eq.{alinhamento_id}", headers=self.headers)
+            return True
+        return False
 
     # --- Operações de Banco (Permissões de Módulos por Role) ---
     def carregar_permissoes_modulos(self):
@@ -383,6 +406,14 @@ class DatabaseManager:
 
     def marcar_alinhamento_lido(self, alinhamento_id, usuario_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos"
+        headers_upsert = self.headers.copy()
+        headers_upsert["Prefer"] = "resolution=ignore-duplicates"
+        data = {"alinhamento_id": alinhamento_id, "usuario_id": usuario_id}
+        response = requests.post(url, headers=headers_upsert, json=data)
+        return response.status_code in [200, 201]
+
+    def marcar_inativacao_lida(self, alinhamento_id, usuario_id):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas"
         headers_upsert = self.headers.copy()
         headers_upsert["Prefer"] = "resolution=ignore-duplicates"
         data = {"alinhamento_id": alinhamento_id, "usuario_id": usuario_id}
