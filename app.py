@@ -136,10 +136,6 @@ if not st.session_state.get("logado", False):
 else:
     role = st.session_state.get("role_interno", "Contas")
     
-    st.sidebar.title(f"Olá, {st.session_state.get('auditor_nome', 'Auditor')}")
-    st.sidebar.caption(f"Cargo: {role}")
-    st.sidebar.divider()
-    
     # Construção Dinâmica do Menu baseada no Cargo
     paginas = []
     
@@ -155,7 +151,19 @@ else:
     # Todos podem ver a TELA de Configuração, mas o CONTEÚDO lá dentro se protege sozinho
     paginas.append(st.Page("views/1_Configuracoes.py", title="Configurações", icon="⚙️"))
     
-    pg = st.navigation(paginas)
+    # Registra as páginas sem exibir o menu padrão no topo
+    pg = st.navigation(paginas, position="hidden")
+    
+    st.sidebar.divider()
+    st.sidebar.title(f"Olá, {st.session_state.get('auditor_nome', 'Auditor')}")
+    st.sidebar.caption(f"Cargo: {role}")
+    st.sidebar.divider()
+    
+    # Renderiza o menu manualmente para garantir a ordem
+    for p in paginas:
+        st.sidebar.page_link(p, label=p.title, icon=p.icon)
+        
+    st.sidebar.divider()
     
     # Expansível de Links Úteis (Disponível para todos)
     with st.sidebar.expander("🔗 Links", expanded=False):
