@@ -22,6 +22,15 @@ st.session_state.db = db
 from streamlit_cookies_controller import CookieController
 cookie_controller = CookieController()
 
+# Processa pendências de cookies ANTES de renderizar a tela
+if "_set_auth_cookie" in st.session_state:
+    _token = st.session_state.pop("_set_auth_cookie")
+    cookie_controller.set("sia_auth", _token, max_age=28800)
+
+if "_remove_auth_cookie" in st.session_state:
+    st.session_state.pop("_remove_auth_cookie")
+    cookie_controller.remove("sia_auth")
+
 
 def _expirar_cookie_sessao():
     """Expira o cookie 'sia_auth' via JS direto (document.cookie).
@@ -89,7 +98,7 @@ def tela_login():
                             
                             from core.auth import criar_token_sessao
                             token = criar_token_sessao("000-000-000", "Administrador", "Admin", "Gestor")
-                            cookie_controller.set("sia_auth", token, max_age=28800)
+                            st.session_state["_set_auth_cookie"] = token
                             
                             st.rerun()
                         else:
@@ -111,7 +120,7 @@ def tela_login():
                                         
                                         from core.auth import criar_token_sessao
                                         token = criar_token_sessao(user_data["id"], primeiro_nome, user_data["role_interno"], user_data["equipe"])
-                                        cookie_controller.set("sia_auth", token, max_age=28800)
+                                        st.session_state["_set_auth_cookie"] = token
                                         
                                         st.rerun()
                                 else:
@@ -251,37 +260,21 @@ else:
         
         html_sidebar = f"""
         <style>
-            .glass-btn {{
-                background: rgba(255,255,255,0.13);
-                backdrop-filter: blur(16px);
-                -webkit-backdrop-filter: blur(16px);
-                border: none;
-                border-radius: 28px;
-                color: white;
-                font-weight: 500;
-                font-family: sans-serif;
-                font-size: 14.5px;
-                padding: 10px 16px;
-                text-align: left;
+            .native-btn {{
+                background: #f0f2f6;
+                border: 1px solid #c9cdd4;
+                border-radius: 4px;
+                color: #31333F;
+                font-family: "Source Sans Pro", sans-serif;
+                font-size: 14px;
+                padding: 0.5rem 1rem;
                 cursor: pointer;
-                box-shadow: 
-                            inset 1px 1px 2px rgba(255,255,255,0.3),
-                            inset -1px -1px 2px rgba(0,0,0,0.1),
-                            0 4px 12px rgba(0,0,0,0.2);
-                transition: all 0.2s ease;
                 width: 100%;
+                margin-bottom: 5px;
             }}
-            .glass-btn:hover {{
-                background: rgba(255,255,255,0.20);
-                transform: translateY(-1px);
-                box-shadow: 
-                            inset 1px 1px 3px rgba(255,255,255,0.4),
-                            inset -1px -1px 3px rgba(0,0,0,0.15),
-                            0 6px 16px rgba(0,0,0,0.3);
-            }}
-            .glass-btn:active {{
-                background: rgba(255,255,255,0.08);
-                transform: translateY(0px);
+            .native-btn:hover {{
+                border-color: #ff4b4b;
+                color: #ff4b4b;
             }}
         </style>
         <script>
@@ -294,8 +287,8 @@ else:
         }}
         </script>
         <div style="display: flex; flex-direction: column; gap: 8px;">
-            <button id="btn_f1" class="glass-btn" onclick="copyFast(`{texto_com}`, 'btn_f1', ' Com especialidades')"> Com especialidades</button>
-            <button id="btn_f2" class="glass-btn" onclick="copyFast(`{texto_sem}`, 'btn_f2', ' Sem especialidades')"> Sem especialidades</button>
+            <button id="btn_f1" class="native-btn" onclick="copyFast(`{texto_com}`, 'btn_f1', ' Com especialidades')"> Com especialidades</button>
+            <button id="btn_f2" class="native-btn" onclick="copyFast(`{texto_sem}`, 'btn_f2', ' Sem especialidades')"> Sem especialidades</button>
         </div>
         """
         with st.sidebar:
@@ -304,14 +297,7 @@ else:
             st.divider()
     
     if st.sidebar.button("Sair", use_container_width=True):
-        # Limpa o cookie via JS direto (síncrono) e também via o componente
-        # (cookie_controller.remove), como redundância. O round-trip do
-        # componente leva alguns reruns para se efetivar; durante essa
-        # janela, _skip_autologin evita que o auto-login reative a conta
-        # antiga com um cookie ainda em trânsito de remoção.
-        _expirar_cookie_sessao()
-        cookie_controller.remove("sia_auth")
-        time.sleep(0.5)
         st.session_state.clear()
         st.session_state["_skip_autologin"] = 3
+        st.session_state["_remove_auth_cookie"] = True
         st.rerun()
