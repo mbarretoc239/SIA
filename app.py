@@ -135,17 +135,25 @@ def tela_login():
 
 # --- AUTO LOGIN (Via Cookies) ---
 if not st.session_state.get("logado", False):
-    token = cookie_controller.get("sia_auth")
-    if token:
-        from core.auth import decifrar_token_sessao
-        dados = decifrar_token_sessao(token)
-        if dados:
-            st.session_state["logado"] = True
-            st.session_state["usuario_id"] = dados.get("id")
-            st.session_state["auditor_nome"] = dados.get("nome")
-            st.session_state["role_interno"] = dados.get("role")
-            st.session_state["equipe"] = dados.get("equipe")
-            st.rerun()
+    # Após um logout, a remoção do cookie no navegador (via componente
+    # iframe) leva alguns reruns para se efetivar. Durante essa janela,
+    # ignoramos o auto-login para não relogar o usuário com o cookie
+    # ainda em trânsito de remoção.
+    skip_autologin = st.session_state.get("_skip_autologin", 0)
+    if skip_autologin > 0:
+        st.session_state["_skip_autologin"] = skip_autologin - 1
+    else:
+        token = cookie_controller.get("sia_auth")
+        if token:
+            from core.auth import decifrar_token_sessao
+            dados = decifrar_token_sessao(token)
+            if dados:
+                st.session_state["logado"] = True
+                st.session_state["usuario_id"] = dados.get("id")
+                st.session_state["auditor_nome"] = dados.get("nome")
+                st.session_state["role_interno"] = dados.get("role")
+                st.session_state["equipe"] = dados.get("equipe")
+                st.rerun()
 
 # --- CONTROLE DE ROTAS (RBAC) ---
 if not st.session_state.get("logado", False):
@@ -280,12 +288,13 @@ else:
             st.divider()
     
     if st.sidebar.button("Sair", use_container_width=True):
-        # Limpa cookie (o componente roda no navegador via iframe; precisa de um
-        # instante para o JS de remoção ser entregue antes do rerun, senão o
-        # cookie ainda existe na próxima execução e o auto-login via cookie
-        # loga o usuário de volta)
+        # Limpa cookie (o componente roda no navegador via iframe; precisa de
+        # alguns reruns para o JS de remoção ser entregue, senão o cookie
+        # ainda existe e o auto-login via cookie loga o usuário de volta)
         cookie_controller.remove("sia_auth")
         time.sleep(0.5)
-        # Limpa sessão
+        # Limpa sessão, mas marca para ignorar o auto-login pelos próximos
+        # reruns enquanto a remoção do cookie se propaga no navegador
         st.session_state.clear()
+        st.session_state["_skip_autologin"] = 3
         st.rerun()
