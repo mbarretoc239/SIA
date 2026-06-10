@@ -9,9 +9,7 @@ import unicodedata
 
 import json
 import os
-import uuid
 
-from core.glass_design_system import render_glass_table
 from core.settings import tem_acesso_modulo
 from shared.database import DatabaseManager
 
@@ -746,9 +744,6 @@ if pdf_file is not None:
             st.session_state["dados_pdf"] = glosas
             st.session_state["meta_pdf"] = meta
             st.session_state["pdf_name"] = pdf_file.name
-            st.session_state["glosas_editadas"] = [
-                {**linha, "_id": str(uuid.uuid4())} for linha in glosas
-            ]
 
     dados = st.session_state.get("dados_pdf", [])
     meta = st.session_state.get("meta_pdf", {"processo": "Desconhecido", "prestador": "Desconhecido", "producao": "Desconhecida"})
@@ -759,51 +754,20 @@ if pdf_file is not None:
         st.markdown("### 1. Auditoria e Justificativas")
         st.markdown("Marque **Incluir no Relatório** para as glosas que deseja exportar. As glosas automáticas (ex: glosa 12) já vêm desmarcadas por padrão.")
 
-        linhas = st.session_state["glosas_editadas"]
+        df = pd.DataFrame(dados)
 
-        colunas_visuais = ["Tipo", "Guia", "Cód. Procedimento", "Procedimento", "Glosa", "Descrição Oficial"]
-        df_visual = pd.DataFrame(linhas)[colunas_visuais] if linhas else pd.DataFrame(columns=colunas_visuais)
-        render_glass_table(df_visual, max_height=320)
+        col_config = {
+            "Incluir no Relatório": st.column_config.CheckboxColumn("Incluir no Relatório", default=True),
+            "Justificativa": st.column_config.TextColumn("Justificativa", required=False),
+        }
 
-        st.markdown("**Edição por glosa**")
-        for linha in list(linhas):
-            row_id = linha["_id"]
-            titulo = f"Guia {linha['Guia']} • Glosa {linha['Glosa']} ({linha['Tipo']}) — {linha['Procedimento'][:50]}"
-            with st.expander(titulo):
-                c1, c2, c3 = st.columns([1, 4, 1])
-                with c1:
-                    linha["Incluir no Relatório"] = st.checkbox(
-                        "Incluir no Relatório",
-                        value=linha.get("Incluir no Relatório", True),
-                        key=f"incl_{row_id}",
-                    )
-                with c2:
-                    linha["Justificativa"] = st.text_input(
-                        "Justificativa",
-                        value=linha.get("Justificativa", ""),
-                        key=f"just_{row_id}",
-                    )
-                with c3:
-                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-                    if st.button("Remover", key=f"rm_{row_id}", use_container_width=True):
-                        linhas.remove(linha)
-                        st.rerun()
-
-        if st.button("+ Adicionar linha manual"):
-            linhas.append({
-                "_id": str(uuid.uuid4()),
-                "Incluir no Relatório": True,
-                "Tipo": "Técnica",
-                "Guia": "",
-                "Cód. Procedimento": "",
-                "Procedimento": "",
-                "Glosa": "",
-                "Descrição Oficial": "",
-                "Justificativa": "",
-            })
-            st.rerun()
-
-        df_editado = pd.DataFrame(linhas).drop(columns=["_id"]) if linhas else pd.DataFrame(columns=colunas_visuais + ["Incluir no Relatório", "Justificativa"])
+        df_editado = st.data_editor(
+            df,
+            use_container_width=True,
+            num_rows="dynamic",
+            column_config=col_config,
+            key="glosas_editor",
+        )
 
         st.markdown("### 2. Motor de Texto Offline")
         col1, col2 = st.columns([1, 2])

@@ -603,6 +603,27 @@ def inject_glass_css(
         border: none !important;
     }}
 
+    /* O grid em si é pintado em <canvas> pelo glide-data-grid com cores
+       fixas (fundo branco, texto preto), ignorando CSS de background.
+       Invertendo as cores do canvas (branco→preto, preto→branco) e
+       desfazendo a rotação de matiz resultante, o fundo fica escuro e o
+       texto claro, mantendo aproximadamente as cores de destaque (azul de
+       seleção etc.). */
+    [data-testid="stDataFrame"] canvas,
+    [data-testid="stDataEditor"] canvas {{
+        filter: invert(1) hue-rotate(180deg) !important;
+    }}
+
+    /* Overlay de edição de célula (input/textarea sobre o canvas), que
+       continua com fundo branco do navegador. */
+    [data-testid="stDataFrame"] [class*="editor"] input,
+    [data-testid="stDataEditor"] [class*="editor"] input,
+    [data-testid="stDataFrame"] [class*="editor"] textarea,
+    [data-testid="stDataEditor"] [class*="editor"] textarea {{
+        background-color: #0c1b2d !important;
+        color: #ffffff !important;
+    }}
+
     /* Toolbar flutuante (busca/download/expandir) que aparece no hover */
     [data-testid="stElementToolbar"] {{
         background: rgba(14, 31, 61, 0.92) !important;
