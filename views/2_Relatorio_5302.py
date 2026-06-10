@@ -757,8 +757,13 @@ if pdf_file is not None:
         df = pd.DataFrame(dados)
 
         col_config = {
-            "Incluir no Relatório": st.column_config.CheckboxColumn("Incluir no Relatório", default=True),
-            "Justificativa": st.column_config.TextColumn("Justificativa", required=False),
+            "Incluir no Relatório": st.column_config.CheckboxColumn("Incluir", width="small", default=True),
+            "Justificativa": st.column_config.TextColumn("Justificativa", width="large", required=False),
+            "Procedimento": st.column_config.TextColumn("Procedimento", width="medium"),
+            "Descrição Oficial": st.column_config.TextColumn("Descrição", width="medium"),
+            "Guia": st.column_config.TextColumn("Guia", width="small"),
+            "Cód. Procedimento": st.column_config.TextColumn("Cód", width="small"),
+            "Tipo": st.column_config.TextColumn("Tipo", width="small"),
         }
 
         df_editado = st.data_editor(

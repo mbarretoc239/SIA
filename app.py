@@ -191,7 +191,7 @@ else:
     from core.settings import ROLES_CIENCIA_OBRIGATORIA
 
     if role in ROLES_CIENCIA_OBRIGATORIA:
-        @st.fragment(run_every=45)
+        @st.fragment(run_every=15)
         def _checar_alinhamentos_pendentes():
             pendentes = db.carregar_alinhamentos_pendentes(st.session_state.get("usuario_id"), role)
             st.session_state["alinhamentos_pendentes"] = pendentes
