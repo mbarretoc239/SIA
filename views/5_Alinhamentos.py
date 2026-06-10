@@ -38,30 +38,22 @@ else:
 
 def _status_html(ativo):
     if ativo:
-        return '<span style="color:#22C55E;font-weight:600;">● Ativo</span>'
-    return '<span style="color:#EF5350;font-weight:600;">● Inativo</span>'
+        return "🟢 Ativo"
+    return "🔴 Inativo"
 
 
 def _titulo_html(titulo, ativo):
-    titulo_esc = html.escape(str(titulo))
     if ativo:
-        return titulo_esc
-    return f'<span style="text-decoration:line-through;color:rgba(255,255,255,0.5);">{titulo_esc}</span>'
+        return str(titulo)
+    return f"❌ {titulo} (INATIVO)"
 
 
 def _conteudo_html(conteudo):
     texto = str(conteudo or "")
     m = re.match(r"^_(.*?)_\n\n(.*)$", texto, re.DOTALL)
     if m:
-        registro_html = (
-            f'<div style="color:rgba(255,255,255,0.45);font-size:11px;margin-bottom:4px;">'
-            f'{html.escape(m.group(1))}</div>'
-        )
-        resto = m.group(2)
-    else:
-        registro_html = ""
-        resto = texto
-    return registro_html + html.escape(resto).replace("\n", "<br>")
+        return m.group(2)
+    return texto
 
 
 with aba_historico:
@@ -99,20 +91,24 @@ with aba_historico:
         else:
             df_visual = pd.DataFrame([
                 {
-                    "Categoria": a.get("categoria", "Geral"),
+                    "Status": _status_html(a.get("ativo", True)),
+                    "Criado em": pd.to_datetime(a["created_at"]).date(),
                     "Título": _titulo_html(a.get("titulo", ""), a.get("ativo", True)),
                     "Deliberação": _conteudo_html(a.get("conteudo", "")),
+                    "Categoria": a.get("categoria", "Geral"),
                     "Direcionado a": a.get("nivel_minimo", "Auditor"),
-                    "Status": _status_html(a.get("ativo", True)),
-                    "Criado em": pd.to_datetime(a["created_at"]).strftime("%d/%m/%Y"),
                 }
                 for a in filtrados
             ])
-            render_glass_table(
-                df_visual,
-                html_cols=["Título", "Deliberação", "Status"],
-                wrap_cols=["Título", "Deliberação"],
-                max_height=600,
+            st.dataframe(
+                df_visual, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Criado em": st.column_config.DateColumn("Criado em", format="DD/MM/YYYY"),
+                    "Título": st.column_config.TextColumn("Título", width="medium"),
+                    "Deliberação": st.column_config.TextColumn("Deliberação", width="large"),
+                }
             )
 
 
@@ -222,7 +218,7 @@ if pode_gerenciar:
                                 }
                                 for u in pendentes_ciencia + confirmaram
                             ])
-                            render_glass_table(df_ciencia, max_height=300)
+                            st.dataframe(df_ciencia, use_container_width=True, hide_index=True)
 
                     col_b1, col_b2 = st.columns(2)
                     with col_b1:
