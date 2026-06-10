@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 import io
 from shared.database import DatabaseManager
+from core.glass_design_system import render_glass_table
 
-st.set_page_config(page_title="Configurações", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="Configurações", page_icon="️", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar as configurações.")
@@ -16,18 +17,18 @@ db = st.session_state.db
 role = st.session_state.get("role_interno", "Contas")
 nome = st.session_state.get("auditor_nome", "Usuário")
 
-st.title("⚙️ Painel de Controle e Configurações")
+st.title("️ Painel de Controle e Configurações")
 st.markdown("Gerencie seu perfil, aprove cadastros da equipe e configure as regras do motor inteligente.")
 
 # Define quais abas o usuário tem acesso
-nomes_abas = ["👤 Meu Perfil", "🔗 Meus Links Úteis"]
+nomes_abas = [" Meu Perfil", " Meus Links Úteis"]
 
 if role == "Admin":
-    nomes_abas.append("🛡️ Aprovação de Equipe")
+    nomes_abas.append("️ Aprovação de Equipe")
     
 if role in ["Admin", "Gestor"]:
-    nomes_abas.append("📚 Tabelas Base e Glosas")
-    nomes_abas.append("🤖 Textos Padrões (Motor)")
+    nomes_abas.append(" Tabelas Base e Glosas")
+    nomes_abas.append(" Textos Padrões (Motor)")
 
 abas = st.tabs(nomes_abas)
 
@@ -42,8 +43,8 @@ with abas[0]:
 # ==========================================
 # ABA 2: LINKS ÚTEIS (TODOS)
 # ==========================================
-if "🔗 Meus Links Úteis" in nomes_abas:
-    aba_idx = nomes_abas.index("🔗 Meus Links Úteis")
+if " Meus Links Úteis" in nomes_abas:
+    aba_idx = nomes_abas.index(" Meus Links Úteis")
     with abas[aba_idx]:
         st.subheader("Meus Links e Atalhos Rápidos")
         st.markdown("Cadastre aqui os links que você mais usa. Eles aparecerão na barra lateral para acesso rápido!")
@@ -83,15 +84,15 @@ if "🔗 Meus Links Úteis" in nomes_abas:
                     with col_btn:
                         st.markdown(f"**{link.get('titulo')}** — [{link.get('url')}]({link.get('url')})")
                     with col_del:
-                        if st.button("🗑️ Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
+                        if st.button("️ Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
                             if db.deletar_link_util(link.get('id')):
                                 st.rerun()
 
 # ==========================================
 # ABA 3: APROVAÇÃO DE EQUIPE (ADMIN)
 # ==========================================
-if "🛡️ Aprovação de Equipe" in nomes_abas:
-    aba_idx = nomes_abas.index("🛡️ Aprovação de Equipe")
+if "️ Aprovação de Equipe" in nomes_abas:
+    aba_idx = nomes_abas.index("️ Aprovação de Equipe")
     with abas[aba_idx]:
         st.subheader("Fila de Moderação de Cadastros")
         
@@ -127,13 +128,13 @@ if "🛡️ Aprovação de Equipe" in nomes_abas:
                                 
             st.divider()
             st.markdown(f"**Usuários Ativos e Bloqueados ({len(ativos) + len(df_users[df_users['status'] == 'Bloqueado'])})**")
-            st.dataframe(df_users[df_users["status"] != "Pendente"][["usuario_sigo", "nome_completo", "equipe", "role_interno", "status", "created_at"]], use_container_width=True)
+            render_glass_table(df_users[df_users["status"] != "Pendente"][["usuario_sigo", "nome_completo", "equipe", "role_interno", "status", "created_at"]])
 
 # ==========================================
 # ABA 3: TABELAS BASE E GLOSAS (ADMIN/GESTOR)
 # ==========================================
-if "📚 Tabelas Base e Glosas" in nomes_abas:
-    aba_idx = nomes_abas.index("📚 Tabelas Base e Glosas")
+if " Tabelas Base e Glosas" in nomes_abas:
+    aba_idx = nomes_abas.index(" Tabelas Base e Glosas")
     with abas[aba_idx]:
         st.subheader("Base de Conhecimento do Sistema")
         
@@ -145,9 +146,9 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             if arquivo_procedimentos is not None:
                 try:
                     df_proc = pd.read_csv(arquivo_procedimentos, sep=';', encoding='utf-8')
-                    st.dataframe(df_proc.head())
+                    render_glass_table(df_proc.head())
                     if role == "Admin":
-                        if st.button("📤 Subir TUSS para o Supabase", type="primary"):
+                        if st.button(" Subir TUSS para o Supabase", type="primary"):
                             with st.spinner("Enviando para o banco..."):
                                 sucesso, erros = 0, 0
                                 for _, row in df_proc.iterrows():
@@ -156,7 +157,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                                     val = float(row.get('valor_unitario', row.iloc[2] if len(row.columns)>2 else 0.0))
                                     if db.inserir_procedimento(cod, desc, val): sucesso += 1
                                     else: erros += 1
-                                if erros == 0: st.success(f"✅ {sucesso} procedimentos salvos!")
+                                if erros == 0: st.success(f" {sucesso} procedimentos salvos!")
                                 else: st.warning(f"{sucesso} salvos, {erros} falharam (duplicados?).")
                     else:
                         st.info("Apenas Administradores podem substituir a base inteira no banco de dados.")
@@ -173,7 +174,10 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                 if filtro_tipo != "Todos":
                     df_glosas = df_glosas[df_glosas["tipo_glosa"] == filtro_tipo]
 
-            st.dataframe(df_glosas, use_container_width=True)
+            if not df_glosas.empty:
+                render_glass_table(df_glosas)
+            else:
+                st.info("Nenhuma glosa cadastrada.")
                 
         with tab_interna3:
             st.markdown("Pesquise glosas existentes para editar sua classificação, ou adicione novas.")
@@ -209,19 +213,19 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                 col_inp, col_btn = st.columns([6, 1])
                 with col_inp:
                     busca_val = st.text_input(
-                        "🔍 Pesquisar Glosa (Código ou Descrição):",
+                        " Pesquisar Glosa (Código ou Descrição):",
                         value=st.session_state.get("busca_glosa", ""),
                         placeholder="Ex: 438 ou 'procedimento não corresponde'"
                     )
                 with col_btn:
                     st.write(""); st.write("")
-                    submitted = st.form_submit_button("🔍 Buscar", use_container_width=True, type="primary")
+                    submitted = st.form_submit_button(" Buscar", use_container_width=True, type="primary")
                 if submitted:
                     st.session_state["busca_glosa"] = busca_val
 
             busca = st.session_state.get("busca_glosa", "")
 
-            if st.button("➕ Adicionar Nova Glosa", type="secondary"):
+            if st.button(" Adicionar Nova Glosa", type="secondary"):
                 st.session_state["glosa_em_edicao"] = "NOVA"
                 st.rerun()
                     
@@ -235,7 +239,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             em_edicao = st.session_state.get("glosa_em_edicao", None)
             if em_edicao:
                 st.divider()
-                st.subheader("✏️ Editor de Glosa" if em_edicao != "NOVA" else "✨ Nova Glosa")
+                st.subheader("️ Editor de Glosa" if em_edicao != "NOVA" else " Nova Glosa")
                 
                 with st.container(border=True):
                     g_alvo = dict_glosas.get(em_edicao, {"codigo": "", "descricao": "", "tipo": "Técnica", "is_critica": False}) if em_edicao != "NOVA" else {"codigo": "", "descricao": "", "tipo": "Técnica", "is_critica": False}
@@ -252,10 +256,10 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                     with form_c4:
                         st.write("")
                         st.write("")
-                        f_crit = st.checkbox("🔥 Glosa de Risco (Crítica)", value=g_alvo["is_critica"])
+                        f_crit = st.checkbox(" Glosa de Risco (Crítica)", value=g_alvo["is_critica"])
                         
                     b1, b2, b3 = st.columns([2, 2, 8])
-                    if b1.button("💾 Salvar", type="primary", use_container_width=True):
+                    if b1.button(" Salvar", type="primary", use_container_width=True):
                         if f_cod and f_desc:
                             db.upsert_glosa_customizada(f_cod, f_desc, f_crit, f_tipo, nome)
                             st.success("Glosa salva com sucesso na nuvem!")
@@ -290,7 +294,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                 st.markdown("**Sub-Glosas**")
 
                 if not subs_csv.empty:
-                    st.caption("📋 Da base (CSV)")
+                    st.caption(" Da base (CSV)")
                     for _, sg_row in subs_csv.iterrows():
                         num  = str(sg_row["sub_glosa"]).strip()
                         desc = str(sg_row["descricao_sub_glosa"]).strip()
@@ -299,13 +303,13 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                         sg_c2.markdown(desc if desc else "*sem descrição*")
 
                 if subs_custom:
-                    st.caption("☁️ Customizadas (Supabase)")
+                    st.caption("️ Customizadas (Supabase)")
                     for sg in subs_custom:
                         sub_num = sg['codigo'].split('.')[-1]
                         sg_c1, sg_c2, sg_c3, sg_c4 = st.columns([1, 4, 2, 1])
                         sg_c1.markdown(f"Sub **{sub_num}**")
                         sg_c2.markdown(sg['descricao'])
-                        badge = "🔥 Risco" if sg['is_critica'] else "✅ Padrão"
+                        badge = " Risco" if sg['is_critica'] else " Padrão"
                         sg_c3.markdown(f"{sg['tipo']} | {badge}")
                         if sg_c4.button("Editar", key=f"btn_edit_sub_{sg['codigo']}"):
                             st.session_state["glosa_em_edicao"] = sg['codigo']
@@ -314,7 +318,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                 if subs_csv.empty and not subs_custom:
                     st.caption("Nenhuma sub-glosa cadastrada.")
 
-                with st.expander("➕ Adicionar Sub-Glosa Customizada"):
+                with st.expander(" Adicionar Sub-Glosa Customizada"):
                     sg_c1, sg_c2, sg_c3 = st.columns([1, 1, 4])
                     with sg_c1:
                         st.text_input("Glosa", value=codigo_pai, disabled=True, key="nova_sg_pai")
@@ -328,8 +332,8 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                         sg_tipo = st.selectbox("Tipo", ["Técnica", "Administrativa"], key="nova_sg_tipo")
                     with sg_c5:
                         st.write("")
-                        sg_crit = st.checkbox("🔥 Crítica", key="nova_sg_crit")
-                    if st.button("💾 Salvar Sub-Glosa", key="btn_salvar_nova_sg", type="primary"):
+                        sg_crit = st.checkbox(" Crítica", key="nova_sg_crit")
+                    if st.button(" Salvar Sub-Glosa", key="btn_salvar_nova_sg", type="primary"):
                         if sg_cod and sg_desc:
                             db.upsert_glosa_customizada(sg_cod, sg_desc, sg_crit, sg_tipo, nome)
                             st.success(f"Glosa {codigo_pai} | Sub {sg_sub_num.strip()} salva!")
@@ -349,7 +353,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
                     rc1, rc2, rc3, rc4 = st.columns([1, 4, 2, 1])
                     rc1.markdown(f"**{g['codigo']}**")
                     rc2.markdown(g['descricao'])
-                    badge_risco = "🔥 Risco" if g['is_critica'] else "✅ Padrão"
+                    badge_risco = " Risco" if g['is_critica'] else " Padrão"
                     rc3.markdown(f"{g['tipo']} | {badge_risco} | *{g['origem']}*")
                     if rc4.button("Editar", key=f"btn_edit_{g['codigo']}", use_container_width=True):
                         st.session_state["glosa_em_edicao"] = g['codigo']
@@ -358,7 +362,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             if len(resultados) > max_mostrar:
                 st.info(f"Mostrando 50 de {len(resultados)} resultados. Use a barra de pesquisa para refinar.")
             st.divider()
-            st.markdown("#### 🗄️ Manutenção do Banco de Dados (Supabase)")
+            st.markdown("#### ️ Manutenção do Banco de Dados (Supabase)")
             st.markdown("Para não lotar seu banco de dados, apague históricos antigos de auditoria.")
             col_meses, col_btn = st.columns([2, 1])
             with col_meses:
@@ -366,7 +370,7 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
             with col_btn:
                 st.write("")
                 st.write("")
-                if st.button("🧹 Limpar Histórico Antigo", type="secondary", use_container_width=True):
+                if st.button(" Limpar Histórico Antigo", type="secondary", use_container_width=True):
                     with st.spinner(f"Limpando registros mais antigos que {meses_retencao} meses..."):
                         import requests
                         from datetime import datetime, timedelta
@@ -389,8 +393,8 @@ if "📚 Tabelas Base e Glosas" in nomes_abas:
 # ==========================================
 # ABA 4: TEXTOS DOS PRESTADORES (GESTOR/ADMIN)
 # ==========================================
-if "🤖 Textos Padrões (Motor)" in nomes_abas:
-    aba_idx = nomes_abas.index("🤖 Textos Padrões (Motor)")
+if " Textos Padrões (Motor)" in nomes_abas:
+    aba_idx = nomes_abas.index(" Textos Padrões (Motor)")
     with abas[aba_idx]:
         st.subheader("Textos para os Prestadores")
         st.markdown("Cadastre os textos descritivos que aparecerão para as glosas no final do relatório.")
@@ -402,11 +406,11 @@ if "🤖 Textos Padrões (Motor)" in nomes_abas:
         # Controles Superiores
         c_busca, c_add = st.columns([4, 1])
         with c_busca:
-            busca_txt = st.text_input("🔍 Pesquisar Texto (Título ou Glosa):")
+            busca_txt = st.text_input(" Pesquisar Texto (Título ou Glosa):")
         with c_add:
             st.write("")
             st.write("")
-            if st.button("➕ Adicionar Novo", type="primary", use_container_width=True, key="btn_add_txt"):
+            if st.button(" Adicionar Novo", type="primary", use_container_width=True, key="btn_add_txt"):
                 st.session_state["texto_em_edicao"] = "NOVO"
                 
         # Filtro
@@ -419,7 +423,7 @@ if "🤖 Textos Padrões (Motor)" in nomes_abas:
         em_edicao = st.session_state.get("texto_em_edicao", None)
         if em_edicao:
             st.divider()
-            st.subheader("✏️ Editor de Texto" if em_edicao != "NOVO" else "✨ Novo Texto")
+            st.subheader("️ Editor de Texto" if em_edicao != "NOVO" else " Novo Texto")
             
             with st.container(border=True):
                 # Encontra o texto se estiver editando
@@ -437,7 +441,7 @@ if "🤖 Textos Padrões (Motor)" in nomes_abas:
                 f_txt = st.text_area("Texto Padrão ao Prestador", value=t_alvo["texto"], height=100)
                     
                 b1, b2, b3 = st.columns([2, 2, 8])
-                if b1.button("💾 Salvar", type="primary", use_container_width=True, key="btn_salvar_txt"):
+                if b1.button(" Salvar", type="primary", use_container_width=True, key="btn_salvar_txt"):
                     if f_tit and f_glo and f_txt:
                         if em_edicao == "NOVO":
                             if db.inserir_texto_prestador(f_tit, f_glo, f_txt, nome):
@@ -470,14 +474,14 @@ if "🤖 Textos Padrões (Motor)" in nomes_abas:
                 with st.container(border=True):
                     c1, c2, c3, c4 = st.columns([2, 2, 4, 2])
                     c1.markdown(f"**{t.get('titulo', 'Sem Título')}**")
-                    c2.markdown(f"🎯 Glosas: `{t.get('glosas_relacionadas', '')}`")
-                    c3.markdown(f"📝 *{t.get('texto', '')[:60]}...*")
+                    c2.markdown(f" Glosas: `{t.get('glosas_relacionadas', '')}`")
+                    c3.markdown(f" *{t.get('texto', '')[:60]}...*")
                     
                     # Coluna de botões (Editar e Excluir)
                     b_edit, b_del = c4.columns([1, 1])
-                    if b_edit.button("✏️", key=f"edit_txt_{t['id']}", help="Editar"):
+                    if b_edit.button("️", key=f"edit_txt_{t['id']}", help="Editar"):
                         st.session_state["texto_em_edicao"] = t['id']
                         st.rerun()
-                    if b_del.button("❌", key=f"del_txt_{t['id']}", help="Excluir Definitivamente"):
+                    if b_del.button("", key=f"del_txt_{t['id']}", help="Excluir Definitivamente"):
                         if db.deletar_texto_prestador(t['id']):
                             st.rerun()

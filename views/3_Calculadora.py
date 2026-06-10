@@ -1,8 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="Calculadora de Glosa", page_icon="🧮", layout="centered")
+st.set_page_config(page_title="Calculadora de Glosa", page_icon="", layout="centered")
 
-st.title("🧮 Calculadora de Glosa")
+st.title(" Calculadora de Glosa")
 st.markdown("Calcule rapidamente o percentual glosado através dos valores cobrados e pagos.")
 
 # Funções auxiliares de formatação
@@ -26,7 +26,7 @@ def formatar_moeda(valor):
         return "R$ 0,00"
 
 with st.container():
-    st.markdown("### 💰 Entrada de Valores")
+    st.markdown("###  Entrada de Valores")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -51,7 +51,7 @@ with st.container():
                 pct_pago = 100 - pct_glosa
                 
                 st.divider()
-                st.markdown("### 📊 Resultado")
+                st.markdown("###  Resultado")
                 
                 if glosado == 0:
                     st.success("Sem glosas aplicadas! 100% pago.")

@@ -5,9 +5,13 @@ from shared.database import DatabaseManager
 # Configuração da Página principal (deve ser a primeira coisa)
 st.set_page_config(
     page_title="SIA Web - Auditoria",
-    page_icon="🛡️",
+    page_icon="️",
     layout="wide"
 )
+
+# Injeta o Design System Liquid Glass
+from core.glass_design_system import inject_glass_css
+inject_glass_css()
 
 # Inicializa Banco de Dados sempre instanciando a classe nova
 db = DatabaseManager()
@@ -33,7 +37,7 @@ def tela_login():
     with col_login:
         st.write("") 
         
-        tab_entrar, tab_cadastrar = st.tabs(["🔒 Entrar", "📝 Cadastrar-se"])
+        tab_entrar, tab_cadastrar = st.tabs([" Entrar", " Cadastrar-se"])
         
         with tab_entrar:
             with st.container(border=True):
@@ -112,7 +116,7 @@ def tela_login():
                             with st.spinner("Registrando..."):
                                 # No futuro, o ideal é checar se usuario_sigo já existe antes do insert
                                 if db.criar_usuario(novo_usr, novo_nome, nova_senha, nova_equipe):
-                                    st.success("✅ Aguarde aprovação do seu cadastro. Em breve será feito contato.")
+                                    st.success(" Aguarde aprovação do seu cadastro. Em breve será feito contato.")
                                 else:
                                     st.error("Erro ao cadastrar. O usuário SIGO já existe?")
 
@@ -140,16 +144,16 @@ else:
     paginas = []
     
     # Todos (Dashboard de Entrada/Bem vindo)
-    paginas.append(st.Page("views/0_Dashboard.py", title="Painel Principal", icon="🏠"))
+    paginas.append(st.Page("views/0_Dashboard.py", title="Painel Principal"))
     
     # Permissões Módulos Clínicos (Auditor, CISO, Gestor, Admin)
     if role in ["Auditor", "CISO", "Gestor", "Admin"]:
-        paginas.append(st.Page("views/2_Relatorio_5302.py", title="Relatório 5302", icon="📄"))
-        paginas.append(st.Page("views/3_Calculadora.py", title="Calculadora de Glosa", icon="🧮"))
-        paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção", icon="📈"))
+        paginas.append(st.Page("views/2_Relatorio_5302.py", title="Relatório 5302"))
+        paginas.append(st.Page("views/3_Calculadora.py", title="Calculadora de Glosa"))
+        paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
         
     # Todos podem ver a TELA de Configuração, mas o CONTEÚDO lá dentro se protege sozinho
-    paginas.append(st.Page("views/1_Configuracoes.py", title="Configurações", icon="⚙️"))
+    paginas.append(st.Page("views/1_Configuracoes.py", title="Configurações"))
     
     # Registra as páginas sem exibir o menu padrão no topo
     pg = st.navigation(paginas, position="hidden")
@@ -161,21 +165,21 @@ else:
     
     # Renderiza o menu manualmente para garantir a ordem
     for p in paginas:
-        st.sidebar.page_link(p, label=p.title, icon=p.icon)
+        st.sidebar.page_link(p, label=p.title)
         
     st.sidebar.divider()
     
     # Expansível de Links Úteis (Disponível para todos)
-    with st.sidebar.expander("🔗 Links", expanded=False):
+    with st.sidebar.expander(" Links", expanded=False):
         meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
         
         if meus_links:
             for link in meus_links:
-                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('url'), use_container_width=True)
+                st.link_button(f" {link.get('titulo')}", url=link.get('url'), use_container_width=True)
         else:
             st.caption("Nenhum link cadastrado.")
             
-        st.page_link("views/1_Configuracoes.py", label="➕ Adicionar Link")
+        st.page_link("views/1_Configuracoes.py", label=" Adicionar Link")
         
     pg.run()
     
@@ -188,18 +192,52 @@ else:
         texto_sem = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS"
         
         html_sidebar = f"""
+        <style>
+            .glass-btn {{
+                background: rgba(255,255,255,0.13);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: none;
+                border-radius: 28px;
+                color: white;
+                font-weight: 500;
+                font-family: sans-serif;
+                font-size: 14.5px;
+                padding: 10px 16px;
+                text-align: left;
+                cursor: pointer;
+                box-shadow: 
+                            inset 1px 1px 2px rgba(255,255,255,0.3),
+                            inset -1px -1px 2px rgba(0,0,0,0.1),
+                            0 4px 12px rgba(0,0,0,0.2);
+                transition: all 0.2s ease;
+                width: 100%;
+            }}
+            .glass-btn:hover {{
+                background: rgba(255,255,255,0.20);
+                transform: translateY(-1px);
+                box-shadow: 
+                            inset 1px 1px 3px rgba(255,255,255,0.4),
+                            inset -1px -1px 3px rgba(0,0,0,0.15),
+                            0 6px 16px rgba(0,0,0,0.3);
+            }}
+            .glass-btn:active {{
+                background: rgba(255,255,255,0.08);
+                transform: translateY(0px);
+            }}
+        </style>
         <script>
         function copyFast(txt, id, original_text) {{
             navigator.clipboard.writeText(txt).then(function() {{
                 var btn = document.getElementById(id);
-                btn.innerText = '✅ Copiado!';
+                btn.innerText = ' Copiado!';
                 setTimeout(() => btn.innerText = original_text, 2000);
             }});
         }}
         </script>
         <div style="display: flex; flex-direction: column; gap: 8px;">
-            <button id="btn_f1" onclick="copyFast(`{texto_com}`, 'btn_f1', '📋 Com especialidades')" style="background-color: #2b2b36; color: white; border: 1px solid rgba(250,250,250,0.2); padding: 0.4rem 0.6rem; border-radius: 0.4rem; cursor: pointer; font-family: sans-serif; font-size: 14px; text-align: left;">📋 Com especialidades</button>
-            <button id="btn_f2" onclick="copyFast(`{texto_sem}`, 'btn_f2', '📋 Sem especialidades')" style="background-color: #2b2b36; color: white; border: 1px solid rgba(250,250,250,0.2); padding: 0.4rem 0.6rem; border-radius: 0.4rem; cursor: pointer; font-family: sans-serif; font-size: 14px; text-align: left;">📋 Sem especialidades</button>
+            <button id="btn_f1" class="glass-btn" onclick="copyFast(`{texto_com}`, 'btn_f1', ' Com especialidades')"> Com especialidades</button>
+            <button id="btn_f2" class="glass-btn" onclick="copyFast(`{texto_sem}`, 'btn_f2', ' Sem especialidades')"> Sem especialidades</button>
         </div>
         """
         with st.sidebar:

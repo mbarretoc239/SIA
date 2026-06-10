@@ -9,8 +9,11 @@ import unicodedata
 
 import json
 import os
+import uuid
 
-st.set_page_config(page_title="Relatório 5302", page_icon="📄", layout="wide")
+from core.glass_design_system import render_glass_table
+
+st.set_page_config(page_title="Relatório 5302", page_icon="", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -717,7 +720,7 @@ def gerar_texto(df_glosas, tipo_geracao):
         
     return prefixo + texto_final
 
-st.title("📄 Gerador Offline - Relatório 5302")
+st.title(" Gerador Offline - Relatório 5302")
 st.markdown("Faça o upload do PDF da operadora para iniciar a análise inteligente e extração de glosas. **Tudo ocorre na memória RAM.**")
 
 pdf_file = st.file_uploader("Arraste o arquivo PDF ou CSV aqui", type=["pdf", "csv"])
@@ -732,6 +735,9 @@ if pdf_file is not None:
             st.session_state["dados_pdf"] = glosas
             st.session_state["meta_pdf"] = meta
             st.session_state["pdf_name"] = pdf_file.name
+            st.session_state["glosas_editadas"] = [
+                {**linha, "_id": str(uuid.uuid4())} for linha in glosas
+            ]
 
     dados = st.session_state.get("dados_pdf", [])
     meta = st.session_state.get("meta_pdf", {"processo": "Desconhecido", "prestador": "Desconhecido", "producao": "Desconhecida"})
@@ -741,21 +747,53 @@ if pdf_file is not None:
         
         st.markdown("### 1. Auditoria e Justificativas")
         st.markdown("Marque **Incluir no Relatório** para as glosas que deseja exportar. As glosas automáticas (ex: glosa 12) já vêm desmarcadas por padrão.")
-        
-        df = pd.DataFrame(dados)
-        
-        col_config = {
-            "Incluir no Relatório": st.column_config.CheckboxColumn("Incluir no Relatório", default=True),
-            "Justificativa": st.column_config.TextColumn("Justificativa", required=False),
-        }
-        
-        df_editado = st.data_editor(
-            df,
-            use_container_width=True,
-            num_rows="dynamic",
-            column_config=col_config
-        )
-        
+
+        linhas = st.session_state["glosas_editadas"]
+
+        colunas_visuais = ["Tipo", "Guia", "Cód. Procedimento", "Procedimento", "Glosa", "Descrição Oficial"]
+        df_visual = pd.DataFrame(linhas)[colunas_visuais] if linhas else pd.DataFrame(columns=colunas_visuais)
+        render_glass_table(df_visual, max_height=320)
+
+        st.markdown("**Edição por glosa**")
+        for linha in list(linhas):
+            row_id = linha["_id"]
+            titulo = f"Guia {linha['Guia']} • Glosa {linha['Glosa']} ({linha['Tipo']}) — {linha['Procedimento'][:50]}"
+            with st.expander(titulo):
+                c1, c2, c3 = st.columns([1, 4, 1])
+                with c1:
+                    linha["Incluir no Relatório"] = st.checkbox(
+                        "Incluir no Relatório",
+                        value=linha.get("Incluir no Relatório", True),
+                        key=f"incl_{row_id}",
+                    )
+                with c2:
+                    linha["Justificativa"] = st.text_input(
+                        "Justificativa",
+                        value=linha.get("Justificativa", ""),
+                        key=f"just_{row_id}",
+                    )
+                with c3:
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                    if st.button("Remover", key=f"rm_{row_id}", use_container_width=True):
+                        linhas.remove(linha)
+                        st.rerun()
+
+        if st.button("+ Adicionar linha manual"):
+            linhas.append({
+                "_id": str(uuid.uuid4()),
+                "Incluir no Relatório": True,
+                "Tipo": "Técnica",
+                "Guia": "",
+                "Cód. Procedimento": "",
+                "Procedimento": "",
+                "Glosa": "",
+                "Descrição Oficial": "",
+                "Justificativa": "",
+            })
+            st.rerun()
+
+        df_editado = pd.DataFrame(linhas).drop(columns=["_id"]) if linhas else pd.DataFrame(columns=colunas_visuais + ["Incluir no Relatório", "Justificativa"])
+
         st.markdown("### 2. Motor de Texto Offline")
         col1, col2 = st.columns([1, 2])
         
@@ -823,17 +861,17 @@ if pdf_file is not None:
                     <script>
                     function copyText() {{
                         navigator.clipboard.writeText(`{texto_seguro_final}`).then(function() {{
-                            document.getElementById('btn_copiar').innerText = '✅ Copiado!';
-                            setTimeout(() => document.getElementById('btn_copiar').innerText = '📋 Copiar Texto', 2000);
+                            document.getElementById('btn_copiar').innerText = ' Copiado!';
+                            setTimeout(() => document.getElementById('btn_copiar').innerText = ' Copiar Texto', 2000);
                         }});
                     }}
                     </script>
-                    <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;">📋 Copiar Texto</button>
+                    <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Texto</button>
                     """, height=65)
                 
                 with col_btn_save:
                     if "Nenhuma glosa" not in texto_gerado:
-                        if st.button("💾 Salvar Análise no Supabase", use_container_width=True):
+                        if st.button(" Salvar Análise no Supabase", use_container_width=True):
                             with st.spinner("Salvando na nuvem..."):
                                 try:
                                     salvar_no_supabase(st.session_state.get("pdf_name", "Desconhecido"), texto_pronto, df_final, meta)
@@ -841,7 +879,7 @@ if pdf_file is not None:
                                 except Exception as e:
                                     st.error(f"Erro ao salvar no banco. A tabela 'analises_auditoria' foi criada no Supabase? Detalhe: {e}")
                 
-                st.markdown("### 💬 Textos Adicionais ao Prestador")
+                st.markdown("###  Textos Adicionais ao Prestador")
                 if "Nenhuma glosa" not in texto_gerado:
                     glosas_presentes = set(df_final['Glosa'].unique())
                     from shared.database import DatabaseManager
@@ -868,17 +906,17 @@ if pdf_file is not None:
                         <script>
                         function copyTextMix() {{
                             navigator.clipboard.writeText(`{texto_seguro_mixado}`).then(function() {{
-                                document.getElementById('btn_copiar_mix').innerText = '✅ Copiado!';
-                                setTimeout(() => document.getElementById('btn_copiar_mix').innerText = '📋 Copiar Mensagem', 2000);
+                                document.getElementById('btn_copiar_mix').innerText = ' Copiado!';
+                                setTimeout(() => document.getElementById('btn_copiar_mix').innerText = ' Copiar Mensagem', 2000);
                             }});
                         }}
                         </script>
-                        <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500;">📋 Copiar Mensagem</button>
+                        <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500;"> Copiar Mensagem</button>
                         """, height=65)
                     else:
                         st.info("Nenhum texto adicional mapeado para as glosas detectadas.")
             else:
-                st.info("💡 Selecione os filtros ao lado e clique em Gerar Texto.")
+                st.info(" Selecione os filtros ao lado e clique em Gerar Texto.")
             
     else:
         st.warning("Nenhuma glosa identificada neste documento com os padrões atuais.")

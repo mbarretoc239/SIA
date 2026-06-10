@@ -5,9 +5,9 @@ import unicodedata
 import pandas as pd
 import io
 
-st.set_page_config(page_title="Análise de Produção", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Análise de Produção", page_icon="", layout="wide")
 
-st.title("📈 Análise de Produção")
+st.title(" Análise de Produção")
 st.markdown("Envie um ou mais demonstrativos de pagamento para contar e ranquear os procedimentos mais produzidos do prestador.")
 
 # Funções de Backend adaptadas para in-memory (BytesIO)
@@ -131,7 +131,7 @@ if uploaded_files:
                 st.success("Análise concluída com sucesso!")
                 
                 # Métricas principais
-                st.markdown("### 📊 Visão Geral")
+                st.markdown("###  Visão Geral")
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Prestador", dados["prestador"][:20] + "..." if len(dados["prestador"]) > 20 else dados["prestador"])
                 c2.metric("Total de PDFs", dados["qtd_pdfs"])
@@ -155,7 +155,7 @@ if uploaded_files:
                 col_lista, col_resumo = st.columns([1, 1])
                 
                 with col_lista:
-                    st.markdown("### 🏆 Top 10 Produzidos")
+                    st.markdown("###  Top 10 Produzidos")
                     for pos, (procedimento, qtd) in enumerate(dados["ranking"][:10], 1):
                         pct = (qtd / dados["total_linhas"]) * 100
                         valor = dados["valores"].get(procedimento, 0.0)
@@ -182,14 +182,14 @@ if uploaded_files:
                 texto_resumo = "\n".join(linhas_resumo)
                 
                 with col_resumo:
-                    st.markdown("### 📝 Resumo Copiável")
+                    st.markdown("###  Resumo Copiável")
                     st.text_area("Texto para anexar:", texto_resumo, height=400)
                     
                     df_csv = pd.DataFrame(ranking_para_csv)
                     csv_data = df_csv.to_csv(index=False, sep=";").encode("utf-8-sig")
                     
                     st.download_button(
-                        label="📥 Exportar Ranking Completo em CSV",
+                        label=" Exportar Ranking Completo em CSV",
                         data=csv_data,
                         file_name="ranking_producao.csv",
                         mime="text/csv",
