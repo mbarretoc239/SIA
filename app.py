@@ -136,22 +136,9 @@ if not st.session_state.get("logado", False):
 else:
     role = st.session_state.get("role_interno", "Contas")
     
-    # Expansível de Links Úteis (Disponível para todos)
-    with st.sidebar.expander("🔗 Links", expanded=False):
-        meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
-        
-        if meus_links:
-            for link in meus_links:
-                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('url'), use_container_width=True)
-        else:
-            st.caption("Nenhum link cadastrado.")
-            
-        st.page_link("views/1_Configuracoes.py", label="➕ Adicionar Link")
-        
-    st.sidebar.divider()
-    
     st.sidebar.title(f"Olá, {st.session_state.get('auditor_nome', 'Auditor')}")
     st.sidebar.caption(f"Cargo: {role}")
+    st.sidebar.divider()
     
     # Construção Dinâmica do Menu baseada no Cargo
     paginas = []
@@ -169,6 +156,19 @@ else:
     paginas.append(st.Page("views/1_Configuracoes.py", title="Configurações", icon="⚙️"))
     
     pg = st.navigation(paginas)
+    
+    # Expansível de Links Úteis (Disponível para todos)
+    with st.sidebar.expander("🔗 Links", expanded=False):
+        meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
+        
+        if meus_links:
+            for link in meus_links:
+                st.link_button(f"🌐 {link.get('titulo')}", url=link.get('url'), use_container_width=True)
+        else:
+            st.caption("Nenhum link cadastrado.")
+            
+        st.page_link("views/1_Configuracoes.py", label="➕ Adicionar Link")
+        
     pg.run()
     
     st.sidebar.divider()
