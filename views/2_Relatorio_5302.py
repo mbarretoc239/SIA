@@ -4,7 +4,6 @@ import re
 import pandas as pd
 import csv
 import collections
-import html
 import io
 import unicodedata
 
@@ -12,6 +11,7 @@ import json
 import os
 import uuid
 
+from core.glass_design_system import render_glass_table
 from core.settings import tem_acesso_modulo
 from shared.database import DatabaseManager
 
@@ -757,56 +757,37 @@ if pdf_file is not None:
         st.success(f"Análise concluída! {len(dados)} glosas detectadas. Prestador: **{meta.get('prestador')}** | Processo: **{meta.get('processo')}** | Produção: **{meta.get('producao')}**")
         
         st.markdown("### 1. Auditoria e Justificativas")
-        st.markdown("Marque **Incluir no Relatório** para as glosas que deseja exportar e edite a justificativa diretamente na tabela. As glosas automáticas (ex: glosa 12) já vêm desmarcadas por padrão.")
+        st.markdown("Marque **Incluir no Relatório** para as glosas que deseja exportar. As glosas automáticas (ex: glosa 12) já vêm desmarcadas por padrão.")
 
         linhas = st.session_state["glosas_editadas"]
 
-        st.markdown("""
-        <style>
-        .ed-glosa-head, .ed-glosa-cell {
-            display: flex; align-items: center; min-height: 38px;
-            font-size: 13px; color: rgba(255,255,255,0.88) !important;
-            overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-            padding: 0 4px;
-        }
-        .ed-glosa-head {
-            font-size: 11px; font-weight: 600; letter-spacing: .5px;
-            text-transform: uppercase; color: rgba(255,255,255,0.55) !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        colunas_visuais = ["Tipo", "Guia", "Cód. Procedimento", "Procedimento", "Glosa", "Descrição Oficial"]
+        df_visual = pd.DataFrame(linhas)[colunas_visuais] if linhas else pd.DataFrame(columns=colunas_visuais)
+        render_glass_table(df_visual, max_height=320)
 
-        col_widths = [0.7, 0.9, 0.9, 2.1, 0.6, 2.1, 0.7, 2.6, 0.5]
-        headers = ["Tipo", "Guia", "Cód.", "Procedimento", "Glosa", "Descrição Oficial", "Incluir", "Justificativa", ""]
-        for hc, h in zip(st.columns(col_widths), headers):
-            hc.markdown(f"<div class='ed-glosa-head'>{h}</div>", unsafe_allow_html=True)
-
+        st.markdown("**Edição por glosa**")
         for linha in list(linhas):
             row_id = linha["_id"]
-            cols = st.columns(col_widths)
-            cols[0].markdown(f"<div class='ed-glosa-cell'>{html.escape(str(linha.get('Tipo', '')))}</div>", unsafe_allow_html=True)
-            cols[1].markdown(f"<div class='ed-glosa-cell'>{html.escape(str(linha.get('Guia', '')))}</div>", unsafe_allow_html=True)
-            cols[2].markdown(f"<div class='ed-glosa-cell'>{html.escape(str(linha.get('Cód. Procedimento', '')))}</div>", unsafe_allow_html=True)
-            proc_txt = html.escape(str(linha.get('Procedimento', '')))
-            cols[3].markdown(f"<div class='ed-glosa-cell' title=\"{proc_txt}\">{proc_txt}</div>", unsafe_allow_html=True)
-            cols[4].markdown(f"<div class='ed-glosa-cell'>{html.escape(str(linha.get('Glosa', '')))}</div>", unsafe_allow_html=True)
-            desc_txt = html.escape(str(linha.get('Descrição Oficial', '')))
-            cols[5].markdown(f"<div class='ed-glosa-cell' title=\"{desc_txt}\">{desc_txt}</div>", unsafe_allow_html=True)
-            linha["Incluir no Relatório"] = cols[6].checkbox(
-                "Incluir",
-                value=linha.get("Incluir no Relatório", True),
-                key=f"incl_{row_id}",
-                label_visibility="collapsed",
-            )
-            linha["Justificativa"] = cols[7].text_input(
-                "Justificativa",
-                value=linha.get("Justificativa", ""),
-                key=f"just_{row_id}",
-                label_visibility="collapsed",
-            )
-            if cols[8].button("✕", key=f"rm_{row_id}", help="Remover linha"):
-                linhas.remove(linha)
-                st.rerun()
+            titulo = f"Guia {linha['Guia']} • Glosa {linha['Glosa']} ({linha['Tipo']}) — {linha['Procedimento'][:50]}"
+            with st.expander(titulo):
+                c1, c2, c3 = st.columns([1, 4, 1])
+                with c1:
+                    linha["Incluir no Relatório"] = st.checkbox(
+                        "Incluir no Relatório",
+                        value=linha.get("Incluir no Relatório", True),
+                        key=f"incl_{row_id}",
+                    )
+                with c2:
+                    linha["Justificativa"] = st.text_input(
+                        "Justificativa",
+                        value=linha.get("Justificativa", ""),
+                        key=f"just_{row_id}",
+                    )
+                with c3:
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                    if st.button("Remover", key=f"rm_{row_id}", use_container_width=True):
+                        linhas.remove(linha)
+                        st.rerun()
 
         if st.button("+ Adicionar linha manual"):
             linhas.append({
@@ -822,8 +803,7 @@ if pdf_file is not None:
             })
             st.rerun()
 
-        colunas_finais = ["Tipo", "Guia", "Cód. Procedimento", "Procedimento", "Glosa", "Descrição Oficial", "Incluir no Relatório", "Justificativa"]
-        df_editado = pd.DataFrame(linhas).drop(columns=["_id"]) if linhas else pd.DataFrame(columns=colunas_finais)
+        df_editado = pd.DataFrame(linhas).drop(columns=["_id"]) if linhas else pd.DataFrame(columns=colunas_visuais + ["Incluir no Relatório", "Justificativa"])
 
         st.markdown("### 2. Motor de Texto Offline")
         col1, col2 = st.columns([1, 2])
