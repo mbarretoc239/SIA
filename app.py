@@ -22,6 +22,22 @@ st.session_state.db = db
 from streamlit_cookies_controller import CookieController
 cookie_controller = CookieController()
 
+
+def _expirar_cookie_sessao():
+    """Expira o cookie 'sia_auth' via JS direto (document.cookie).
+
+    cookie_controller.remove() depende de um round-trip com o componente
+    iframe que nem sempre se completa antes do rerun, deixando o cookie
+    antigo no navegador e fazendo o auto-login reativar a conta anterior.
+    Um <script> injetado via components.html executa de forma síncrona ao
+    ser parseado pelo navegador, sem depender desse round-trip.
+    """
+    import streamlit.components.v1 as components
+    components.html(
+        "<script>document.cookie = 'sia_auth=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';</script>",
+        height=0,
+    )
+
 @st.dialog("Alinhamento Importante", width="large")
 def mostrar_alinhamento_dialog(alinhamento, usuario_id):
     st.caption(f"Categoria: {alinhamento.get('categoria', 'Geral')}")
@@ -288,13 +304,14 @@ else:
             st.divider()
     
     if st.sidebar.button("Sair", use_container_width=True):
-        # Limpa cookie (o componente roda no navegador via iframe; precisa de
-        # alguns reruns para o JS de remoção ser entregue, senão o cookie
-        # ainda existe e o auto-login via cookie loga o usuário de volta)
+        # Limpa o cookie via JS direto (síncrono) e também via o componente
+        # (cookie_controller.remove), como redundância. O round-trip do
+        # componente leva alguns reruns para se efetivar; durante essa
+        # janela, _skip_autologin evita que o auto-login reative a conta
+        # antiga com um cookie ainda em trânsito de remoção.
+        _expirar_cookie_sessao()
         cookie_controller.remove("sia_auth")
         time.sleep(0.5)
-        # Limpa sessão, mas marca para ignorar o auto-login pelos próximos
-        # reruns enquanto a remoção do cookie se propaga no navegador
         st.session_state.clear()
         st.session_state["_skip_autologin"] = 3
         st.rerun()
