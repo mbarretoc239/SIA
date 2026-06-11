@@ -209,9 +209,12 @@ else:
         def _checar_alinhamentos_pendentes():
             pendentes = db.carregar_alinhamentos_pendentes(st.session_state.get("usuario_id"), role)
             st.session_state["alinhamentos_pendentes"] = pendentes
-            if pendentes and st.session_state.get("_dialog_alinhamento_id") != pendentes[0]["id"]:
-                st.session_state["_dialog_alinhamento_id"] = pendentes[0]["id"]
-                mostrar_alinhamento_dialog(pendentes[0], st.session_state.get("usuario_id"))
+            
+            if pendentes:
+                id_e_status = f"{pendentes[0]['id']}_{pendentes[0].get('ativo')}"
+                if st.session_state.get("_dialog_alinhamento_id") != id_e_status:
+                    st.session_state["_dialog_alinhamento_id"] = id_e_status
+                    mostrar_alinhamento_dialog(pendentes[0], st.session_state.get("usuario_id"))
 
         _checar_alinhamentos_pendentes()
 
