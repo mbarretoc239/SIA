@@ -216,6 +216,7 @@ def carregar_mapa_subglosas():
     db = DatabaseManager()
     mapa = {}
     try:
+        # Carrega da tabela padrao
         rows = db._get("glosas_padrao?select=codigo,sub_glosa,descricao_sub_glosa&sub_glosa=neq.")
         for r in rows:
             cod = str(r.get('codigo', '')).strip()
@@ -223,6 +224,18 @@ def carregar_mapa_subglosas():
             desc = str(r.get('descricao_sub_glosa', '')).strip()
             if cod and sub and desc:
                 mapa[(cod, sub)] = desc
+                
+        # Integra o Módulo Híbrido: Carrega customizadas cadastradas pelo usuário
+        custom = db.carregar_glosas_customizadas()
+        for c in custom:
+            cod_full = str(c.get('codigo_glosa', '')).strip()
+            if '.' in cod_full:
+                parts = cod_full.split('.')
+                cod = parts[0]
+                sub = parts[1]
+                desc = str(c.get('descricao', '')).strip()
+                if cod and sub and desc:
+                    mapa[(cod, sub)] = desc
     except Exception:
         pass
     return mapa
@@ -319,6 +332,21 @@ def processar_pdf(pdf_file):
     
     mp = re.search(r"(?:Processo|Lote)[\s\:\;\-\"\'\=]+(\d+)", texto_completo, re.IGNORECASE)
     if mp: meta["processo"] = mp.group(1).strip()
+    
+    def parse_float(val_str):
+        try:
+            return float(val_str.replace(",", ""))
+        except:
+            return 0.0
+            
+    m_cobrado = re.search(r"Vl\.Cobrado\s+([\d\.\,]+)", texto_completo, re.IGNORECASE)
+    if m_cobrado: meta["valor_cobrado"] = parse_float(m_cobrado.group(1))
+    
+    m_calculado = re.search(r"Vl\.Calculado\s+([\d\.\,]+)", texto_completo, re.IGNORECASE)
+    if m_calculado: meta["valor_calculado"] = parse_float(m_calculado.group(1))
+    
+    m_glosa = re.search(r"Vl\.\s*Glosa\s+([\d\.\,]+)", texto_completo, re.IGNORECASE)
+    if m_glosa: meta["valor_glosa"] = parse_float(m_glosa.group(1))
     
     # Estratégia 1: header "Credenciado" com dados na linha seguinte
     # Formato Hapvida: linha de traços separa header dos dados
@@ -439,6 +467,33 @@ def processar_csv(csv_file):
             idx = chaves.index("mesproducao") if "mesproducao" in chaves else chaves.index("producao")
             if len(linhas_csv) > i + 1 and len(linhas_csv[i+1]) > idx:
                 meta["producao"] = linhas_csv[i+1][idx].strip()
+                
+        def parse_float_csv(val_str):
+            try:
+                # Remove R$, espaços, e converte formato PT-BR para float
+                clean = re.sub(r'[^\d\,\.-]', '', val_str)
+                if ',' in clean and '.' in clean:
+                    clean = clean.replace('.', '').replace(',', '.')
+                elif ',' in clean:
+                    clean = clean.replace(',', '.')
+                return float(clean)
+            except:
+                return 0.0
+
+        if "vlcobrado" in chaves:
+            idx = chaves.index("vlcobrado")
+            if len(linhas_csv) > i + 1 and len(linhas_csv[i+1]) > idx:
+                meta["valor_cobrado"] = parse_float_csv(linhas_csv[i+1][idx])
+                
+        if "vlcalculado" in chaves:
+            idx = chaves.index("vlcalculado")
+            if len(linhas_csv) > i + 1 and len(linhas_csv[i+1]) > idx:
+                meta["valor_calculado"] = parse_float_csv(linhas_csv[i+1][idx])
+                
+        if "vlglosa" in chaves or "vlglosado" in chaves:
+            idx = chaves.index("vlglosa") if "vlglosa" in chaves else chaves.index("vlglosado")
+            if len(linhas_csv) > i + 1 and len(linhas_csv[i+1]) > idx:
+                meta["valor_glosa"] = parse_float_csv(linhas_csv[i+1][idx])
     
     guia_atual = "N/A"
     item_atual = ""
@@ -531,7 +586,41 @@ def processar_csv(csv_file):
                 
     return glosas_encontradas, meta
 
-def gerar_texto(df_glosas, tipo_geracao):
+def formatar_descricao_glosa_inteligente(desc, glosa):
+    desc = desc.strip().lower()
+    
+    # Correções gramaticais na glosa
+    desc = desc.replace("rx evidencia", "o rx evidenciar")
+    desc = desc.replace("radiografia evidencia", "a radiografia evidenciar")
+    desc = desc.replace("imagem evidencia", "a imagem evidenciar")
+    desc = desc.replace("documentação evidencia", "a documentação evidenciar")
+    
+    if desc.startswith("falta "):
+        if not desc.startswith("falta de "):
+            desc = desc.replace("falta ", "falta de ", 1)
+            
+    if desc.startswith("ausência ") and not desc.startswith("ausência de "):
+        desc = desc.replace("ausência ", "ausência de ", 1)
+    if desc.startswith("ausencia ") and not desc.startswith("ausencia de "):
+        desc = desc.replace("ausencia ", "ausência de ", 1)
+        
+    conectivo = "por "
+    if desc.startswith("o "):
+        conectivo = "pelo "
+        desc = desc[2:]
+    elif desc.startswith("a "):
+        conectivo = "pela "
+        desc = desc[2:]
+    elif desc.startswith("os "):
+        conectivo = "pelos "
+        desc = desc[3:]
+    elif desc.startswith("as "):
+        conectivo = "pelas "
+        desc = desc[3:]
+        
+    return f"glosa {conectivo}{desc} (glosa {glosa})"
+
+def gerar_texto(df_glosas, tipo_geracao, meta=None):
     df = df_glosas[df_glosas['Incluir no Relatório'] == True].copy()
     
     if tipo_geracao == "Só Glosas Críticas":
@@ -544,6 +633,10 @@ def gerar_texto(df_glosas, tipo_geracao):
     
     if tipo_geracao == "Versão Completa (Detalhada)":
         clausulas = []
+        
+        guias_raw = {}
+        globais_dict = {}
+        
         for i, row in df.iterrows():
             justificativa = (str(row.get('Justificativa') or "")).strip()
             glosa = str(row['Glosa'])
@@ -551,15 +644,119 @@ def gerar_texto(df_glosas, tipo_geracao):
             cod_proc = str(row['Cód. Procedimento'])
             proc = str(row['Procedimento']).lower()
             guia = str(row['Guia'])
+            tipo_glosa = str(row.get('Tipo', ''))
             
-            texto = f"glosa por {desc_oficial} (glosa {glosa}) no procedimento {cod_proc} - {proc}, na guia {guia}"
+            texto_glosa = formatar_descricao_glosa_inteligente(desc_oficial, glosa)
             if justificativa:
-                texto += f", {justificativa}"
-            clausulas.append(texto)
+                texto_glosa += f", {justificativa}"
+                
+            is_automatica = (tipo_glosa == 'Automática')
+            is_480 = (glosa == '480')
+            
+            if is_automatica or is_480:
+                if texto_glosa not in globais_dict:
+                    globais_dict[texto_glosa] = set()
+                globais_dict[texto_glosa].add(guia)
+            else:
+                if cod_proc == "N/A" or not cod_proc:
+                    proc_key = ""
+                else:
+                    proc_key = f"{cod_proc} - {proc}"
+                    
+                if guia not in guias_raw:
+                    guias_raw[guia] = {}
+                if proc_key not in guias_raw[guia]:
+                    guias_raw[guia][proc_key] = []
+                    
+                guias_raw[guia][proc_key].append({
+                    "texto": texto_glosa,
+                    "glosa": glosa
+                })
+                
+        guias_dict = {}
+        for guia, procs in guias_raw.items():
+            guias_dict[guia] = {}
+            for proc_key, glosas_list in procs.items():
+                codigos = [g['glosa'] for g in glosas_list]
+                
+                # Regra Família de Glosas: Mesclar rx inicial (430) e rx final (420)
+                if '420' in codigos and '430' in codigos:
+                    glosas_list = [g for g in glosas_list if g['glosa'] not in ('420', '430')]
+                    glosas_list.append({
+                        "texto": "glosas por falta de rx inicial e final (glosas 430 e 420)",
+                        "glosa": "430_420"
+                    })
+                    
+                # Popular o dicionário final agrupando por texto da glosa
+                for g in glosas_list:
+                    t = g["texto"]
+                    if t not in guias_dict[guia]:
+                        guias_dict[guia][t] = []
+                    if proc_key and proc_key not in guias_dict[guia][t]:
+                        guias_dict[guia][t].append(proc_key)
+            
+        for idx, (guia, glosas_dict) in enumerate(guias_dict.items()):
+            clausulas_glosas = []
+            for texto_glosa, procs in glosas_dict.items():
+                if len(procs) == 0:
+                    clausulas_glosas.append(f"{texto_glosa}")
+                elif len(procs) == 1:
+                    clausulas_glosas.append(f"{texto_glosa} no procedimento {procs[0]}")
+                else:
+                    procs_str = ", ".join(procs[:-1]) + " e " + procs[-1]
+                    clausulas_glosas.append(f"{texto_glosa} nos procedimentos {procs_str}")
+            
+            if len(clausulas_glosas) == 1:
+                procs_str = clausulas_glosas[0]
+            else:
+                procs_str = ", ".join(clausulas_glosas[:-1]) + ", além de " + clausulas_glosas[-1]
+                
+            if idx == 0:
+                clausulas.append(f"Foram identificadas glosas nas seguintes guias: na guia {guia}, {procs_str}")
+            else:
+                clausulas.append(f"na guia {guia}, {procs_str}")
+                
+        clausulas_globais = []
+        for texto_glosa, guias_set in globais_dict.items():
+            guias_list = sorted(list(guias_set))
+            n_guias = len(guias_list)
+            
+            if n_guias == 1:
+                guias_formatado = f"guia {guias_list[0]}"
+            elif n_guias == 2:
+                guias_formatado = f"guias {guias_list[0]} e {guias_list[1]}"
+            elif n_guias == 3:
+                guias_formatado = f"guias {guias_list[0]}, {guias_list[1]} e {guias_list[2]}"
+            else:
+                guias_formatado = f"guias {guias_list[0]}, {guias_list[1]}, {guias_list[2]} e mais {n_guias - 3}"
+                
+            clausulas_globais.append(f"{texto_glosa} em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({guias_formatado})")
+            
+        clausulas.extend(clausulas_globais)
+        
         if not clausulas:
             return "Nenhuma glosa selecionada."
-        texto_final = "; ".join(clausulas[:-1]) + "; e " + clausulas[-1] + "."
-        return "O prestador apresentou " + texto_final
+            
+        if len(clausulas) == 1:
+            texto_final = clausulas[0]
+        else:
+            texto_final = "; e ".join(["; ".join(clausulas[:-1]), clausulas[-1]])
+            
+        resumo_financeiro = ""
+        if meta and "valor_cobrado" in meta and meta["valor_cobrado"] > 0:
+            cobrado = meta.get("valor_cobrado", 0)
+            calculado = meta.get("valor_calculado", 0)
+            glosa = meta.get("valor_glosa", 0)
+            
+            # Validação: o valor glosa do sistema as vezes está errado, calcula usando a diferença
+            diferenca = cobrado - calculado
+            glosa_real = diferenca if diferenca > 0 else glosa
+            
+            if glosa_real > 0:
+                pct = (glosa_real / cobrado) * 100
+                resumo_financeiro = f", totalizando um percentual de glosa de {pct:.1f}% do valor cobrado no processo"
+                
+        return texto_final + resumo_financeiro + "."
 
     # --- NOVO MOTOR MISTO COM FATORAÇÃO DE GUIAS ---
     itens = []
@@ -816,7 +1013,7 @@ if pdf_file is not None:
                 if "Somente" in opcao_filtro:
                     df_final = df_final[df_final['Tipo'] == 'Crítica']
                 
-                texto_gerado = gerar_texto(df_final, tipo)
+                texto_gerado = gerar_texto(df_final, tipo, meta)
                 
                 # Limpa prefixos caso a funcao os tenha gerado
                 texto_gerado = texto_gerado.replace("PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\\n", "")
