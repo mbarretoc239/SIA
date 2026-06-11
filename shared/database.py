@@ -317,6 +317,14 @@ class DatabaseManager:
             return response.json()
         return []
 
+    # --- Operações de Banco (Changelog / Novidades) ---
+    def carregar_changelog(self, limite=5):
+        url = f"{self.supabase_url}/rest/v1/changelog?select=*&order=created_at.desc&limit={limite}"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
     def carregar_alinhamentos_pendentes(self, usuario_id, role):
         from core.settings import NIVEL_HIERARQUIA, ROLES_CIENCIA_OBRIGATORIA
         if role not in ROLES_CIENCIA_OBRIGATORIA:
