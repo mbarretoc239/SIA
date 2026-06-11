@@ -210,6 +210,14 @@ class DatabaseManager:
             return [str(u.get('usuario_sigo', '')).strip().upper() for u in response.json() if u.get('usuario_sigo')]
         return []
 
+    # --- Operações de Banco (Regras Gramaticais) ---
+    def carregar_regras_gramaticais(self):
+        url = f"{self.supabase_url}/rest/v1/regras_gramaticais?select=*"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
     # --- Operações de Banco (Histórico de Glosas - Modulo 5302) ---
     def inserir_glosa_historico(self, auditor_id, codigo_glosa, paciente_nome, numero_guia, justificativa_texto, valor_glosado):
         url = f"{self.supabase_url}/rest/v1/historico_glosas"
@@ -405,7 +413,7 @@ class DatabaseManager:
         return response.status_code in [200, 201]
 
     def marcar_alinhamento_lido(self, alinhamento_id, usuario_id):
-        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos"
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?on_conflict=alinhamento_id,usuario_id"
         headers_upsert = self.headers.copy()
         headers_upsert["Prefer"] = "resolution=ignore-duplicates"
         data = {"alinhamento_id": alinhamento_id, "usuario_id": usuario_id}
@@ -413,7 +421,7 @@ class DatabaseManager:
         return response.status_code in [200, 201]
 
     def marcar_inativacao_lida(self, alinhamento_id, usuario_id):
-        url = f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas"
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?on_conflict=alinhamento_id,usuario_id"
         headers_upsert = self.headers.copy()
         headers_upsert["Prefer"] = "resolution=ignore-duplicates"
         data = {"alinhamento_id": alinhamento_id, "usuario_id": usuario_id}

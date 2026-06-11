@@ -586,23 +586,42 @@ def processar_csv(csv_file):
                 
     return glosas_encontradas, meta
 
+@st.cache_data(ttl=600, show_spinner=False)
+def carregar_regras_gramaticais_cache():
+    try:
+        from shared.database import DatabaseManager
+        db = DatabaseManager()
+        return db.carregar_regras_gramaticais()
+    except Exception:
+        return []
+
 def formatar_descricao_glosa_inteligente(desc, glosa):
     desc = desc.strip().lower()
     
-    # Correções gramaticais na glosa
-    desc = desc.replace("rx evidencia", "o rx evidenciar")
-    desc = desc.replace("radiografia evidencia", "a radiografia evidenciar")
-    desc = desc.replace("imagem evidencia", "a imagem evidenciar")
-    desc = desc.replace("documentação evidencia", "a documentação evidenciar")
+    regras = carregar_regras_gramaticais_cache()
     
-    if desc.startswith("falta "):
-        if not desc.startswith("falta de "):
-            desc = desc.replace("falta ", "falta de ", 1)
-            
-    if desc.startswith("ausência ") and not desc.startswith("ausência de "):
-        desc = desc.replace("ausência ", "ausência de ", 1)
-    if desc.startswith("ausencia ") and not desc.startswith("ausencia de "):
-        desc = desc.replace("ausencia ", "ausência de ", 1)
+    if regras:
+        # Se existem regras no banco, o motor as processa na ordem
+        for regra in regras:
+            original = str(regra.get('texto_original', '')).lower()
+            substituto = str(regra.get('texto_substituto', '')).lower()
+            if original and substituto != "":
+                desc = desc.replace(original, substituto)
+    else:
+        # Fallback de segurança caso a tabela ainda esteja vazia
+        desc = desc.replace("rx evidencia", "o rx evidenciar")
+        desc = desc.replace("radiografia evidencia", "a radiografia evidenciar")
+        desc = desc.replace("imagem evidencia", "a imagem evidenciar")
+        desc = desc.replace("documentação evidencia", "a documentação evidenciar")
+        
+        if desc.startswith("falta "):
+            if not desc.startswith("falta de "):
+                desc = desc.replace("falta ", "falta de ", 1)
+                
+        if desc.startswith("ausência ") and not desc.startswith("ausência de "):
+            desc = desc.replace("ausência ", "ausência de ", 1)
+        if desc.startswith("ausencia ") and not desc.startswith("ausencia de "):
+            desc = desc.replace("ausencia ", "ausência de ", 1)
         
     conectivo = "por "
     if desc.startswith("o "):
