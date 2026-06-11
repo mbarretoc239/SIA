@@ -150,13 +150,17 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
     prefixo = ""
     
     if tipo_geracao == "Versão Completa (Detalhada)":
+        def formatar_lista_guias(lista):
+            if len(lista) == 1: return lista[0]
+            if len(lista) == 2: return f"{lista[0]} e {lista[1]}"
+            if len(lista) <= 6:
+                return f"{', '.join(lista[:-1])} e {lista[-1]}"
+            return f"{', '.join(lista[:6])} e mais {len(lista) - 6}"
+
         def formatar_guias_detalhada(lista):
             if not lista or lista[0] == "Desconhecida": return ""
-            if len(lista) == 1: return f"guia {lista[0]}"
-            if len(lista) == 2: return f"guias {lista[0]} e {lista[1]}"
-            if len(lista) <= 6:
-                return f"guias {', '.join(lista[:-1])} e {lista[-1]}"
-            return f"guias {', '.join(lista[:6])} e mais {len(lista) - 6}"
+            prefixo = "guia" if len(lista) == 1 else "guias"
+            return f"{prefixo} {formatar_lista_guias(lista)}"
 
         guias_480 = df[df['Glosa'] == '480']['Guia'].unique().tolist()
         clausula_480 = ""
@@ -164,8 +168,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             sep_480 = "na" if len(guias_480) == 1 else "nas"
             clausula_480 = f"Houve glosa 480 por falta de documentação ou ausência de envio da guia {sep_480} {formatar_guias_detalhada(guias_480)}"
 
-        guias_raw = {}
+        guia_proc_glosas = {}
         globais_dict = {}
+        ordem_guias = []
 
         for _, row in df[df['Glosa'] != '480'].iterrows():
             justificativa = (str(row.get('Justificativa') or "")).strip()
@@ -177,73 +182,139 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             tipo_glosa = str(row.get('Tipo', ''))
 
             texto_base = formatar_descricao_glosa_inteligente(desc_oficial, glosa)
-            texto_glosa = texto_base
-            if justificativa:
-                texto_glosa += f", {justificativa}"
 
             if tipo_glosa == 'Automática':
+                texto_glosa = texto_base
+                if justificativa:
+                    texto_glosa += f", {justificativa}"
                 globais_dict.setdefault(texto_glosa, set()).add(guia)
-            else:
-                proc_key = f"{cod_proc} - {proc}" if cod_proc not in ("N/A", "") else ""
-                guias_raw.setdefault(guia, {}).setdefault(proc_key, []).append({
-                    "texto": texto_glosa, "base": texto_base, "justificativa": justificativa, "glosa": glosa
-                })
+                continue
 
-        guias_dict = {}
-        for guia, procs in guias_raw.items():
-            guias_dict[guia] = {}
-            for proc_key, glosas_list in procs.items():
-                codigos = [g['glosa'] for g in glosas_list]
+            if guia not in ordem_guias:
+                ordem_guias.append(guia)
 
-                # Regra Família de Glosas: Mesclar rx inicial (430) e rx final (420)
+            proc_key = f"{cod_proc} - {proc}" if cod_proc not in ("N/A", "") else ""
+            guia_proc_glosas.setdefault(guia, {}).setdefault(proc_key, []).append({
+                "base": texto_base, "justificativa": justificativa, "glosa": glosa
+            })
+
+        # Regra Família de Glosas: Mesclar rx inicial (430) e rx final (420)
+        for guia, procs in guia_proc_glosas.items():
+            for proc_key, lista in procs.items():
+                codigos = [g['glosa'] for g in lista]
                 if '420' in codigos and '430' in codigos:
-                    glosas_list = [g for g in glosas_list if g['glosa'] not in ('420', '430')]
-                    glosas_list.append({
-                        "texto": "glosas por falta de rx inicial e final (glosas 430 e 420)",
+                    nova_lista = [g for g in lista if g['glosa'] not in ('420', '430')]
+                    nova_lista.append({
                         "base": "glosas por falta de rx inicial e final (glosas 430 e 420)",
                         "justificativa": "",
                         "glosa": "430_420"
                     })
+                    procs[proc_key] = nova_lista
 
-                for g in glosas_list:
-                    t = g["texto"]
-                    guias_dict[guia].setdefault(t, {"base": g["base"], "justificativa": g["justificativa"], "procs": []})
-                    if proc_key and proc_key not in guias_dict[guia][t]["procs"]:
-                        guias_dict[guia][t]["procs"].append(proc_key)
+        # Agrupa por (descrição da glosa, justificativa) entre todas as guias, para
+        # consolidar repetições da mesma glosa+motivo em guias diferentes.
+        grupos_ordem = []
+        grupos = {}
+        for guia in ordem_guias:
+            for proc_key, lista in guia_proc_glosas.get(guia, {}).items():
+                for g in lista:
+                    chave = (g["base"], g["justificativa"])
+                    if chave not in grupos:
+                        grupos[chave] = {}
+                        grupos_ordem.append(chave)
+                    guias_proc = grupos[chave].setdefault(proc_key, [])
+                    if guia not in guias_proc:
+                        guias_proc.append(guia)
 
-        clausulas = []
-        for idx, (guia, glosas_d) in enumerate(guias_dict.items()):
-            clausulas_glosas = []
-            for texto_glosa, info in glosas_d.items():
-                base = info["base"]
-                justificativa_item = info["justificativa"]
-                procs = info["procs"]
+        clausulas_por_guia = {}
+        clausulas_globais = []
+
+        for chave in grupos_ordem:
+            base, justificativa = chave
+            proc_map = grupos[chave]
+
+            todas_guias = []
+            for guias_lista in proc_map.values():
+                for g in guias_lista:
+                    if g not in todas_guias:
+                        todas_guias.append(g)
+
+            if len(todas_guias) == 1:
+                guia = todas_guias[0]
+                procs = [pk for pk in proc_map.keys() if pk]
 
                 if len(procs) == 0:
                     clausula = base
-                    if justificativa_item:
-                        clausula += f", {justificativa_item}"
                 elif len(procs) == 1:
                     clausula = f"{base} no procedimento {procs[0]}"
-                    if justificativa_item:
-                        clausula += f", {justificativa_item}"
                 else:
                     procs_str = ", ".join(procs[:-1]) + " e " + procs[-1]
                     clausula = f"{base} nos procedimentos {procs_str}"
-                    if justificativa_item:
-                        clausula += f", {justificativa_item}"
 
-                clausulas_glosas.append(clausula)
+                if justificativa:
+                    clausula += f", {justificativa}"
 
-            if len(clausulas_glosas) == 1:
-                procs_str = clausulas_glosas[0]
+                clausulas_por_guia.setdefault(guia, []).append(clausula)
+            elif len(proc_map) > 3:
+                # Glosa+justificativa repetida em muitos procedimentos diferentes:
+                # detalhar por procedimento deixaria a frase enorme, então resume
+                # apenas pela quantidade e lista de guias (igual às glosas automáticas).
+                guias_ordenadas = sorted(todas_guias)
+                n_guias = len(guias_ordenadas)
+
+                clausula = base
+                if justificativa:
+                    clausula += f", {justificativa}"
+                clausula += f" em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({formatar_lista_guias(guias_ordenadas)})"
+
+                ordering_key = min(ordem_guias.index(g) for g in todas_guias)
+                clausulas_globais.append((ordering_key, len(clausulas_globais), clausula))
             else:
-                procs_str = ", ".join(clausulas_glosas[:-1]) + ", além de " + clausulas_glosas[-1]
+                # Glosa+justificativa idêntica em mais de uma guia: consolida em
+                # uma única cláusula, listando as guias por procedimento.
+                partes = []
+                for proc_key, guias_lista in proc_map.items():
+                    guias_fmt = formatar_guias_detalhada(guias_lista)
+                    prep = "na" if len(guias_lista) == 1 else "nas"
+                    if proc_key:
+                        partes.append(f"no procedimento {proc_key} {prep} {guias_fmt}")
+                    else:
+                        partes.append(f"{prep} {guias_fmt}")
 
+                if len(partes) == 1:
+                    partes_str = partes[0]
+                else:
+                    partes_str = ", ".join(partes[:-1]) + ", e " + partes[-1]
+
+                clausula = base
+                if justificativa:
+                    clausula += f", {justificativa}"
+                clausula += f", {partes_str}"
+
+                ordering_key = min(ordem_guias.index(g) for g in todas_guias)
+                clausulas_globais.append((ordering_key, len(clausulas_globais), clausula))
+
+        itens_ordenados = []
+        for guia in ordem_guias:
+            if guia in clausulas_por_guia:
+                lista_glosas = clausulas_por_guia[guia]
+                if len(lista_glosas) == 1:
+                    texto_guia = lista_glosas[0]
+                else:
+                    texto_guia = ", ".join(lista_glosas[:-1]) + ", além de " + lista_glosas[-1]
+                itens_ordenados.append((ordem_guias.index(guia), 1, f"na guia {guia}, {texto_guia}"))
+
+        for ordering_key, seq, clausula in clausulas_globais:
+            itens_ordenados.append((ordering_key, 0, clausula))
+
+        itens_ordenados.sort(key=lambda x: (x[0], x[1]))
+
+        clausulas = []
+        for idx, (_, _, texto) in enumerate(itens_ordenados):
             if idx == 0:
-                clausulas.append(f"Foram identificadas glosas nas seguintes guias: na guia {guia}, {procs_str}")
+                clausulas.append(f"Foram identificadas glosas nas seguintes guias: {texto}")
             else:
-                clausulas.append(f"na guia {guia}, {procs_str}")
+                clausulas.append(texto)
 
         for texto_glosa, guias_set in globais_dict.items():
             guias_list = sorted(list(guias_set))
