@@ -67,4 +67,8 @@ main.py
 
 # --- Arquivos de dados locais que não devem ir pro repo ---
 CHANGELOG_GLOSAS.md
+
+# --- Dados reais de pacientes/prestadores (PII) usados em QA local ---
+/relatórios/
+*.pdf
 *.jsonl

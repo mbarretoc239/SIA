@@ -25,6 +25,14 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
+    def carregar_dicionario_glosas(self) -> dict:
+        """Carrega o dicionário de correção de textos de glosas do Supabase"""
+        url = f"{self.supabase_url}/rest/v1/glosas_dicionario?select=texto_original,texto_corrigido"
+        r = requests.get(url, headers=self.headers)
+        if r.status_code == 200:
+            return {item["texto_original"].lower().strip(): item["texto_corrigido"] for item in r.json()}
+        return {}
+
     # --- Segurança e Hashing ---
     def criptografar(self, texto: str) -> str:
         if not texto: return ""
