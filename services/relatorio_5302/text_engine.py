@@ -400,6 +400,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if 'cerômero' in desc_lower or 'ceromero' in desc_lower:
             if 'onlay' in desc_lower:
                 return 'restauração em cerômero (onlay)', 'restaurações em cerômero (onlay)'
+            if 'inlay' in desc_lower:
+                return 'restauração em cerômero (inlay)', 'restaurações em cerômero (inlay)'
             return 'restauração em cerômero', 'restaurações em cerômero'
         if 'restaura' in desc_lower or cod_str.startswith('40'):
             return 'restauração', 'restaurações'
