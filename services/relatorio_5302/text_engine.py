@@ -375,7 +375,11 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if 'incluso' in desc_lower or 'inclusos' in desc_lower or 'impactad' in desc_lower:
             return 'exodontia de incluso/impactado', 'exodontias de incluso/impactado'
         if 'exodontia' in desc_lower: return 'exodontia', 'exodontias'
-        if 'protese' in desc_lower or 'prótese' in desc_lower:
+        if 'protese' in desc_lower or 'prótese' in desc_lower or 'protétic' in desc_lower or 'protetic' in desc_lower:
+            if 'recimenta' in desc_lower:
+                return 'recimentação de prótese', 'recimentações de prótese'
+            if 'remoção' in desc_lower or 'remocao' in desc_lower:
+                return 'remoção de prótese', 'remoções de prótese'
             if 'reembasamento' in desc_lower:
                 return 'reembasamento de prótese', 'reembasamentos de prótese'
             if 'conserto' in desc_lower:
@@ -404,7 +408,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             return 'aumento de coroa clínica', 'aumentos de coroa clínica'
         if 'gengivectomia' in desc_lower: return 'gengivectomia', 'gengivectomias'
         if 'gengivoplastia' in desc_lower: return 'gengivoplastia', 'gengivoplastias'
-        if 'pino' in desc_lower:
+        if 'pino pré' in desc_lower or 'pino pre' in desc_lower:
             return 'pino pré-fabricado', 'pinos pré-fabricados'
         if 'núcleo' in desc_lower or 'nucleo' in desc_lower:
             if 'metálic' in desc_lower or 'metalic' in desc_lower:
@@ -424,6 +428,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             return 'restauração atraumática', 'restaurações atraumáticas'
         if 'amálgama' in desc_lower or 'amalgama' in desc_lower:
             return 'restauração em amálgama', 'restaurações em amálgama'
+        if 'ionômero' in desc_lower or 'ionomero' in desc_lower:
+            return 'restauração em ionômero de vidro', 'restaurações em ionômero de vidro'
         if 'resina' in desc_lower:
             return 'restauração em resina', 'restaurações em resina'
         if 'cerômero' in desc_lower or 'ceromero' in desc_lower:
