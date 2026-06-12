@@ -172,9 +172,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         def formatar_lista_guias(lista):
             if len(lista) == 1: return lista[0]
             if len(lista) == 2: return f"{lista[0]} e {lista[1]}"
-            if len(lista) <= 6:
+            if len(lista) <= 3:
                 return f"{', '.join(lista[:-1])} e {lista[-1]}"
-            return f"{', '.join(lista[:6])} e mais {len(lista) - 6}"
+            return f"{', '.join(lista[:3])} e mais {len(lista) - 3}"
 
         def formatar_guias_detalhada(lista):
             if not lista or lista[0] == "Desconhecida": return ""
@@ -190,6 +190,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         guia_proc_glosas = {}
         globais_dict = {}
         ordem_guias = []
+        todos_proc_keys = set()
 
         for _, row in df[df['Glosa'] != '480'].iterrows():
             justificativa = (str(row.get('Justificativa') or "")).strip()
@@ -213,6 +214,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 ordem_guias.append(guia)
 
             proc_key = f"{cod_proc} - {proc}" if cod_proc not in ("N/A", "") else ""
+            if proc_key:
+                todos_proc_keys.add(proc_key)
             guia_proc_glosas.setdefault(guia, {}).setdefault(proc_key, []).append({
                 "base": texto_base, "justificativa": justificativa, "glosa": glosa
             })
@@ -246,7 +249,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                         guias_proc.append(guia)
 
         clausulas_por_guia = {}
-        clausulas_globais = []
+        clausulas_globais_raw = []  # (ordering_key, base, resto, caso)
 
         for chave in grupos_ordem:
             base, justificativa = chave
@@ -281,13 +284,12 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 guias_ordenadas = sorted(todas_guias)
                 n_guias = len(guias_ordenadas)
 
-                clausula = base
+                resto = f" em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({formatar_lista_guias(guias_ordenadas)})"
                 if justificativa:
-                    clausula += f", {justificativa}"
-                clausula += f" em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({formatar_lista_guias(guias_ordenadas)})"
+                    resto = f", {justificativa}" + resto
 
                 ordering_key = min(ordem_guias.index(g) for g in todas_guias)
-                clausulas_globais.append((ordering_key, len(clausulas_globais), clausula))
+                clausulas_globais_raw.append((ordering_key, base, resto, 'B'))
             else:
                 # Glosa+justificativa idêntica em mais de uma guia: consolida em
                 # uma única cláusula, listando as guias por procedimento.
@@ -305,13 +307,44 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 else:
                     partes_str = ", ".join(partes[:-1]) + ", e " + partes[-1]
 
-                clausula = base
-                if justificativa:
-                    clausula += f", {justificativa}"
-                clausula += f", {partes_str}"
-
                 ordering_key = min(ordem_guias.index(g) for g in todas_guias)
-                clausulas_globais.append((ordering_key, len(clausulas_globais), clausula))
+                clausulas_globais_raw.append((ordering_key, base, (justificativa, partes_str), 'C'))
+
+        # Glosas iguais (mesma descrição-base) com motivos/procedimentos diferentes:
+        # junta em uma só cláusula no formato "{base}: {motivo1}, {detalhe1}; e
+        # {motivo2}, {detalhe2}" em vez de repetir a descrição completa da glosa
+        # para cada motivo.
+        merge_c = {}
+        merge_c_ordem = []
+        clausulas_globais = []
+        for ordering_key, base, dados, caso in clausulas_globais_raw:
+            if caso == 'C':
+                if base not in merge_c:
+                    merge_c[base] = []
+                    merge_c_ordem.append(base)
+                merge_c[base].append((ordering_key, dados))
+            else:
+                clausulas_globais.append((ordering_key, base + dados))
+
+        for base in merge_c_ordem:
+            entradas = merge_c[base]
+            if len(entradas) == 1:
+                ordering_key, (justificativa, partes_str) = entradas[0]
+                resto = (f", {justificativa}" if justificativa else "") + f", {partes_str}"
+                clausulas_globais.append((ordering_key, base + resto))
+            else:
+                # Com motivos diferentes para a mesma glosa, o motivo vai ao
+                # final de cada bloco (em vez de logo após a glosa), para que
+                # "procedimento + guias" fiquem sempre juntos.
+                ordering_key = min(ok for ok, _ in entradas)
+                subclausulas = []
+                for _, (justificativa, partes_str) in entradas:
+                    sub = partes_str
+                    if justificativa:
+                        sub += f", {justificativa}"
+                    subclausulas.append(sub)
+                texto = "; ".join(subclausulas[:-1]) + "; e " + subclausulas[-1]
+                clausulas_globais.append((ordering_key, f"{base}: {texto}"))
 
         itens_ordenados = []
         for guia in ordem_guias:
@@ -323,7 +356,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     texto_guia = ", ".join(lista_glosas[:-1]) + ", além de " + lista_glosas[-1]
                 itens_ordenados.append((ordem_guias.index(guia), 1, f"na guia {guia}, {texto_guia}"))
 
-        for ordering_key, seq, clausula in clausulas_globais:
+        for ordering_key, clausula in clausulas_globais:
             itens_ordenados.append((ordering_key, 0, clausula))
 
         itens_ordenados.sort(key=lambda x: (x[0], x[1]))
@@ -334,6 +367,26 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 clausulas.append(f"Foram identificadas glosas nas seguintes guias: {texto}")
             else:
                 clausulas.append(texto)
+
+        # Na segunda menção de um mesmo procedimento, omite a descrição e
+        # mantém só o código, evitando repetir "cód - descrição" várias vezes
+        # (inclusive quando as duas menções caem na mesma cláusula mesclada).
+        proc_keys_ordenados = sorted(todos_proc_keys, key=len, reverse=True)
+        mencionados_cods = set()
+        for idx, texto in enumerate(clausulas):
+            for proc_key in proc_keys_ordenados:
+                cod = proc_key.split(' - ', 1)[0]
+                ocorrencias = texto.count(proc_key)
+                if ocorrencias == 0:
+                    continue
+                if cod in mencionados_cods:
+                    texto = texto.replace(proc_key, cod)
+                else:
+                    mencionados_cods.add(cod)
+                    if ocorrencias > 1:
+                        primeira, resto = texto.split(proc_key, 1)
+                        texto = primeira + proc_key + resto.replace(proc_key, cod)
+            clausulas[idx] = texto
 
         for texto_glosa, guias_set in globais_dict.items():
             guias_list = sorted(list(guias_set))
@@ -350,17 +403,21 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 
             clausulas.append(f"{texto_glosa} em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({guias_formatado})")
 
+        # Cada cláusula de alto nível vira sua própria frase, em vez de uma
+        # única frase gigante com vários "; ", para facilitar a leitura.
         texto_complementar = ""
-        if len(clausulas) == 1:
-            texto_complementar = clausulas[0] + "."
-        elif len(clausulas) > 1:
-            texto_complementar = "; ".join(clausulas[:-1]) + "; e " + clausulas[-1] + "."
+        if clausulas:
+            frases = []
+            for c in clausulas:
+                c = c.strip()
+                if c:
+                    frases.append(c[0].upper() + c[1:] + ".")
+            texto_complementar = " ".join(frases)
 
         texto_final = ""
         if clausula_480:
             texto_final = clausula_480
             if texto_complementar:
-                texto_complementar = texto_complementar[0].upper() + texto_complementar[1:]
                 texto_final += ". " + texto_complementar
         else:
             texto_final = texto_complementar
