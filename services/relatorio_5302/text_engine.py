@@ -371,16 +371,27 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         cod_str = str(cod).strip()
         
         if 'exodontia' in desc_lower: return 'exodontia', 'exodontias'
+        if 'semi-inclus' in desc_lower or 'semi inclus' in desc_lower:
+            return 'exodontia de semi-incluso/impactado', 'exodontias de semi-incluso/impactado'
+        if 'incluso' in desc_lower or 'inclusos' in desc_lower or 'impactad' in desc_lower:
+            return 'exodontia de incluso/impactado', 'exodontias de incluso/impactado'
         if 'radiografia panor' in desc_lower: return 'radiografia panorâmica', 'radiografias panorâmicas'
-        if 'radiografia' in desc_lower or 'periapical' in desc_lower or 'bite-wing' in desc_lower or cod_str == '210': 
+        if 'radiografia' in desc_lower or 'periapical' in desc_lower or 'bite-wing' in desc_lower or cod_str == '210':
             return 'radiografia periapical', 'radiografias periapicais'
-        if 'retratamento endod' in desc_lower or cod_str == '2040': 
+        if 'retratamento endod' in desc_lower or cod_str == '2040':
             return 'retratamento endodôntico', 'retratamentos endodônticos'
         if 'tratamento endod' in desc_lower or cod_str.startswith('20'):
             return 'tratamento endodôntico', 'tratamentos endodônticos'
         if 'aumento de coroa' in desc_lower:
             return 'aumento de coroa clínica', 'aumentos de coroa clínica'
-        if 'pino' in desc_lower or 'núcleo' in desc_lower or 'nucleo' in desc_lower: return 'pino/núcleo', 'pinos/núcleos'
+        if 'gengivectomia' in desc_lower: return 'gengivectomia', 'gengivectomias'
+        if 'gengivoplastia' in desc_lower: return 'gengivoplastia', 'gengivoplastias'
+        if 'pino' in desc_lower:
+            return 'pino pré-fabricado', 'pinos pré-fabricados'
+        if 'núcleo' in desc_lower or 'nucleo' in desc_lower:
+            if 'metálic' in desc_lower or 'metalic' in desc_lower:
+                return 'núcleo metálico fundido', 'núcleos metálicos fundidos'
+            return 'núcleo de preenchimento', 'núcleos de preenchimento'
         if 'coroa' in desc_lower:
             if 'provis' in desc_lower:
                 return 'coroa provisória', 'coroas provisórias'
@@ -412,7 +423,11 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if 'selante' in desc_lower: return 'aplicação de selante', 'aplicações de selante'
         if 'clareamento' in desc_lower: return 'clareamento', 'clareamentos'
         if 'protese' in desc_lower or 'prótese' in desc_lower: return 'prótese', 'próteses'
-        
+        if 'consulta' in desc_lower:
+            if 'urg' in desc_lower:
+                return 'consulta odontológica de urgência', 'consultas odontológicas de urgência'
+            return 'consulta odontológica', 'consultas odontológicas'
+
         return 'procedimento', 'procedimentos'
 
     temp_itens = collections.defaultdict(list)
