@@ -138,6 +138,25 @@ def formatar_conectivo_subglosa(t):
         return 'pois ' + t
 
 
+def pluralizar_descricao(desc):
+    palavras = desc.split(' ')
+    primeira = palavras[0]
+    if primeira.endswith('ão'):
+        nova = primeira[:-2] + 'ões'
+    elif primeira.endswith('m'):
+        nova = primeira[:-1] + 'ns'
+    elif primeira.endswith('il'):
+        nova = primeira[:-2] + 'eis'
+    elif primeira[-2:] in ('al', 'el', 'ol', 'ul'):
+        nova = primeira[:-1] + 'is'
+    elif primeira.endswith(('r', 's', 'z')):
+        nova = primeira + 'es'
+    else:
+        nova = primeira + 's'
+    palavras[0] = nova
+    return ' '.join(palavras)
+
+
 def gerar_texto(df_glosas, tipo_geracao, meta=None):
     df = df_glosas[df_glosas['Incluir no Relatório'] == True].copy()
     
@@ -375,6 +394,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if 'incluso' in desc_lower or 'inclusos' in desc_lower or 'impactad' in desc_lower:
             return 'exodontia de incluso/impactado', 'exodontias de incluso/impactado'
         if 'exodontia' in desc_lower: return 'exodontia', 'exodontias'
+        if desc_lower.startswith('provisório para') or desc_lower.startswith('provisorio para'):
+            alvo = re.sub(r'^provis[oó]rio para\s+', '', desc_lower).strip()
+            return f'provisório para {alvo}', f'provisórios para {alvo}'
         if 'protese' in desc_lower or 'prótese' in desc_lower or 'protétic' in desc_lower or 'protetic' in desc_lower:
             if 'recimenta' in desc_lower:
                 return 'recimentação de prótese', 'recimentações de prótese'
@@ -388,6 +410,16 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 return 'planejamento em prótese', 'planejamentos em prótese'
             if 'implant' in desc_lower:
                 return 'prótese sobre implante', 'próteses sobre implante'
+            if 'provis' in desc_lower:
+                if 'fixa adesiva' in desc_lower:
+                    return 'prótese fixa adesiva provisória', 'próteses fixas adesivas provisórias'
+                if 'parcial remov' in desc_lower:
+                    return 'prótese parcial removível provisória', 'próteses parciais removíveis provisórias'
+                if 'parcial fixa' in desc_lower:
+                    return 'prótese parcial fixa provisória', 'próteses parciais fixas provisórias'
+                if 'total' in desc_lower:
+                    return 'prótese total provisória', 'próteses totais provisórias'
+                return 'prótese provisória', 'próteses provisórias'
             if 'fixa adesiva' in desc_lower:
                 return 'prótese fixa adesiva', 'próteses fixas adesivas'
             if 'parcial remov' in desc_lower:
@@ -415,6 +447,18 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 return 'núcleo metálico fundido', 'núcleos metálicos fundidos'
             return 'núcleo de preenchimento', 'núcleos de preenchimento'
         if 'coroa' in desc_lower:
+            if 'implant' in desc_lower:
+                if 'provis' in desc_lower:
+                    return 'coroa provisória sobre implante', 'coroas provisórias sobre implante'
+                if 'cerômero' in desc_lower or 'ceromero' in desc_lower:
+                    return 'coroa em cerômero sobre implante', 'coroas em cerômero sobre implante'
+                if 'cerâmica' in desc_lower or 'ceramica' in desc_lower:
+                    return 'coroa em cerâmica sobre implante', 'coroas em cerâmica sobre implante'
+                if 'resina' in desc_lower or 'plástica' in desc_lower or 'plastica' in desc_lower:
+                    return 'coroa em resina sobre implante', 'coroas em resina sobre implante'
+                return 'coroa sobre implante', 'coroas sobre implante'
+            if 'reembas' in desc_lower:
+                return 'reembasamento de coroa provisória', 'reembasamentos de coroa provisória'
             if 'provis' in desc_lower:
                 return 'coroa provisória', 'coroas provisórias'
             if 'metálica' in desc_lower or 'metalica' in desc_lower:
@@ -430,6 +474,18 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             return 'restauração em amálgama', 'restaurações em amálgama'
         if 'ionômero' in desc_lower or 'ionomero' in desc_lower:
             return 'restauração em ionômero de vidro', 'restaurações em ionômero de vidro'
+        if 'cerâmica pura' in desc_lower or 'ceramica pura' in desc_lower:
+            if 'onlay' in desc_lower:
+                return 'restauração em cerâmica pura (onlay)', 'restaurações em cerâmica pura (onlay)'
+            if 'inlay' in desc_lower:
+                return 'restauração em cerâmica pura (inlay)', 'restaurações em cerâmica pura (inlay)'
+            return 'restauração em cerâmica pura', 'restaurações em cerâmica pura'
+        if 'resina' in desc_lower and 'indireta' in desc_lower:
+            if 'onlay' in desc_lower:
+                return 'restauração em resina indireta (onlay)', 'restaurações em resina indireta (onlay)'
+            if 'inlay' in desc_lower:
+                return 'restauração em resina indireta (inlay)', 'restaurações em resina indireta (inlay)'
+            return 'restauração em resina indireta', 'restaurações em resina indireta'
         if 'resina' in desc_lower:
             return 'restauração em resina', 'restaurações em resina'
         if 'cerômero' in desc_lower or 'ceromero' in desc_lower:
@@ -451,7 +507,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 return 'consulta de urgência', 'consultas de urgência'
             return 'consulta', 'consultas'
 
-        return 'procedimento', 'procedimentos'
+        return desc_lower, pluralizar_descricao(desc_lower)
 
     temp_itens = collections.defaultdict(list)
     for _, row in df.iterrows():
