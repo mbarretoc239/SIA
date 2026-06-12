@@ -23,6 +23,30 @@ def carregar_mapa_glosas():
     return mapa
 
 @st.cache_data(ttl=300)
+def carregar_mapa_tipos_glosa():
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
+    mapa = {}
+    try:
+        rows = db._get("glosas_padrao?select=codigo,tipo_glosa")
+        for r in rows:
+            codigo = str(r.get('codigo', '')).strip()
+            tipo = str(r.get('tipo_glosa', '')).strip()
+            if codigo and tipo:
+                mapa[codigo] = tipo
+    except Exception:
+        pass
+    # Merge com customizadas (override)
+    try:
+        for gb in db.carregar_glosas_customizadas():
+            tipo = str(gb.get('tipo', '')).strip()
+            if tipo:
+                mapa[str(gb['codigo_glosa']).strip()] = tipo
+    except Exception:
+        pass
+    return mapa
+
+@st.cache_data(ttl=300)
 def carregar_mapa_procedimentos():
     from shared.database import DatabaseManager
     db = DatabaseManager()

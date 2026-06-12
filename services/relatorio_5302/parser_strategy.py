@@ -8,7 +8,8 @@ from services.relatorio_5302.glosa_matcher import (
     carregar_mapa_procedimentos,
     carregar_mapa_glosas,
     carregar_glosas_criticas,
-    carregar_mapa_subglosas
+    carregar_mapa_subglosas,
+    carregar_mapa_tipos_glosa
 )
 from services.relatorio_5302.text_engine import formatar_conectivo_subglosa
 from shared.database import DatabaseManager
@@ -18,6 +19,7 @@ def processar_pdf(pdf_file):
     mapa_glosas = carregar_mapa_glosas()
     glosas_criticas = carregar_glosas_criticas()
     mapa_subglosas = carregar_mapa_subglosas()
+    mapa_tipos_glosa = carregar_mapa_tipos_glosa()
 
     db = DatabaseManager()
     logins_validos = db.carregar_logins_validos()
@@ -101,6 +103,13 @@ def processar_pdf(pdf_file):
         is_critica = cod in glosas_criticas
         oficial = str(mapa_glosas.get(cod, "")).lower()
 
+        if is_auto:
+            tipo = "Automática"
+        elif is_critica:
+            tipo = "Crítica"
+        else:
+            tipo = mapa_tipos_glosa.get(cod) or "Técnica"
+
         justificativa = ""
         if cod != '480' and sub_cod:
             desc_oficial = mapa_subglosas.get((cod, sub_cod))
@@ -109,7 +118,7 @@ def processar_pdf(pdf_file):
 
         glosas_encontradas.append({
             "Incluir no Relatório": not is_auto,
-            "Tipo": "Automática" if is_auto else ("Crítica" if is_critica else "Técnica"),
+            "Tipo": tipo,
             "Guia": str(r["guia"]),
             "Cód. Procedimento": str(r["proc_cod"]),
             "Procedimento": str(r["proc_desc"]).lower(),
@@ -153,7 +162,8 @@ def processar_csv(csv_file):
     mapa_glosas = carregar_mapa_glosas()
     glosas_criticas = carregar_glosas_criticas()
     mapa_subglosas = carregar_mapa_subglosas()
-    
+    mapa_tipos_glosa = carregar_mapa_tipos_glosa()
+
     db = DatabaseManager()
     logins_validos = db.carregar_logins_validos()
     
@@ -254,13 +264,20 @@ def processar_csv(csv_file):
                         is_auto = len(cod) <= 2 or cod.startswith('0')
                         is_critica = cod in glosas_criticas
                         chave_visto = (guia_atual, cod, proc_cod_atual, item_atual)
-                        
+
                         oficial = str(mapa_glosas.get(cod, match_glosa.group(2).strip())).lower()
-                        
+
+                        if is_auto:
+                            tipo = "Automática"
+                        elif is_critica:
+                            tipo = "Crítica"
+                        else:
+                            tipo = mapa_tipos_glosa.get(cod) or "Técnica"
+
                         if chave_visto not in vistos:
                             glosas_encontradas.append({
                                 "Incluir no Relatório": not is_auto,
-                                "Tipo": "Automática" if is_auto else ("Crítica" if is_critica else "Técnica"),
+                                "Tipo": tipo,
                                 "Guia": str(guia_atual),
                                 "Cód. Procedimento": str(proc_cod_atual),
                                 "Procedimento": str(proc_desc_atual).lower(),
