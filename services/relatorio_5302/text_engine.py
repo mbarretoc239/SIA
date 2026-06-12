@@ -378,8 +378,17 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             return 'retratamento endodôntico', 'retratamentos endodônticos'
         if 'tratamento endod' in desc_lower or cod_str.startswith('20'):
             return 'tratamento endodôntico', 'tratamentos endodônticos'
+        if 'aumento de coroa' in desc_lower:
+            return 'aumento de coroa clínica', 'aumentos de coroa clínica'
         if 'pino' in desc_lower or 'núcleo' in desc_lower or 'nucleo' in desc_lower: return 'pino/núcleo', 'pinos/núcleos'
-        if 'coroa' in desc_lower: return 'coroa', 'coroas'
+        if 'coroa' in desc_lower:
+            if 'provis' in desc_lower:
+                return 'coroa provisória', 'coroas provisórias'
+            if 'metálica' in desc_lower or 'metalica' in desc_lower:
+                return 'coroa total metálica', 'coroas totais metálicas'
+            if 'cerômero' in desc_lower or 'ceromero' in desc_lower:
+                return 'coroa em cerômero', 'coroas em cerômero'
+            return 'coroa', 'coroas'
         if 'metálica fundida' in desc_lower or 'metalica fundida' in desc_lower:
             return 'restauração metálica fundida', 'restaurações metálicas fundidas'
         if 'atraumática' in desc_lower or 'atraumatica' in desc_lower:
@@ -388,6 +397,10 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             return 'restauração em amálgama', 'restaurações em amálgama'
         if 'resina' in desc_lower:
             return 'restauração em resina', 'restaurações em resina'
+        if 'cerômero' in desc_lower or 'ceromero' in desc_lower:
+            if 'onlay' in desc_lower:
+                return 'restauração em cerômero (onlay)', 'restaurações em cerômero (onlay)'
+            return 'restauração em cerômero', 'restaurações em cerômero'
         if 'restaura' in desc_lower or cod_str.startswith('40'):
             return 'restauração', 'restaurações'
         if 'raspagem' in desc_lower or 'alisamento' in desc_lower or cod_str.startswith('80'):
