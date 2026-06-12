@@ -370,11 +370,29 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         desc_lower = str(desc).lower()
         cod_str = str(cod).strip()
         
-        if 'exodontia' in desc_lower: return 'exodontia', 'exodontias'
         if 'semi-inclus' in desc_lower or 'semi inclus' in desc_lower:
             return 'exodontia de semi-incluso/impactado', 'exodontias de semi-incluso/impactado'
         if 'incluso' in desc_lower or 'inclusos' in desc_lower or 'impactad' in desc_lower:
             return 'exodontia de incluso/impactado', 'exodontias de incluso/impactado'
+        if 'exodontia' in desc_lower: return 'exodontia', 'exodontias'
+        if 'protese' in desc_lower or 'prótese' in desc_lower:
+            if 'reembasamento' in desc_lower:
+                return 'reembasamento de prótese', 'reembasamentos de prótese'
+            if 'conserto' in desc_lower:
+                return 'conserto de prótese', 'consertos de prótese'
+            if 'planejamento' in desc_lower:
+                return 'planejamento em prótese', 'planejamentos em prótese'
+            if 'implant' in desc_lower:
+                return 'prótese sobre implante', 'próteses sobre implante'
+            if 'fixa adesiva' in desc_lower:
+                return 'prótese fixa adesiva', 'próteses fixas adesivas'
+            if 'parcial remov' in desc_lower:
+                return 'prótese parcial removível', 'próteses parciais removíveis'
+            if 'parcial fixa' in desc_lower:
+                return 'prótese parcial fixa', 'próteses parciais fixas'
+            if 'total' in desc_lower:
+                return 'prótese total', 'próteses totais'
+            return 'prótese', 'próteses'
         if 'radiografia panor' in desc_lower: return 'radiografia panorâmica', 'radiografias panorâmicas'
         if 'radiografia' in desc_lower or 'periapical' in desc_lower or 'bite-wing' in desc_lower or cod_str == '210':
             return 'radiografia periapical', 'radiografias periapicais'
@@ -422,11 +440,10 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if 'fluor' in desc_lower or 'flúor' in desc_lower: return 'aplicação de flúor', 'aplicações de flúor'
         if 'selante' in desc_lower: return 'aplicação de selante', 'aplicações de selante'
         if 'clareamento' in desc_lower: return 'clareamento', 'clareamentos'
-        if 'protese' in desc_lower or 'prótese' in desc_lower: return 'prótese', 'próteses'
         if 'consulta' in desc_lower:
             if 'urg' in desc_lower:
-                return 'consulta odontológica de urgência', 'consultas odontológicas de urgência'
-            return 'consulta odontológica', 'consultas odontológicas'
+                return 'consulta de urgência', 'consultas de urgência'
+            return 'consulta', 'consultas'
 
         return 'procedimento', 'procedimentos'
 
