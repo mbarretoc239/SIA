@@ -376,18 +376,26 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             return 'radiografia periapical', 'radiografias periapicais'
         if 'retratamento endod' in desc_lower or cod_str == '2040': 
             return 'retratamento endodôntico', 'retratamentos endodônticos'
-        if 'tratamento endod' in desc_lower or cod_str.startswith('20'): 
+        if 'tratamento endod' in desc_lower or cod_str.startswith('20'):
             return 'tratamento endodôntico', 'tratamentos endodônticos'
-        if 'restaura' in desc_lower or cod_str.startswith('40'): 
-            return 'restauração', 'restaurações'
-        if 'raspagem' in desc_lower or 'alisamento' in desc_lower or cod_str.startswith('80'): 
-            return 'raspagem', 'raspagens'
+        if 'pino' in desc_lower or 'núcleo' in desc_lower or 'nucleo' in desc_lower: return 'pino/núcleo', 'pinos/núcleos'
         if 'coroa' in desc_lower: return 'coroa', 'coroas'
+        if 'metálica fundida' in desc_lower or 'metalica fundida' in desc_lower:
+            return 'restauração metálica fundida', 'restaurações metálicas fundidas'
+        if 'atraumática' in desc_lower or 'atraumatica' in desc_lower:
+            return 'restauração atraumática', 'restaurações atraumáticas'
+        if 'amálgama' in desc_lower or 'amalgama' in desc_lower:
+            return 'restauração em amálgama', 'restaurações em amálgama'
+        if 'resina' in desc_lower:
+            return 'restauração em resina', 'restaurações em resina'
+        if 'restaura' in desc_lower or cod_str.startswith('40'):
+            return 'restauração', 'restaurações'
+        if 'raspagem' in desc_lower or 'alisamento' in desc_lower or cod_str.startswith('80'):
+            return 'raspagem', 'raspagens'
         if 'profilaxia' in desc_lower: return 'profilaxia', 'profilaxias'
         if 'fluor' in desc_lower or 'flúor' in desc_lower: return 'aplicação de flúor', 'aplicações de flúor'
         if 'selante' in desc_lower: return 'aplicação de selante', 'aplicações de selante'
         if 'clareamento' in desc_lower: return 'clareamento', 'clareamentos'
-        if 'pino' in desc_lower or 'núcleo' in desc_lower or 'nucleo' in desc_lower: return 'pino/núcleo', 'pinos/núcleos'
         if 'protese' in desc_lower or 'prótese' in desc_lower: return 'prótese', 'próteses'
         
         return 'procedimento', 'procedimentos'
