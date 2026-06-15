@@ -197,20 +197,24 @@ def processar_csv(csv_file):
             except:
                 return 0.0
 
+        # VL.COBRADO / VL.CALCULADO / VL.GLOSA vêm com o valor na mesma linha,
+        # na coluna seguinte ao rótulo (ex.: ['VL. COBRADO', '36107,40']) —
+        # diferente de "Credenciado"/"Processo", que são cabeçalho de tabela
+        # com o valor na linha de baixo.
         if "vlcobrado" in chaves:
             idx = chaves.index("vlcobrado")
-            if len(linhas_csv) > i + 1 and len(linhas_csv[i+1]) > idx:
-                meta["valor_cobrado"] = parse_float_csv(linhas_csv[i+1][idx])
-                
+            if len(row) > idx + 1:
+                meta["valor_cobrado"] = parse_float_csv(row[idx + 1])
+
         if "vlcalculado" in chaves:
             idx = chaves.index("vlcalculado")
-            if len(linhas_csv) > i + 1 and len(linhas_csv[i+1]) > idx:
-                meta["valor_calculado"] = parse_float_csv(linhas_csv[i+1][idx])
-                
+            if len(row) > idx + 1:
+                meta["valor_calculado"] = parse_float_csv(row[idx + 1])
+
         if "vlglosa" in chaves or "vlglosado" in chaves:
             idx = chaves.index("vlglosa") if "vlglosa" in chaves else chaves.index("vlglosado")
-            if len(linhas_csv) > i + 1 and len(linhas_csv[i+1]) > idx:
-                meta["valor_glosa"] = parse_float_csv(linhas_csv[i+1][idx])
+            if len(row) > idx + 1:
+                meta["valor_glosa"] = parse_float_csv(row[idx + 1])
     
     guia_atual = "N/A"
     item_atual = ""
