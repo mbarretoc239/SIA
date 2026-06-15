@@ -238,11 +238,11 @@ if pdf_file is not None:
 
                     textos_db = st.session_state.db.carregar_textos_prestador()
 
-                    textos_sugeridos = []
-
+                    candidatos = []
                     for txt in textos_db:
                         glosas_relacionadas = set([g.strip() for g in str(txt.get('glosas_relacionadas', '')).split(',') if g.strip()])
-                        if not (glosas_relacionadas & glosas_presentes):
+                        glosas_cobertas = glosas_relacionadas & glosas_presentes
+                        if not glosas_cobertas:
                             continue
 
                         sub_glosas_relacionadas = set([s.strip() for s in str(txt.get('sub_glosas_relacionadas') or '').split(',') if s.strip()])
@@ -253,7 +253,20 @@ if pdf_file is not None:
                         if procedimentos_relacionados and not (procedimentos_relacionados & procedimentos_presentes):
                             continue
 
-                        textos_sugeridos.append(txt.get('texto', '').strip())
+                        is_especifico = bool(sub_glosas_relacionadas) or bool(procedimentos_relacionados)
+                        candidatos.append((txt.get('texto', '').strip(), glosas_cobertas, is_especifico))
+
+                    # Glosas já atendidas por algum texto específico (sub-glosa/procedimento)
+                    glosas_com_especifico = set()
+                    for _, glosas_cobertas, is_especifico in candidatos:
+                        if is_especifico:
+                            glosas_com_especifico |= glosas_cobertas
+
+                    # Textos gerais só entram se cobrirem alguma glosa sem texto específico
+                    textos_sugeridos = [
+                        texto for texto, glosas_cobertas, is_especifico in candidatos
+                        if is_especifico or not glosas_cobertas.issubset(glosas_com_especifico)
+                    ]
                     
                     if textos_sugeridos:
                         texto_mixado = mixar_textos_inteligente(textos_sugeridos)
