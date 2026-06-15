@@ -3,6 +3,7 @@ import pandas as pd
 import io
 from shared.database import DatabaseManager
 from core.glass_design_system import render_glass_table
+from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 
 st.set_page_config(page_title="Configurações", page_icon="️", layout="wide")
 
@@ -503,7 +504,7 @@ if " Textos Padrões (Motor)" in nomes_abas:
             
             with st.container(border=True):
                 # Encontra o texto se estiver editando
-                t_alvo = {"id": None, "titulo": "", "glosas_relacionadas": "", "texto": ""}
+                t_alvo = {"id": None, "titulo": "", "glosas_relacionadas": "", "texto": "", "sub_glosas_relacionadas": "", "procedimentos_relacionados": ""}
                 if em_edicao != "NOVO":
                     for t in textos:
                         if t['id'] == em_edicao:
@@ -512,22 +513,60 @@ if " Textos Padrões (Motor)" in nomes_abas:
                             
                 f_tit = st.text_input("Título (Identificador Interno)", value=t_alvo["titulo"])
                 f_glo = st.text_input("Glosas Relacionadas (ex: 438, 450)", value=t_alvo["glosas_relacionadas"])
-                
+
+                # Sub-Glosas Relacionadas (opcional): cascateia a partir das Glosas Relacionadas acima
+                glosa_codes = [g.strip() for g in f_glo.split(',') if g.strip()]
+                mapa_subglosas = carregar_mapa_subglosas()
+                opcoes_sub = sorted(
+                    [(f"{cod}.{sub}", f"{cod}.{sub} - {desc}") for (cod, sub), desc in mapa_subglosas.items() if cod in glosa_codes],
+                    key=lambda x: x[0]
+                )
+                label_to_valor_sub = {lbl: val for val, lbl in opcoes_sub}
+                valor_to_label_sub = {val: lbl for val, lbl in opcoes_sub}
+                default_sub_vals = [v.strip() for v in str(t_alvo.get("sub_glosas_relacionadas", "")).split(',') if v.strip()]
+                default_sub_labels = [valor_to_label_sub[v] for v in default_sub_vals if v in valor_to_label_sub]
+
+                f_sub_labels = st.multiselect(
+                    "Sub-Glosas Relacionadas (opcional)",
+                    options=list(label_to_valor_sub.keys()),
+                    default=default_sub_labels,
+                    help="Restringe este texto às sub-glosas selecionadas das glosas acima. Deixe vazio para um texto geral, válido para qualquer sub-glosa."
+                )
+
+                # Procedimentos Relacionados (opcional): pesquisável em toda a tabela de procedimentos
+                mapa_procedimentos = carregar_mapa_procedimentos()
+                opcoes_proc = sorted(
+                    [(cod, f"{cod} - {desc}") for cod, desc in mapa_procedimentos.items()],
+                    key=lambda x: x[1]
+                )
+                label_to_valor_proc = {lbl: val for val, lbl in opcoes_proc}
+                default_proc_vals = [v.strip() for v in str(t_alvo.get("procedimentos_relacionados", "")).split(',') if v.strip()]
+                default_proc_labels = [lbl for val, lbl in opcoes_proc if val in default_proc_vals]
+
+                f_proc_labels = st.multiselect(
+                    "Procedimentos Relacionados (opcional)",
+                    options=[lbl for _, lbl in opcoes_proc],
+                    default=default_proc_labels,
+                    help="Restringe este texto aos procedimentos selecionados. Deixe vazio para um texto geral, válido para qualquer procedimento."
+                )
+
                 st.markdown("Use `{guia}` para a frase que exibe as guias, `{glosas}` para as descrições e `{procedimentos}` para os códigos.")
                 f_txt = st.text_area("Texto Padrão ao Prestador", value=t_alvo["texto"], height=100)
                     
                 b1, b2, b3 = st.columns([2, 2, 8])
                 if b1.button(" Salvar", type="primary", use_container_width=True, key="btn_salvar_txt"):
                     if f_tit and f_glo and f_txt:
+                        f_sub = ",".join(label_to_valor_sub[lbl] for lbl in f_sub_labels)
+                        f_proc = ",".join(label_to_valor_proc[lbl] for lbl in f_proc_labels)
                         if em_edicao == "NOVO":
-                            if db.inserir_texto_prestador(f_tit, f_glo, f_txt, nome):
+                            if db.inserir_texto_prestador(f_tit, f_glo, f_txt, nome, f_sub, f_proc):
                                 st.success("Texto cadastrado com sucesso!")
                                 st.session_state["texto_em_edicao"] = None
                                 st.rerun()
                             else:
                                 st.error("Erro ao salvar no banco.")
                         else:
-                            if db.atualizar_texto_prestador(t_alvo['id'], f_tit, f_glo, f_txt, nome):
+                            if db.atualizar_texto_prestador(t_alvo['id'], f_tit, f_glo, f_txt, nome, f_sub, f_proc):
                                 st.success("Texto atualizado com sucesso!")
                                 st.session_state["texto_em_edicao"] = None
                                 st.rerun()
@@ -552,7 +591,17 @@ if " Textos Padrões (Motor)" in nomes_abas:
                     c1.markdown(f"**{t.get('titulo', 'Sem Título')}**")
                     c2.markdown(f" Glosas: `{t.get('glosas_relacionadas', '')}`")
                     c3.markdown(f" *{t.get('texto', '')[:60]}...*")
-                    
+
+                    sub_rel = str(t.get('sub_glosas_relacionadas') or '').strip()
+                    proc_rel = str(t.get('procedimentos_relacionados') or '').strip()
+                    if sub_rel or proc_rel:
+                        detalhes = []
+                        if sub_rel:
+                            detalhes.append(f"Sub-glosas: `{sub_rel}`")
+                        if proc_rel:
+                            detalhes.append(f"Procedimentos: `{proc_rel}`")
+                        st.caption(" | ".join(detalhes))
+
                     # Coluna de botões (Editar e Excluir)
                     b_edit, b_del = c4.columns([1, 1])
                     if b_edit.button("️", key=f"edit_txt_{t['id']}", help="Editar"):

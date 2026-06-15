@@ -131,6 +131,7 @@ if pdf_file is not None:
             use_container_width=True,
             num_rows="dynamic",
             column_config=col_config,
+            column_order=["Incluir no Relatório", "Tipo", "Guia", "Cód. Procedimento", "Procedimento", "Glosa", "Descrição Oficial", "Justificativa"],
             key="glosas_editor",
         )
 
@@ -222,20 +223,37 @@ if pdf_file is not None:
                 st.markdown("###  Textos Adicionais ao Prestador")
                 if "Nenhuma glosa" not in texto_gerado:
                     glosas_presentes = set(df_final['Glosa'].unique())
+
+                    sub_glosas_presentes = set()
+                    for _, row in df_final.iterrows():
+                        sub_cod = str(row.get('Cód. Sub-Glosa', '') or '').strip()
+                        if sub_cod:
+                            sub_glosas_presentes.add(f"{row['Glosa']}.{sub_cod}")
+
+                    procedimentos_presentes = set(str(p) for p in df_final['Cód. Procedimento'].unique())
+
                     from shared.database import DatabaseManager
                     if "db" not in st.session_state:
                         st.session_state.db = DatabaseManager()
-                    
+
                     textos_db = st.session_state.db.carregar_textos_prestador()
-                    
+
                     textos_sugeridos = []
-                    
+
                     for txt in textos_db:
                         glosas_relacionadas = set([g.strip() for g in str(txt.get('glosas_relacionadas', '')).split(',') if g.strip()])
-                        # Se houver intersecção entre as glosas presentes e as mapeadas no texto
-                        if glosas_relacionadas & glosas_presentes:
-                            # Adiciona um cabecalhozinho opcional ou so o texto
-                            textos_sugeridos.append(txt.get('texto', '').strip())
+                        if not (glosas_relacionadas & glosas_presentes):
+                            continue
+
+                        sub_glosas_relacionadas = set([s.strip() for s in str(txt.get('sub_glosas_relacionadas') or '').split(',') if s.strip()])
+                        if sub_glosas_relacionadas and not (sub_glosas_relacionadas & sub_glosas_presentes):
+                            continue
+
+                        procedimentos_relacionados = set([p.strip() for p in str(txt.get('procedimentos_relacionados') or '').split(',') if p.strip()])
+                        if procedimentos_relacionados and not (procedimentos_relacionados & procedimentos_presentes):
+                            continue
+
+                        textos_sugeridos.append(txt.get('texto', '').strip())
                     
                     if textos_sugeridos:
                         texto_mixado = mixar_textos_inteligente(textos_sugeridos)

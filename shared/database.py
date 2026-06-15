@@ -153,24 +153,28 @@ class DatabaseManager:
             return response.json()
         return []
         
-    def inserir_texto_prestador(self, titulo, glosas_relacionadas, texto, updated_by):
+    def inserir_texto_prestador(self, titulo, glosas_relacionadas, texto, updated_by, sub_glosas_relacionadas="", procedimentos_relacionados=""):
         url = f"{self.supabase_url}/rest/v1/textos_prestadores"
         data = {
             "titulo": titulo,
             "glosas_relacionadas": glosas_relacionadas,
             "texto": texto,
-            "updated_by": updated_by
+            "updated_by": updated_by,
+            "sub_glosas_relacionadas": sub_glosas_relacionadas,
+            "procedimentos_relacionados": procedimentos_relacionados
         }
         response = requests.post(url, headers=self.headers, json=data)
         return response.status_code in [200, 201]
 
-    def atualizar_texto_prestador(self, msg_id, titulo, glosas_relacionadas, texto, updated_by):
+    def atualizar_texto_prestador(self, msg_id, titulo, glosas_relacionadas, texto, updated_by, sub_glosas_relacionadas="", procedimentos_relacionados=""):
         url = f"{self.supabase_url}/rest/v1/textos_prestadores?id=eq.{msg_id}"
         data = {
             "titulo": titulo,
             "glosas_relacionadas": glosas_relacionadas,
             "texto": texto,
-            "updated_by": updated_by
+            "updated_by": updated_by,
+            "sub_glosas_relacionadas": sub_glosas_relacionadas,
+            "procedimentos_relacionados": procedimentos_relacionados
         }
         response = requests.patch(url, headers=self.headers, json=data)
         return response.status_code in [200, 204]

@@ -125,6 +125,7 @@ def processar_pdf(pdf_file):
             "Glosa": str(cod),
             "Descrição Oficial": oficial,
             "Justificativa": justificativa,
+            "Cód. Sub-Glosa": str(sub_cod) if sub_cod else "",
         })
 
     return glosas_encontradas, meta
@@ -287,7 +288,8 @@ def processar_csv(csv_file):
                                 "Procedimento": str(proc_desc_atual).lower(),
                                 "Glosa": str(cod),
                                 "Descrição Oficial": oficial,
-                                "Justificativa": ""
+                                "Justificativa": "",
+                                "Cód. Sub-Glosa": ""
                             })
                             vistos.add(chave_visto)
                     continue
@@ -302,10 +304,11 @@ def processar_csv(csv_file):
                         if match_sub:
                             sub_cod = match_sub.group(1).lstrip('0')
                             if not sub_cod: sub_cod = '0'
-                            
+
                             desc_oficial = mapa_subglosas.get((ultima_glosa, sub_cod))
                             texto_bruto = desc_oficial if desc_oficial else match_sub.group(2).strip()
                             glosas_encontradas[-1]["Justificativa"] = formatar_conectivo_subglosa(texto_bruto)
+                            glosas_encontradas[-1]["Cód. Sub-Glosa"] = sub_cod
                         else:
                             glosas_encontradas[-1]["Justificativa"] = formatar_conectivo_subglosa(valor.strip())
                 continue
