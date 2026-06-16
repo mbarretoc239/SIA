@@ -514,41 +514,57 @@ if " Textos Padrões (Motor)" in nomes_abas:
                 f_tit = st.text_input("Título (Identificador Interno)", value=t_alvo["titulo"])
                 f_glo = st.text_input("Glosas Relacionadas (ex: 438, 450)", value=t_alvo["glosas_relacionadas"])
 
-                # Sub-Glosas Relacionadas (opcional): cascateia a partir das Glosas Relacionadas acima
-                glosa_codes = [g.strip() for g in f_glo.split(',') if g.strip()]
-                mapa_subglosas = carregar_mapa_subglosas()
-                opcoes_sub = sorted(
-                    [(f"{cod}.{sub}", f"{cod}.{sub} - {desc}") for (cod, sub), desc in mapa_subglosas.items() if cod in glosa_codes],
-                    key=lambda x: x[0]
+                # Filtros avançados: só carregam (3 chamadas REST) quando solicitado
+                tem_filtros_salvos = bool(
+                    str(t_alvo.get("sub_glosas_relacionadas") or "").strip() or
+                    str(t_alvo.get("procedimentos_relacionados") or "").strip()
                 )
-                label_to_valor_sub = {lbl: val for val, lbl in opcoes_sub}
-                valor_to_label_sub = {val: lbl for val, lbl in opcoes_sub}
-                default_sub_vals = [v.strip() for v in str(t_alvo.get("sub_glosas_relacionadas", "")).split(',') if v.strip()]
-                default_sub_labels = [valor_to_label_sub[v] for v in default_sub_vals if v in valor_to_label_sub]
-
-                f_sub_labels = st.multiselect(
-                    "Sub-Glosas Relacionadas (opcional)",
-                    options=list(label_to_valor_sub.keys()),
-                    default=default_sub_labels,
-                    help="Restringe este texto às sub-glosas selecionadas das glosas acima. Deixe vazio para um texto geral, válido para qualquer sub-glosa."
+                usar_filtros = st.checkbox(
+                    "Restringir por sub-glosa ou procedimento específico",
+                    value=tem_filtros_salvos,
+                    help="Ative para que este texto só apareça em casos com a sub-glosa/procedimento escolhido. Deixe desmarcado para um texto geral."
                 )
 
-                # Procedimentos Relacionados (opcional): pesquisável em toda a tabela de procedimentos
-                mapa_procedimentos = carregar_mapa_procedimentos()
-                opcoes_proc = sorted(
-                    [(cod, f"{cod} - {desc}") for cod, desc in mapa_procedimentos.items()],
-                    key=lambda x: x[1]
-                )
-                label_to_valor_proc = {lbl: val for val, lbl in opcoes_proc}
-                default_proc_vals = [v.strip() for v in str(t_alvo.get("procedimentos_relacionados", "")).split(',') if v.strip()]
-                default_proc_labels = [lbl for val, lbl in opcoes_proc if val in default_proc_vals]
+                label_to_valor_sub = {}
+                f_sub_labels = []
+                label_to_valor_proc = {}
+                f_proc_labels = []
 
-                f_proc_labels = st.multiselect(
-                    "Procedimentos Relacionados (opcional)",
-                    options=[lbl for _, lbl in opcoes_proc],
-                    default=default_proc_labels,
-                    help="Restringe este texto aos procedimentos selecionados. Deixe vazio para um texto geral, válido para qualquer procedimento."
-                )
+                if usar_filtros:
+                    glosa_codes = [g.strip() for g in f_glo.split(',') if g.strip()]
+
+                    mapa_subglosas = carregar_mapa_subglosas()
+                    opcoes_sub = sorted(
+                        [(f"{cod}.{sub}", f"{cod}.{sub} - {desc}") for (cod, sub), desc in mapa_subglosas.items() if cod in glosa_codes],
+                        key=lambda x: x[0]
+                    )
+                    label_to_valor_sub = {lbl: val for val, lbl in opcoes_sub}
+                    valor_to_label_sub = {val: lbl for val, lbl in opcoes_sub}
+                    default_sub_vals = [v.strip() for v in str(t_alvo.get("sub_glosas_relacionadas", "")).split(',') if v.strip()]
+                    default_sub_labels = [valor_to_label_sub[v] for v in default_sub_vals if v in valor_to_label_sub]
+
+                    f_sub_labels = st.multiselect(
+                        "Sub-Glosas Relacionadas",
+                        options=list(label_to_valor_sub.keys()),
+                        default=default_sub_labels,
+                        help="Cascateia a partir das Glosas Relacionadas digitadas acima."
+                    )
+
+                    mapa_procedimentos = carregar_mapa_procedimentos()
+                    opcoes_proc = sorted(
+                        [(cod, f"{cod} - {desc}") for cod, desc in mapa_procedimentos.items()],
+                        key=lambda x: x[1]
+                    )
+                    label_to_valor_proc = {lbl: val for val, lbl in opcoes_proc}
+                    default_proc_vals = [v.strip() for v in str(t_alvo.get("procedimentos_relacionados", "")).split(',') if v.strip()]
+                    default_proc_labels = [lbl for val, lbl in opcoes_proc if val in default_proc_vals]
+
+                    f_proc_labels = st.multiselect(
+                        "Procedimentos Relacionados",
+                        options=[lbl for _, lbl in opcoes_proc],
+                        default=default_proc_labels,
+                        help="Digite parte do código ou nome para pesquisar nos 448 procedimentos."
+                    )
 
                 st.markdown("Use `{guia}` para a frase que exibe as guias, `{glosas}` para as descrições e `{procedimentos}` para os códigos.")
                 f_txt = st.text_area("Texto Padrão ao Prestador", value=t_alvo["texto"], height=100)
