@@ -363,7 +363,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 
         clausulas = []
         for idx, (_, _, texto) in enumerate(itens_ordenados):
-            if idx == 0:
+            if idx == 0 and len(itens_ordenados) > 1:
                 clausulas.append(f"Foram identificadas glosas nas seguintes guias: {texto}")
             else:
                 clausulas.append(texto)
