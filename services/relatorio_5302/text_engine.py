@@ -207,7 +207,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 texto_glosa = texto_base
                 if justificativa:
                     texto_glosa += f", {justificativa}"
-                globais_dict.setdefault(texto_glosa, set()).add(guia)
+                proc_key_auto = f"{cod_proc} - {proc}" if cod_proc not in ("N/A", "") else ""
+                globais_dict.setdefault((texto_glosa, proc_key_auto), set()).add(guia)
                 continue
 
             if guia not in ordem_guias:
@@ -388,7 +389,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                         texto = primeira + proc_key + resto.replace(proc_key, cod)
             clausulas[idx] = texto
 
-        for texto_glosa, guias_set in globais_dict.items():
+        for (texto_glosa, proc_key_auto), guias_set in globais_dict.items():
             guias_list = sorted(list(guias_set))
             n_guias = len(guias_list)
 
@@ -401,7 +402,10 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             else:
                 guias_formatado = f"guias {guias_list[0]}, {guias_list[1]}, {guias_list[2]} e mais {n_guias - 3}"
 
-            clausulas.append(f"{texto_glosa} em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({guias_formatado})")
+            if proc_key_auto:
+                clausulas.append(f"{texto_glosa} no procedimento {proc_key_auto} em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({guias_formatado})")
+            else:
+                clausulas.append(f"{texto_glosa} em {n_guias} {'guia' if n_guias == 1 else 'guias'} ({guias_formatado})")
 
         # Cada cláusula de alto nível vira sua própria frase, em vez de uma
         # única frase gigante com vários "; ", para facilitar a leitura.
