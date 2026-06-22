@@ -252,12 +252,41 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     if guia not in guias_proc:
                         guias_proc.append(guia)
 
+        # Mescla grupos com proc_map idêntico (glosas diferentes, mesmo proc+guias)
+        proc_map_to_keys = {}
+        proc_map_key_ordem = []
+        for chave in grupos_ordem:
+            pm = grupos[chave]
+            pm_frozen = tuple(sorted((pk, tuple(gl)) for pk, gl in pm.items()))
+            if pm_frozen not in proc_map_to_keys:
+                proc_map_to_keys[pm_frozen] = [chave]
+                proc_map_key_ordem.append(pm_frozen)
+            else:
+                proc_map_to_keys[pm_frozen].append(chave)
+
+        grupos_merged = {}
+        grupos_merged_ordem = []
+        for pm_frozen in proc_map_key_ordem:
+            chaves = proc_map_to_keys[pm_frozen]
+            if len(chaves) == 1:
+                c = chaves[0]
+                grupos_merged[c] = grupos[c]
+                grupos_merged_ordem.append(c)
+            else:
+                bases = [c[0] for c in chaves]
+                justs = list(dict.fromkeys(c[1] for c in chaves if c[1]))
+                merged_base = " e ".join(bases)
+                merged_just = " e ".join(justs)
+                merged_key = (merged_base, merged_just)
+                grupos_merged[merged_key] = grupos[chaves[0]]
+                grupos_merged_ordem.append(merged_key)
+
         clausulas_por_guia = {}
         clausulas_globais_raw = []  # (ordering_key, base, resto, caso)
 
-        for chave in grupos_ordem:
+        for chave in grupos_merged_ordem:
             base, justificativa = chave
-            proc_map = grupos[chave]
+            proc_map = grupos_merged[chave]
 
             todas_guias = []
             for guias_lista in proc_map.values():
