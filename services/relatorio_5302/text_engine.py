@@ -605,14 +605,12 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 "justificativa": ""
             })
             
-        for g in lista_glosas:
-            texto_formatado = ""
-            if g["glosa"] == "430_420":
-                texto_formatado = "glosas 420 e 430"
-            elif g["glosa"] != "480":
-                texto_formatado = f"glosa {g['glosa']}"
-                
-            if texto_formatado:
+        glosas_nao_480 = [g for g in lista_glosas if g["glosa"] != "480"]
+        codigos_unicos = list(dict.fromkeys(g["glosa"] for g in glosas_nao_480))
+        if len(codigos_unicos) <= 1:
+            # 0 ou 1 código único: cria um item por entrada (pode ter repetições do mesmo glosa)
+            for g in glosas_nao_480:
+                texto_formatado = "glosas 420 e 430" if g["glosa"] == "430_420" else f"glosa {g['glosa']}"
                 itens.append({
                     "glosa": g["glosa"],
                     "texto_formatado": texto_formatado,
@@ -620,6 +618,25 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     "cat": (cat_s, cat_p),
                     "guia": guia
                 })
+        else:
+            # Glosas DIFERENTES no mesmo procedimento+guia → mescla numa só cláusula
+            # Ordena por código para que a ordem seja consistente entre guias diferentes
+            glosas_ordenadas = sorted(glosas_nao_480, key=lambda g: (0 if g["glosa"] == "430_420" else int(g["glosa"]) if g["glosa"].isdigit() else 999))
+            txts = list(dict.fromkeys("glosas 420 e 430" if g["glosa"] == "430_420" else f"glosa {g['glosa']}" for g in glosas_ordenadas))
+            # Strip "glosa " ou "glosas " para extrair apenas o identificador numérico/combinado
+            partes = [t[len('glosas '):] if t.startswith('glosas ') else t[len('glosa '):] if t.startswith('glosa ') else t for t in txts]
+            if len(partes) == 2:
+                merged_texto = f"glosas {partes[0]} e {partes[1]}"
+            else:
+                merged_texto = "glosas " + ", ".join(partes[:-1]) + " e " + partes[-1]
+            justs = list(dict.fromkeys(g['justificativa'] for g in glosas_nao_480 if g['justificativa']))
+            itens.append({
+                "glosa": glosas_nao_480[0]["glosa"],
+                "texto_formatado": merged_texto,
+                "justificativa": " e ".join(justs),
+                "cat": (cat_s, cat_p),
+                "guia": guia
+            })
 
     def formatar_guias_resumo(lista):
         if not lista or lista[0] == "Desconhecida": return ""
