@@ -326,14 +326,35 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             else:
                 # Glosa+justificativa idêntica em mais de uma guia: consolida em
                 # uma única cláusula, listando as guias por procedimento.
-                partes = []
+                # Agrupa procs com a MESMA lista de guias num único bloco
+                # ("nos procedimentos X e Y nas guias ...") em vez de repetir as
+                # guias para cada procedimento.
+                guias_to_procs = {}
+                guias_to_procs_ordem = []
                 for proc_key, guias_lista in proc_map.items():
+                    chave_g = tuple(guias_lista)
+                    if chave_g not in guias_to_procs:
+                        guias_to_procs[chave_g] = []
+                        guias_to_procs_ordem.append(chave_g)
+                    guias_to_procs[chave_g].append(proc_key)
+
+                partes = []
+                for chave_g in guias_to_procs_ordem:
+                    procs_chave = guias_to_procs[chave_g]
+                    guias_lista = list(chave_g)
                     guias_fmt = formatar_guias_detalhada(guias_lista)
                     prep = "na" if len(guias_lista) == 1 else "nas"
-                    if proc_key:
-                        partes.append(f"no procedimento {proc_key} {prep} {guias_fmt}")
-                    else:
+                    procs_validos = [p for p in procs_chave if p]
+                    if not procs_validos:
                         partes.append(f"{prep} {guias_fmt}")
+                    elif len(procs_validos) == 1:
+                        partes.append(f"no procedimento {procs_validos[0]} {prep} {guias_fmt}")
+                    else:
+                        if len(procs_validos) == 2:
+                            procs_str = f"{procs_validos[0]} e {procs_validos[1]}"
+                        else:
+                            procs_str = ", ".join(procs_validos[:-1]) + " e " + procs_validos[-1]
+                        partes.append(f"nos procedimentos {procs_str} {prep} {guias_fmt}")
 
                 if len(partes) == 1:
                     partes_str = partes[0]
@@ -696,23 +717,47 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         for item in lista_itens:
             cat_counts[item['cat']].append(item['guia'])
             
-        partes_categoria = []
-        for (cat_s, cat_p), guias_lista in cat_counts.items():
-            n_itens = len(guias_lista)
-            guias_unicas = sorted(list(set(guias_lista)))
-            nome_cat = cat_s if n_itens == 1 else cat_p
-            
-            str_guias = formatar_guias_resumo(guias_unicas)
-            
-            if n_itens == 1:
-                partes_categoria.append(f"{n_itens} {nome_cat} na {str_guias}")
+        # Se todas as categorias têm exatamente as mesmas guias únicas, lista as
+        # guias só uma vez no final ("N cat1 e M cat2 (guias ...)" em vez de
+        # "N cat1 (guias ...) e M cat2 (guias ...)").
+        guias_unicas_por_cat = [tuple(sorted(set(g))) for g in cat_counts.values()]
+        todas_mesmas_guias = len(guias_unicas_por_cat) > 1 and all(g == guias_unicas_por_cat[0] for g in guias_unicas_por_cat)
+
+        if todas_mesmas_guias:
+            nomes_cats = []
+            for (cat_s, cat_p), guias_lista in cat_counts.items():
+                n_itens = len(guias_lista)
+                nome_cat = cat_s if n_itens == 1 else cat_p
+                nomes_cats.append(f"{n_itens} {nome_cat}")
+            if len(nomes_cats) == 2:
+                cats_str = f"{nomes_cats[0]} e {nomes_cats[1]}"
             else:
-                partes_categoria.append(f"{n_itens} {nome_cat} ({str_guias})")
-                
-        if len(partes_categoria) == 1:
-            texto_categorias = partes_categoria[0]
+                cats_str = ", ".join(nomes_cats[:-1]) + " e " + nomes_cats[-1]
+            guias_unicas = list(guias_unicas_por_cat[0])
+            str_guias = formatar_guias_resumo(guias_unicas)
+            prep = "na" if len(guias_unicas) == 1 else None
+            if prep == "na":
+                texto_categorias = f"{cats_str} na {str_guias}"
+            else:
+                texto_categorias = f"{cats_str} ({str_guias})"
         else:
-            texto_categorias = ", ".join(partes_categoria[:-1]) + " e " + partes_categoria[-1]
+            partes_categoria = []
+            for (cat_s, cat_p), guias_lista in cat_counts.items():
+                n_itens = len(guias_lista)
+                guias_unicas = sorted(list(set(guias_lista)))
+                nome_cat = cat_s if n_itens == 1 else cat_p
+
+                str_guias = formatar_guias_resumo(guias_unicas)
+
+                if n_itens == 1:
+                    partes_categoria.append(f"{n_itens} {nome_cat} na {str_guias}")
+                else:
+                    partes_categoria.append(f"{n_itens} {nome_cat} ({str_guias})")
+
+            if len(partes_categoria) == 1:
+                texto_categorias = partes_categoria[0]
+            else:
+                texto_categorias = ", ".join(partes_categoria[:-1]) + " e " + partes_categoria[-1]
             
         frase = f"{texto_glosa} em {texto_categorias}"
         if justificativa:
