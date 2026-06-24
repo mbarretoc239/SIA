@@ -112,9 +112,40 @@ if pdf_file is not None:
         st.success(f"Análise concluída! {len(dados)} glosas detectadas. Prestador: **{meta.get('prestador')}** | Processo: **{meta.get('processo')}** | Produção: **{meta.get('producao')}**")
         
         st.markdown("### 1. Auditoria e Justificativas")
-        st.markdown("Marque **Incluir no Relatório** para as glosas que deseja exportar. As glosas automáticas (ex: glosa 12) já vêm desmarcadas por padrão.")
+        st.markdown("Todas as glosas vêm marcadas em **Incluir no Relatório**. Use a seleção em massa abaixo para marcar/desmarcar várias por código de uma vez, ou edite linha a linha na tabela.")
 
-        df = pd.DataFrame(dados)
+        if "df_glosas_state" not in st.session_state or st.session_state.get("origem_glosas") != pdf_file.name:
+            st.session_state.df_glosas_state = pd.DataFrame(dados).copy()
+            st.session_state.origem_glosas = pdf_file.name
+            st.session_state.editor_version = 0
+
+        codigos_unicos = sorted(
+            st.session_state.df_glosas_state['Glosa'].astype(str).unique(),
+            key=lambda x: (int(x) if x.isdigit() else 9999, x)
+        )
+
+        col_sel, col_mark, col_unmark = st.columns([5, 1, 1])
+        with col_sel:
+            sel_codigos = st.multiselect(
+                "Selecionar por código de glosa:",
+                codigos_unicos,
+                key=f"sel_massa_v{st.session_state.editor_version}",
+                placeholder="Escolha um ou mais códigos…",
+            )
+        with col_mark:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+            if st.button("Marcar", use_container_width=True, key="btn_marcar_massa", disabled=not sel_codigos):
+                mask = st.session_state.df_glosas_state['Glosa'].astype(str).isin(sel_codigos)
+                st.session_state.df_glosas_state.loc[mask, 'Incluir no Relatório'] = True
+                st.session_state.editor_version += 1
+                st.rerun()
+        with col_unmark:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+            if st.button("Desmarcar", use_container_width=True, key="btn_desmarcar_massa", disabled=not sel_codigos):
+                mask = st.session_state.df_glosas_state['Glosa'].astype(str).isin(sel_codigos)
+                st.session_state.df_glosas_state.loc[mask, 'Incluir no Relatório'] = False
+                st.session_state.editor_version += 1
+                st.rerun()
 
         col_config = {
             "Incluir no Relatório": st.column_config.CheckboxColumn("Incluir", width="small", default=True),
@@ -127,13 +158,16 @@ if pdf_file is not None:
         }
 
         df_editado = st.data_editor(
-            df,
+            st.session_state.df_glosas_state,
             use_container_width=True,
             num_rows="dynamic",
             column_config=col_config,
             column_order=["Incluir no Relatório", "Tipo", "Guia", "Cód. Procedimento", "Procedimento", "Glosa", "Descrição Oficial", "Justificativa"],
-            key="glosas_editor",
+            key=f"glosas_editor_v{st.session_state.editor_version}",
         )
+
+        # Persiste edições manuais para sobreviver às ações em massa subsequentes
+        st.session_state.df_glosas_state = df_editado
 
         st.markdown("### 2. Motor de Texto Offline")
         col1, col2 = st.columns([1, 2])

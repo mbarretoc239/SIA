@@ -117,7 +117,7 @@ def processar_pdf(pdf_file):
                 justificativa = formatar_conectivo_subglosa(desc_oficial)
 
         glosas_encontradas.append({
-            "Incluir no Relatório": not is_auto,
+            "Incluir no Relatório": True,
             "Tipo": tipo,
             "Guia": str(r["guia"]),
             "Cód. Procedimento": str(r["proc_cod"]),
@@ -281,7 +281,7 @@ def processar_csv(csv_file):
 
                         if chave_visto not in vistos:
                             glosas_encontradas.append({
-                                "Incluir no Relatório": not is_auto,
+                                "Incluir no Relatório": True,
                                 "Tipo": tipo,
                                 "Guia": str(guia_atual),
                                 "Cód. Procedimento": str(proc_cod_atual),
