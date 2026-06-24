@@ -192,6 +192,34 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         ordem_guias = []
         todos_proc_keys = set()
 
+        # Pré-pass: decide quais glosas vão pro caminho compacto (globais_dict)
+        # com base no tipo e número de procedimentos distintos. Mesma regra da
+        # Resumida: Automáticas sempre, Administrativas ≥5, Técnicas ≥7,
+        # Críticas nunca.
+        procs_por_glosa = {}
+        tipo_por_glosa = {}
+        for _, row in df[df['Glosa'] != '480'].iterrows():
+            g = str(row['Glosa'])
+            cod_p = str(row['Cód. Procedimento'])
+            proc_p = str(row['Procedimento']).lower()
+            pk = f"{cod_p} - {proc_p}" if cod_p not in ("N/A", "") else ""
+            procs_por_glosa.setdefault(g, set())
+            if pk:
+                procs_por_glosa[g].add(pk)
+            tipo_por_glosa[g] = str(row.get('Tipo', '') or '')
+
+        glosas_compactar = set()
+        for g, tipo in tipo_por_glosa.items():
+            n_procs = len(procs_por_glosa[g])
+            if tipo == 'Crítica':
+                continue
+            if tipo == 'Automática':
+                glosas_compactar.add(g)
+            elif tipo == 'Técnica' and n_procs >= 7:
+                glosas_compactar.add(g)
+            elif tipo == 'Administrativa' and n_procs >= 5:
+                glosas_compactar.add(g)
+
         for _, row in df[df['Glosa'] != '480'].iterrows():
             justificativa = (str(row.get('Justificativa') or "")).strip()
             glosa = str(row['Glosa'])
@@ -203,7 +231,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 
             texto_base = formatar_descricao_glosa_inteligente(desc_oficial, glosa)
 
-            if tipo_glosa == 'Automática':
+            if glosa in glosas_compactar:
                 texto_glosa = texto_base
                 if justificativa:
                     texto_glosa += f", {justificativa}"
@@ -241,6 +269,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         # consolidar repetições da mesma glosa+motivo em guias diferentes.
         grupos_ordem = []
         grupos = {}
+        chave_glosa_codigos = {}
         for guia in ordem_guias:
             for proc_key, lista in guia_proc_glosas.get(guia, {}).items():
                 for g in lista:
@@ -248,9 +277,15 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     if chave not in grupos:
                         grupos[chave] = {}
                         grupos_ordem.append(chave)
+                        chave_glosa_codigos[chave] = set()
                     guias_proc = grupos[chave].setdefault(proc_key, [])
                     if guia not in guias_proc:
                         guias_proc.append(guia)
+                    cod_g = g["glosa"]
+                    if cod_g == "430_420":
+                        chave_glosa_codigos[chave].update(["420", "430"])
+                    else:
+                        chave_glosa_codigos[chave].add(cod_g)
 
         # Mescla grupos com proc_map idêntico (glosas diferentes, mesmo proc+guias)
         proc_map_to_keys = {}
@@ -266,12 +301,14 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 
         grupos_merged = {}
         grupos_merged_ordem = []
+        grupos_merged_codigos = {}
         for pm_frozen in proc_map_key_ordem:
             chaves = proc_map_to_keys[pm_frozen]
             if len(chaves) == 1:
                 c = chaves[0]
                 grupos_merged[c] = grupos[c]
                 grupos_merged_ordem.append(c)
+                grupos_merged_codigos[c] = chave_glosa_codigos.get(c, set())
             else:
                 bases = [c[0] for c in chaves]
                 justs = list(dict.fromkeys(c[1] for c in chaves if c[1]))
@@ -280,6 +317,10 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 merged_key = (merged_base, merged_just)
                 grupos_merged[merged_key] = grupos[chaves[0]]
                 grupos_merged_ordem.append(merged_key)
+                merged_cods = set()
+                for c in chaves:
+                    merged_cods.update(chave_glosa_codigos.get(c, set()))
+                grupos_merged_codigos[merged_key] = merged_cods
 
         clausulas_por_guia = {}
         clausulas_globais_raw = []  # (ordering_key, base, resto, caso)
@@ -310,10 +351,14 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     clausula += f", {justificativa}"
 
                 clausulas_por_guia.setdefault(guia, []).append(clausula)
-            elif len(proc_map) > 3:
+            elif len(proc_map) > 3 and not any(
+                tipo_por_glosa.get(c) == 'Crítica'
+                for c in grupos_merged_codigos.get(chave, set())
+            ):
                 # Glosa+justificativa repetida em muitos procedimentos diferentes:
                 # detalhar por procedimento deixaria a frase enorme, então resume
                 # apenas pela quantidade e lista de guias (igual às glosas automáticas).
+                # Glosas Críticas escapam dessa compactação — sempre detalhadas.
                 guias_ordenadas = sorted(todas_guias)
                 n_guias = len(guias_ordenadas)
 
@@ -641,7 +686,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         temp_itens[(str(row['Guia']), cod_proc, cat_singular, cat_plural)].append({
             "glosa": str(row['Glosa']),
             "desc": str(row['Descrição Oficial']),
-            "justificativa": (str(row.get('Justificativa') or "")).strip()
+            "justificativa": (str(row.get('Justificativa') or "")).strip(),
+            "tipo": str(row.get('Tipo', '') or ''),
         })
         
     itens = []
@@ -666,7 +712,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     "texto_formatado": texto_formatado,
                     "justificativa": g["justificativa"],
                     "cat": (cat_s, cat_p),
-                    "guia": guia
+                    "guia": guia,
+                    "tipos": {g.get("tipo", "")},
                 })
         else:
             # Glosas DIFERENTES no mesmo procedimento+guia → mescla numa só cláusula
@@ -685,7 +732,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 "texto_formatado": merged_texto,
                 "justificativa": " e ".join(justs),
                 "cat": (cat_s, cat_p),
-                "guia": guia
+                "guia": guia,
+                "tipos": {g.get("tipo", "") for g in glosas_nao_480},
             })
 
     def formatar_guias_resumo(lista):
@@ -716,7 +764,36 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         cat_counts = collections.defaultdict(list)
         for item in lista_itens:
             cat_counts[item['cat']].append(item['guia'])
-            
+
+        # Compactação por tipo: Automáticas sempre, Administrativas a partir de 5
+        # categorias, Técnicas a partir de 7. Críticas nunca compactam — se uma
+        # cláusula combinar tipos diferentes, o mais conservador prevalece.
+        tipos_clausula = set()
+        for item in lista_itens:
+            tipos_clausula.update(item.get('tipos', set()))
+
+        n_categorias = len(cat_counts)
+        if "Crítica" in tipos_clausula:
+            compactar = False
+        elif "Técnica" in tipos_clausula:
+            compactar = n_categorias >= 7
+        elif "Administrativa" in tipos_clausula:
+            compactar = n_categorias >= 5
+        elif "Automática" in tipos_clausula:
+            compactar = True
+        else:
+            compactar = False
+
+        if compactar:
+            guias_unicas = sorted({i['guia'] for i in lista_itens})
+            str_guias = formatar_guias_resumo(guias_unicas)
+            prep = "na" if len(guias_unicas) == 1 else "nas"
+            frase = f"{texto_glosa} {prep} {str_guias}"
+            if justificativa:
+                frase += f", {justificativa}"
+            clausulas.append(frase)
+            continue
+
         # Se todas as categorias têm exatamente as mesmas guias únicas, lista as
         # guias só uma vez no final ("N cat1 e M cat2 (guias ...)" em vez de
         # "N cat1 (guias ...) e M cat2 (guias ...)").
