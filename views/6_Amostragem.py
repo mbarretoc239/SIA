@@ -292,13 +292,13 @@ for esp in especialidades:
     total_procs = int(df_esp_total["Qtde"].sum())
     total_guias = len(df_esp_guias)
     n_amostra, descricao = calcular_amostra(esp, total_procs, total_guias)
+    df_amostra = sortear_amostra(df_esp_guias, n_amostra, seed=int(seed))
 
-    cabecalho = f"**{esp}** — {total_guias} guia(s), {total_procs} proc(s) • {descricao}"
-    with st.expander(cabecalho, expanded=True):
-        df_amostra = sortear_amostra(df_esp_guias, n_amostra, seed=int(seed))
+    st.markdown(f"#### {esp}")
+    st.caption(f"{total_guias} guia(s), {total_procs} proc(s) • {descricao}")
 
-        st.markdown(f"**Tabela completa** — {total_guias} guia(s)")
-        renderizar_tabela_guias(df_esp_guias, esp)
-
-        st.markdown(f"**Sugestão de amostra** — {len(df_amostra)} guia(s)")
+    with st.expander(f"Sugestão de amostra — {len(df_amostra)} guia(s)", expanded=True):
         renderizar_tabela_guias(df_amostra, esp)
+
+    with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
+        renderizar_tabela_guias(df_esp_guias, esp)
