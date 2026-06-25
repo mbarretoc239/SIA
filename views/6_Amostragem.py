@@ -134,11 +134,13 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
 
     html_tabela = f"""
     <style>
-        .pbi-wrap {{ font-family: 'Source Sans Pro', sans-serif; }}
-        .pbi-table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+        body {{ color: #1f2937; background: transparent; margin: 0; }}
+        .pbi-wrap {{ font-family: 'Source Sans Pro', sans-serif; color: inherit; }}
+        .pbi-table {{ width: 100%; border-collapse: collapse; font-size: 14px; color: inherit; }}
         .pbi-table th, .pbi-table td {{
             padding: 7px 10px; text-align: left;
             border-bottom: 1px solid rgba(125,125,125,0.25);
+            color: inherit;
         }}
         .pbi-table th {{
             background: rgba(125,125,125,0.12); font-weight: 600;
@@ -146,7 +148,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
         }}
         .copy-btn {{
             background: transparent;
-            border: 1px solid rgba(125,125,125,0.4);
+            border: 1px solid rgba(125,125,125,0.5);
             border-radius: 4px;
             padding: 3px 10px;
             cursor: pointer;
@@ -154,8 +156,15 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
             font-size: 13px;
             color: inherit;
         }}
-        .copy-btn:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.7); }}
+        .copy-btn:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
         .copy-btn.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
+
+        @media (prefers-color-scheme: dark) {{
+            body {{ color: #e6ecf5; }}
+            .pbi-table th {{ background: rgba(255,255,255,0.06); }}
+            .copy-btn {{ border-color: rgba(255,255,255,0.25); }}
+            .copy-btn:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
+        }}
     </style>
     <div class='pbi-wrap'>
         <table class='pbi-table'>
@@ -205,18 +214,26 @@ texto = st.text_area(
     ),
 )
 
-col_botao, col_seed, _ = st.columns([1, 1, 3])
-with col_botao:
-    limpar = st.button("Limpar", use_container_width=True)
-with col_seed:
-    seed = st.number_input(
-        "Seed do sorteio",
-        min_value=0,
-        max_value=9999,
-        value=42,
-        step=1,
-        help="Trocar o seed gera outra amostra aleatória.",
-    )
+_is_admin = st.session_state.get("role_interno") == "Admin"
+
+if _is_admin:
+    col_botao, col_seed, _ = st.columns([1, 1, 3])
+    with col_botao:
+        limpar = st.button("Limpar", use_container_width=True)
+    with col_seed:
+        seed = st.number_input(
+            "Seed do sorteio",
+            min_value=0,
+            max_value=9999,
+            value=42,
+            step=1,
+            help="Trocar o seed gera outra amostra aleatória.",
+        )
+else:
+    col_botao, _ = st.columns([1, 4])
+    with col_botao:
+        limpar = st.button("Limpar", use_container_width=True)
+    seed = 42
 
 if limpar:
     st.session_state.pop("texto_powerbi", None)
