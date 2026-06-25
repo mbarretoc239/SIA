@@ -143,8 +143,9 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
             color: inherit;
         }}
         .pbi-table th {{
-            background: rgba(125,125,125,0.12); font-weight: 600;
-            position: sticky; top: 0;
+            background: #f0f2f6; font-weight: 600;
+            position: sticky; top: 0; z-index: 1;
+            box-shadow: 0 1px 0 rgba(125,125,125,0.35);
         }}
         .copy-btn {{
             background: transparent;
@@ -161,7 +162,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
 
         @media (prefers-color-scheme: dark) {{
             body {{ color: #e6ecf5; }}
-            .pbi-table th {{ background: rgba(255,255,255,0.06); }}
+            .pbi-table th {{ background: #1c2230; box-shadow: 0 1px 0 rgba(255,255,255,0.15); }}
             .copy-btn {{ border-color: rgba(255,255,255,0.25); }}
             .copy-btn:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
         }}
