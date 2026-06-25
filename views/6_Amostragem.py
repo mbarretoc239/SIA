@@ -297,8 +297,8 @@ for esp in especialidades:
     st.markdown(f"#### {esp}")
     st.caption(f"{total_guias} guia(s), {total_procs} proc(s) • {descricao}")
 
+    with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=True):
+        renderizar_tabela_guias(df_esp_guias, esp)
+
     with st.expander(f"Sugestão de amostra — {len(df_amostra)} guia(s)", expanded=True):
         renderizar_tabela_guias(df_amostra, esp)
-
-    with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
-        renderizar_tabela_guias(df_esp_guias, esp)
