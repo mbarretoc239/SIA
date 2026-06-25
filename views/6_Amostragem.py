@@ -164,6 +164,13 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
         }}
         .copy-btn.vista:hover {{ background: rgba(46, 125, 50, 0.32); }}
         .copy-btn.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
+        .pbi-counter {{
+            font-size: 12.5px;
+            color: rgba(120,120,120,0.95);
+            margin: 0 0 8px 2px;
+            font-family: 'Source Sans Pro', sans-serif;
+        }}
+        .pbi-counter strong {{ color: rgba(76, 175, 80, 1); font-weight: 600; }}
 
         @media (prefers-color-scheme: dark) {{
             body {{ color: #e6ecf5; }}
@@ -178,6 +185,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
         }}
     </style>
     <div class='pbi-wrap'>
+        <div class='pbi-counter'><strong>0</strong> de {len(df_guias)} analisado(s)</div>
         <table class='pbi-table'>
             <thead>
                 <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:right'>Qtde</th></tr>
@@ -188,6 +196,13 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
     <script>
         const PREFIX = 'amostragem_guia_vista_';
 
+        function atualizarContador() {{
+            const total = document.querySelectorAll('.copy-btn').length;
+            const vistos = document.querySelectorAll('.copy-btn.vista').length;
+            const c = document.querySelector('.pbi-counter');
+            if (c) c.innerHTML = '<strong>' + vistos + '</strong> de ' + total + ' analisado(s)';
+        }}
+
         function aplicarEstadoVistas() {{
             document.querySelectorAll('.copy-btn').forEach(btn => {{
                 const val = btn.getAttribute('data-val');
@@ -195,6 +210,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
                     btn.classList.add('vista');
                 }}
             }});
+            atualizarContador();
         }}
 
         aplicarEstadoVistas();
@@ -211,6 +227,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
                 navigator.clipboard.writeText(val).then(() => {{
                     localStorage.setItem(PREFIX + val, '1');
                     btn.classList.add('vista');
+                    atualizarContador();
                     const orig = btn.innerText;
                     btn.innerText = '✓ ' + val;
                     btn.classList.add('copied');
@@ -223,8 +240,8 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
         }});
     </script>
     """
-    altura = 60 + 36 * max(1, len(df_guias))
-    components.html(html_tabela, height=min(altura, 520), scrolling=True)
+    altura = 82 + 36 * max(1, len(df_guias))
+    components.html(html_tabela, height=min(altura, 540), scrolling=True)
 
 
 # --------------------------------------------------------------------- UI ----
