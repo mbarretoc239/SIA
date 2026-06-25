@@ -234,7 +234,7 @@ else:
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
 
     # Amostragem PowerBI: visível para todos os logados
-    paginas.append(st.Page("views/6_Amostragem.py", title="Amostragem PowerBI"))
+    paginas.append(st.Page("views/6_Amostragem.py", title="Amostragem"))
 
     # Alinhamentos: visível para todos, conteúdo se ajusta por nível dentro da tela
     paginas.append(st.Page("views/5_Alinhamentos.py", title="Alinhamentos"))

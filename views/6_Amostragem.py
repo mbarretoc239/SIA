@@ -7,7 +7,7 @@ import unicodedata
 from core.settings import tem_acesso_modulo
 from shared.database import DatabaseManager
 
-st.set_page_config(page_title="Amostragem PowerBI", page_icon="", layout="wide")
+st.set_page_config(page_title="Amostragem", page_icon="", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -197,7 +197,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
 
 # --------------------------------------------------------------------- UI ----
 
-st.title("Amostragem de Guias — PowerBI")
+st.title("Amostragem de Guias")
 st.markdown(
     "Cole o texto da seleção do PowerBI (**Liberação de IA por procedimento**) abaixo. "
     "O app deduplica as guias por especialidade e sugere a amostra a auditar."
