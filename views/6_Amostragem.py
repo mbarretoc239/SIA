@@ -204,10 +204,20 @@ st.markdown(
     "O app deduplica as guias por especialidade e sugere a amostra a auditar."
 )
 
+_is_admin = st.session_state.get("role_interno") == "Admin"
+
+# Versão da key do text_area: usada para "resetar" o widget no clique do Limpar
+# (Streamlit não limpa widget só removendo do session_state após render).
+if "texto_powerbi_v" not in st.session_state:
+    st.session_state["texto_powerbi_v"] = 0
+# Seed da amostra. Cliques no "Gerar amostra" geram um novo seed aleatório.
+if "seed_amostra" not in st.session_state:
+    st.session_state["seed_amostra"] = 42
+
 texto = st.text_area(
     "Texto copiado do PowerBI",
     height=200,
-    key="texto_powerbi",
+    key=f"texto_powerbi_v{st.session_state['texto_powerbi_v']}",
     placeholder=(
         "Especialidade\tCD_PROCEDIMENTO\tNU_GUIA\tLIBERAÇÃO\tQtde itens\n"
         "ENDODONTIA\t2015\t27029804\tN\t1\n"
@@ -215,29 +225,40 @@ texto = st.text_area(
     ),
 )
 
-_is_admin = st.session_state.get("role_interno") == "Admin"
-
 if _is_admin:
-    col_botao, col_seed, _ = st.columns([1, 1, 3])
-    with col_botao:
+    col_limpar, col_gerar, col_seed, _ = st.columns([1, 1, 1, 2])
+    with col_limpar:
         limpar = st.button("Limpar", use_container_width=True)
+    with col_gerar:
+        gerar_amostra = st.button("Gerar amostra", use_container_width=True)
     with col_seed:
         seed = st.number_input(
             "Seed do sorteio",
             min_value=0,
             max_value=9999,
-            value=42,
+            value=int(st.session_state["seed_amostra"]),
             step=1,
             help="Trocar o seed gera outra amostra aleatória.",
         )
+        st.session_state["seed_amostra"] = int(seed)
 else:
-    col_botao, _ = st.columns([1, 4])
-    with col_botao:
+    col_limpar, col_gerar, _ = st.columns([1, 1, 3])
+    with col_limpar:
         limpar = st.button("Limpar", use_container_width=True)
-    seed = 42
+    with col_gerar:
+        gerar_amostra = st.button("Gerar amostra", use_container_width=True)
+    seed = int(st.session_state["seed_amostra"])
 
 if limpar:
-    st.session_state.pop("texto_powerbi", None)
+    st.session_state["texto_powerbi_v"] += 1
+    st.rerun()
+
+if gerar_amostra:
+    import random
+    novo = random.randint(0, 9999)
+    if novo == int(st.session_state["seed_amostra"]):
+        novo = (novo + 1) % 10000
+    st.session_state["seed_amostra"] = novo
     st.rerun()
 
 if not texto.strip():
@@ -271,13 +292,12 @@ for esp in especialidades:
     df_esp_guias = df_guias[df_guias["Especialidade"] == esp]
     total_procs = int(df_esp_total["Qtde"].sum())
     total_guias = len(df_esp_guias)
-    n_amostra, descricao = calcular_amostra(esp, total_procs, total_guias)
+    n_amostra, _ = calcular_amostra(esp, total_procs, total_guias)
     resumo.append({
         "Especialidade": esp,
         "Guias únicas": total_guias,
         "Total de procs": total_procs,
         "Amostra sugerida": n_amostra,
-        "Regra aplicada": descricao,
     })
 
 st.markdown("### Resumo")
