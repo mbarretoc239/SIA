@@ -224,6 +224,9 @@ else:
     # Todos (Dashboard de Entrada/Bem vindo)
     paginas.append(st.Page("views/0_Dashboard.py", title="Painel Principal"))
     
+    # Amostragem: visível para todos os logados
+    paginas.append(st.Page("views/6_Amostragem.py", title="Amostragem"))
+
     # Permissões Módulos Clínicos (configurável por role em Configurações)
     from core.settings import tem_acesso_modulo
     if tem_acesso_modulo(permissoes, role, "relatorio_5302"):
@@ -232,9 +235,6 @@ else:
         paginas.append(st.Page("views/3_Calculadora.py", title="Calculadora de Glosa"))
     if tem_acesso_modulo(permissoes, role, "producao"):
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
-
-    # Amostragem PowerBI: visível para todos os logados
-    paginas.append(st.Page("views/6_Amostragem.py", title="Amostragem"))
 
     # Alinhamentos: visível para todos, conteúdo se ajusta por nível dentro da tela
     paginas.append(st.Page("views/5_Alinhamentos.py", title="Alinhamentos"))
