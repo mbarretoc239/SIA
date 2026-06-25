@@ -158,6 +158,11 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
             color: inherit;
         }}
         .copy-btn:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
+        .copy-btn.vista {{
+            background: rgba(46, 125, 50, 0.18);
+            border-color: rgba(76, 175, 80, 0.65);
+        }}
+        .copy-btn.vista:hover {{ background: rgba(46, 125, 50, 0.32); }}
         .copy-btn.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
 
         @media (prefers-color-scheme: dark) {{
@@ -165,6 +170,11 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
             .pbi-table th {{ background: #1c2230; box-shadow: 0 1px 0 rgba(255,255,255,0.15); }}
             .copy-btn {{ border-color: rgba(255,255,255,0.25); }}
             .copy-btn:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
+            .copy-btn.vista {{
+                background: rgba(76, 175, 80, 0.22);
+                border-color: rgba(102, 187, 106, 0.75);
+            }}
+            .copy-btn.vista:hover {{ background: rgba(76, 175, 80, 0.4); }}
         }}
     </style>
     <div class='pbi-wrap'>
@@ -176,10 +186,31 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
         </table>
     </div>
     <script>
+        const PREFIX = 'amostragem_guia_vista_';
+
+        function aplicarEstadoVistas() {{
+            document.querySelectorAll('.copy-btn').forEach(btn => {{
+                const val = btn.getAttribute('data-val');
+                if (localStorage.getItem(PREFIX + val) === '1') {{
+                    btn.classList.add('vista');
+                }}
+            }});
+        }}
+
+        aplicarEstadoVistas();
+
+        // Sincroniza entre os dois iframes (tabela completa e amostra) na mesma janela
+        window.addEventListener('storage', (e) => {{
+            if (e.key && e.key.startsWith(PREFIX)) aplicarEstadoVistas();
+        }});
+        setInterval(aplicarEstadoVistas, 1500);
+
         document.querySelectorAll('.copy-btn').forEach(btn => {{
             btn.addEventListener('click', () => {{
                 const val = btn.getAttribute('data-val');
                 navigator.clipboard.writeText(val).then(() => {{
+                    localStorage.setItem(PREFIX + val, '1');
+                    btn.classList.add('vista');
                     const orig = btn.innerText;
                     btn.innerText = '✓ ' + val;
                     btn.classList.add('copied');
@@ -251,7 +282,17 @@ else:
 
 if limpar:
     st.session_state["texto_powerbi_v"] += 1
+    st.session_state["limpar_marcas_pendente"] = True
     st.rerun()
+
+if st.session_state.pop("limpar_marcas_pendente", False):
+    components.html(
+        "<script>"
+        "Object.keys(localStorage).filter(k => k.startsWith('amostragem_guia_vista_'))"
+        ".forEach(k => localStorage.removeItem(k));"
+        "</script>",
+        height=0,
+    )
 
 if gerar_amostra:
     import random
