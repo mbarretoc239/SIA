@@ -116,8 +116,12 @@ def sortear_amostra(df_guias: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     return df_guias.sample(n=n, random_state=seed).sort_index()
 
 
-def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
-    """Renderiza tabela HTML com NU_GUIA como botão clicável (copia ao clicar)."""
+def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int):
+    """Renderiza tabela HTML com NU_GUIA como botão clicável (copia ao clicar).
+
+    `objetivo` é o tamanho de amostra requerido pela regra da especialidade
+    (mostrado como denominador do contador).
+    """
     linhas_html = []
     for _, row in df_guias.iterrows():
         guia = html.escape(str(row["NU_GUIA"]))
@@ -171,6 +175,8 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
             font-family: 'Source Sans Pro', sans-serif;
         }}
         .pbi-counter strong {{ color: rgba(76, 175, 80, 1); font-weight: 600; }}
+        .pbi-counter.atingido strong {{ color: rgba(46, 125, 50, 1); }}
+        .pbi-counter.atingido::after {{ content: ' ✓'; color: rgba(46, 125, 50, 1); font-weight: 600; }}
 
         @media (prefers-color-scheme: dark) {{
             body {{ color: #e6ecf5; }}
@@ -185,7 +191,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
         }}
     </style>
     <div class='pbi-wrap'>
-        <div class='pbi-counter'><strong>0</strong> de {len(df_guias)} analisado(s)</div>
+        <div class='pbi-counter'><strong>0</strong> de {objetivo} analisado(s)</div>
         <table class='pbi-table'>
             <thead>
                 <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:right'>Qtde</th></tr>
@@ -196,11 +202,14 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str):
     <script>
         const PREFIX = 'amostragem_guia_vista_';
 
+        const OBJETIVO = {objetivo};
         function atualizarContador() {{
-            const total = document.querySelectorAll('.copy-btn').length;
             const vistos = document.querySelectorAll('.copy-btn.vista').length;
             const c = document.querySelector('.pbi-counter');
-            if (c) c.innerHTML = '<strong>' + vistos + '</strong> de ' + total + ' analisado(s)';
+            if (!c) return;
+            c.innerHTML = '<strong>' + vistos + '</strong> de ' + OBJETIVO + ' analisado(s)';
+            if (vistos >= OBJETIVO) c.classList.add('atingido');
+            else c.classList.remove('atingido');
         }}
 
         function aplicarEstadoVistas() {{
@@ -377,7 +386,7 @@ for esp in especialidades:
     st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
     with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=True):
-        renderizar_tabela_guias(df_esp_guias, esp)
+        renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_amostra)
 
     with st.expander(f"Sugestão de amostra — {len(df_amostra)} guia(s)", expanded=True):
-        renderizar_tabela_guias(df_amostra, esp)
+        renderizar_tabela_guias(df_amostra, esp, objetivo=n_amostra)
