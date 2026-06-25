@@ -65,6 +65,19 @@ dump2.py
 automacao_hapvida.py
 main.py
 
+# --- Documentação interna de sessões com Claude (CLAUDE.md continua versionado) ---
+contexto_claude.md
+plano_*_claude.md
+
+# --- Arquivos temporários de dump/análise ---
+temp_*
+
+# --- Scripts utilitários one-off (manipulação manual de DB / análise local) ---
+bridge_test.py
+find_*.py
+inativar_*.py
+parse_excel.py
+
 # --- Arquivos de dados locais que não devem ir pro repo ---
 CHANGELOG_GLOSAS.md
 
