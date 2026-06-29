@@ -185,7 +185,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         clausula_480 = ""
         if guias_480:
             sep_480 = "na" if len(guias_480) == 1 else "nas"
-            clausula_480 = f"Houve glosa 480 por falta de documentação ou ausência de envio da guia {sep_480} {formatar_guias_detalhada(guias_480)}"
+            clausula_480 = f"Houve glosa 480 {sep_480} {formatar_guias_detalhada(guias_480)}"
 
         guia_proc_glosas = {}
         globais_dict = {}
@@ -748,7 +748,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
     clausula_480 = ""
     if guias_480:
         sep_480 = "na" if len(guias_480) == 1 else "nas"
-        clausula_480 = f"Houve glosa 480 por falta de documentação ou ausência de envio da guia {sep_480} {formatar_guias_resumo(guias_480)}"
+        clausula_480 = f"Houve glosa 480 {sep_480} {formatar_guias_resumo(guias_480)}"
         itens = [i for i in itens if i['glosa'] != '480']
 
     # Agrupar por (texto_formatado, justificativa)
