@@ -328,6 +328,10 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         for chave in grupos_merged_ordem:
             base, justificativa = chave
             proc_map = grupos_merged[chave]
+            is_critica_chave = any(
+                tipo_por_glosa.get(c) == 'Crítica'
+                for c in grupos_merged_codigos.get(chave, set())
+            )
 
             todas_guias = []
             for guias_lista in proc_map.values():
@@ -350,11 +354,8 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 if justificativa:
                     clausula += f", {justificativa}"
 
-                clausulas_por_guia.setdefault(guia, []).append(clausula)
-            elif len(proc_map) > 3 and not any(
-                tipo_por_glosa.get(c) == 'Crítica'
-                for c in grupos_merged_codigos.get(chave, set())
-            ):
+                clausulas_por_guia.setdefault(guia, []).append((clausula, is_critica_chave))
+            elif len(proc_map) > 3 and not is_critica_chave:
                 # Glosa+justificativa repetida em muitos procedimentos diferentes:
                 # detalhar por procedimento deixaria a frase enorme, então resume
                 # apenas pela quantidade e lista de guias (igual às glosas automáticas).
@@ -367,7 +368,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     resto = f", {justificativa}" + resto
 
                 ordering_key = min(ordem_guias.index(g) for g in todas_guias)
-                clausulas_globais_raw.append((ordering_key, base, resto, 'B'))
+                clausulas_globais_raw.append((ordering_key, base, resto, 'B', is_critica_chave))
             else:
                 # Glosa+justificativa idêntica em mais de uma guia: consolida em
                 # uma única cláusula, listando as guias por procedimento.
@@ -407,7 +408,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     partes_str = ", ".join(partes[:-1]) + ", e " + partes[-1]
 
                 ordering_key = min(ordem_guias.index(g) for g in todas_guias)
-                clausulas_globais_raw.append((ordering_key, base, (justificativa, partes_str), 'C'))
+                clausulas_globais_raw.append((ordering_key, base, (justificativa, partes_str), 'C', is_critica_chave))
 
         # Glosas iguais (mesma descrição-base) com motivos/procedimentos diferentes:
         # junta em uma só cláusula no formato "{base}: {motivo1}, {detalhe1}; e
@@ -416,52 +417,62 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         merge_c = {}
         merge_c_ordem = []
         clausulas_globais = []
-        for ordering_key, base, dados, caso in clausulas_globais_raw:
+        for ordering_key, base, dados, caso, is_critica in clausulas_globais_raw:
             if caso == 'C':
                 if base not in merge_c:
                     merge_c[base] = []
                     merge_c_ordem.append(base)
-                merge_c[base].append((ordering_key, dados))
+                merge_c[base].append((ordering_key, dados, is_critica))
             else:
-                clausulas_globais.append((ordering_key, base + dados))
+                clausulas_globais.append((ordering_key, base + dados, is_critica))
 
         for base in merge_c_ordem:
             entradas = merge_c[base]
+            is_critica_merged = any(ic for _, _, ic in entradas)
             if len(entradas) == 1:
-                ordering_key, (justificativa, partes_str) = entradas[0]
+                ordering_key, (justificativa, partes_str), _ = entradas[0]
                 resto = (f", {justificativa}" if justificativa else "") + f", {partes_str}"
-                clausulas_globais.append((ordering_key, base + resto))
+                clausulas_globais.append((ordering_key, base + resto, is_critica_merged))
             else:
                 # Com motivos diferentes para a mesma glosa, o motivo vai ao
                 # final de cada bloco (em vez de logo após a glosa), para que
                 # "procedimento + guias" fiquem sempre juntos.
-                ordering_key = min(ok for ok, _ in entradas)
+                ordering_key = min(ok for ok, _, _ in entradas)
                 subclausulas = []
-                for _, (justificativa, partes_str) in entradas:
+                for _, (justificativa, partes_str), _ in entradas:
                     sub = partes_str
                     if justificativa:
                         sub += f", {justificativa}"
                     subclausulas.append(sub)
                 texto = "; ".join(subclausulas[:-1]) + "; e " + subclausulas[-1]
-                clausulas_globais.append((ordering_key, f"{base}: {texto}"))
+                clausulas_globais.append((ordering_key, f"{base}: {texto}", is_critica_merged))
 
+        # Ordem das cláusulas: Críticas primeiro (prio=0), demais depois (prio=1).
+        # Glosa 480 é tratada à parte e movida para o fim do texto final.
         itens_ordenados = []
         for guia in ordem_guias:
             if guia in clausulas_por_guia:
-                lista_glosas = clausulas_por_guia[guia]
-                if len(lista_glosas) == 1:
-                    texto_guia = lista_glosas[0]
-                else:
-                    texto_guia = ", ".join(lista_glosas[:-1]) + ", além de " + lista_glosas[-1]
-                itens_ordenados.append((ordem_guias.index(guia), 1, f"na guia {guia}, {texto_guia}"))
+                lista_pares = clausulas_por_guia[guia]
+                criticas = [c for c, ic in lista_pares if ic]
+                outras = [c for c, ic in lista_pares if not ic]
+                guia_idx = ordem_guias.index(guia)
+                for grupo, prio in [(criticas, 0), (outras, 1)]:
+                    if not grupo:
+                        continue
+                    if len(grupo) == 1:
+                        texto_guia = grupo[0]
+                    else:
+                        texto_guia = ", ".join(grupo[:-1]) + ", além de " + grupo[-1]
+                    itens_ordenados.append((prio, guia_idx, 1, f"na guia {guia}, {texto_guia}"))
 
-        for ordering_key, clausula in clausulas_globais:
-            itens_ordenados.append((ordering_key, 0, clausula))
+        for ordering_key, clausula, is_critica in clausulas_globais:
+            prio = 0 if is_critica else 1
+            itens_ordenados.append((prio, ordering_key, 0, clausula))
 
-        itens_ordenados.sort(key=lambda x: (x[0], x[1]))
+        itens_ordenados.sort(key=lambda x: (x[0], x[1], x[2]))
 
         clausulas = []
-        for idx, (_, _, texto) in enumerate(itens_ordenados):
+        for idx, (_, _, _, texto) in enumerate(itens_ordenados):
             if idx == 0 and len(itens_ordenados) > 1:
                 clausulas.append(f"Foram identificadas glosas nas seguintes guias: {texto}")
             else:
@@ -525,13 +536,14 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     frases.append(c[0].upper() + c[1:] + ".")
             texto_complementar = " ".join(frases)
 
-        texto_final = ""
+        texto_final = texto_complementar
         if clausula_480:
-            texto_final = clausula_480
-            if texto_complementar:
-                texto_final += ". " + texto_complementar
-        else:
-            texto_final = texto_complementar
+            if texto_final:
+                if texto_final.endswith('.'):
+                    texto_final = texto_final[:-1]
+                texto_final += ". " + clausula_480
+            else:
+                texto_final = clausula_480
 
         if not texto_final:
             return "Nenhuma glosa selecionada."
@@ -757,8 +769,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         chave_glosa = (item['texto_formatado'], item['justificativa'])
         agrupamento_glosas[chave_glosa].append(item)
 
-    clausulas = []
-    
+    clausulas_criticas = []
+    clausulas_outras = []
+
     for (texto_glosa, justificativa), lista_itens in agrupamento_glosas.items():
         # Agrupar por categoria dentro desta glosa
         cat_counts = collections.defaultdict(list)
@@ -772,8 +785,11 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         for item in lista_itens:
             tipos_clausula.update(item.get('tipos', set()))
 
+        is_critica_clausula = "Crítica" in tipos_clausula
+        destino = clausulas_criticas if is_critica_clausula else clausulas_outras
+
         n_categorias = len(cat_counts)
-        if "Crítica" in tipos_clausula:
+        if is_critica_clausula:
             compactar = False
         elif "Técnica" in tipos_clausula:
             compactar = n_categorias >= 7
@@ -791,7 +807,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             frase = f"{texto_glosa} {prep} {str_guias}"
             if justificativa:
                 frase += f", {justificativa}"
-            clausulas.append(frase)
+            destino.append(frase)
             continue
 
         # Se todas as categorias têm exatamente as mesmas guias únicas, lista as
@@ -839,23 +855,26 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         frase = f"{texto_glosa} em {texto_categorias}"
         if justificativa:
             frase += f", {justificativa}"
-            
-        clausulas.append(frase)
-        
+
+        destino.append(frase)
+
+    # Críticas primeiro, depois demais; 480 fica no final do texto.
+    clausulas = clausulas_criticas + clausulas_outras
+
     texto_complementar = ""
     if len(clausulas) == 1:
         texto_complementar = "O prestador apresentou " + clausulas[0] + "."
     elif len(clausulas) > 1:
         texto_complementar = "O prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1] + "."
-        
-    texto_final = ""
+
+    texto_final = texto_complementar
     if clausula_480:
-        texto_final = clausula_480
-        if texto_complementar:
-            texto_complementar = texto_complementar[0].upper() + texto_complementar[1:]
-            texto_final += ". " + texto_complementar
-    else:
-        texto_final = texto_complementar
+        if texto_final:
+            if texto_final.endswith('.'):
+                texto_final = texto_final[:-1]
+            texto_final += ". " + clausula_480
+        else:
+            texto_final = clausula_480
     if not texto_final:
         return prefixo + "Nenhuma glosa selecionada."
         
