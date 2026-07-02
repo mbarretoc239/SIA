@@ -119,6 +119,21 @@ if pdf_file is not None:
             st.session_state.origem_glosas = pdf_file.name
             st.session_state.editor_version = 0
 
+        def _sync_edicoes_editor():
+            """Persiste edições da tabela em df_glosas_state assim que ocorrem.
+            Sem isso, cliques em Marcar/Desmarcar (que incrementam a versão da key
+            e descartam o `edited_rows`) perdem alterações da coluna Justificativa
+            digitadas logo antes."""
+            key_ed = f"glosas_editor_v{st.session_state.editor_version}"
+            delta = st.session_state.get(key_ed)
+            if not delta:
+                return
+            df_alvo = st.session_state.df_glosas_state
+            for row_idx, changes in (delta.get("edited_rows") or {}).items():
+                for col, val in changes.items():
+                    if col in df_alvo.columns and 0 <= row_idx < len(df_alvo):
+                        df_alvo.iat[row_idx, df_alvo.columns.get_loc(col)] = val
+
         codigos_unicos = sorted(
             st.session_state.df_glosas_state['Glosa'].astype(str).unique(),
             key=lambda x: (int(x) if x.isdigit() else 9999, x)
@@ -164,9 +179,10 @@ if pdf_file is not None:
             column_config=col_config,
             column_order=["Incluir no Relatório", "Tipo", "Guia", "Cód. Procedimento", "Procedimento", "Glosa", "Descrição Oficial", "Justificativa"],
             key=f"glosas_editor_v{st.session_state.editor_version}",
+            on_change=_sync_edicoes_editor,
         )
 
-        # Persiste edições manuais para sobreviver às ações em massa subsequentes
+        # Fallback: também persiste no fim do rerun caso o callback nao tenha rodado
         st.session_state.df_glosas_state = df_editado
 
         st.markdown("### 2. Motor de Texto Offline")
