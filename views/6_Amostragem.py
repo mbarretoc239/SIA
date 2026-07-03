@@ -41,28 +41,89 @@ def _norm(texto: str) -> str:
     return sem_acento.strip().upper()
 
 
-def parse_powerbi(texto: str) -> pd.DataFrame:
-    """Parse texto colado do PowerBI (TSV, 5 colunas).
+# Sinônimos aceitos pra cada campo lógico. Novos formatos do PowerBI podem
+# adicionar/renomear colunas — cadastrar aqui em vez de mexer no parser.
+SINONIMOS_COLUNAS = {
+    "especialidade": {"ESPECIALIDADE", "DS_GRUPO", "GRUPO"},
+    "cd_procedimento": {"CD_PROCEDIMENTO", "CD PROCEDIMENTO", "PROCEDIMENTO", "COD_PROCEDIMENTO"},
+    "nu_guia": {"NU_GUIA", "NU GUIA", "GUIA", "NUMERO_GUIA"},
+    "liberacao": {"LIBERACAO", "LIBERACÃO", "LIBERAÇÃO"},
+    "qtde": {"QTDE_ITENS", "QTDE ITENS", "QTDE", "QUANTIDADE", "QUANTIDADE_ITENS"},
+}
+CAMPOS_OBRIGATORIOS = ("especialidade", "cd_procedimento", "nu_guia", "qtde")
 
-    Espera as colunas: Especialidade, CD_PROCEDIMENTO, NU_GUIA, LIBERACAO, Qtde.
-    Linhas com NU_GUIA vazio são descartadas (procedimentos sem guia não
-    auditáveis individualmente). Cabeçalho é detectado e ignorado.
+
+def _detectar_colunas(partes: list) -> dict:
+    """Dado um cabeçalho (lista de células), retorna {campo_logico: indice}.
+
+    Só reconhece a linha como header se conseguir mapear todos os campos
+    obrigatórios — evita falso-positivo em linhas de dados que por acaso
+    tenham "5010" ou similar.
     """
-    registros = []
-    for linha in texto.splitlines():
-        if not linha.strip():
-            continue
-        partes = linha.split("\t")
-        if len(partes) < 5:
-            continue
-        especialidade = partes[0].strip()
-        cd_proc = partes[1].strip()
-        nu_guia = partes[2].strip()
-        liberacao = partes[3].strip()
-        qtde_bruta = partes[4].strip()
+    mapa = {}
+    for i, celula in enumerate(partes):
+        norm = _norm(celula)
+        for campo, sinonimos in SINONIMOS_COLUNAS.items():
+            if norm in sinonimos:
+                mapa.setdefault(campo, i)
+                break
+    if all(k in mapa for k in CAMPOS_OBRIGATORIOS):
+        return mapa
+    return {}
 
-        if _norm(especialidade) == "ESPECIALIDADE":
+
+def parse_powerbi(texto: str) -> pd.DataFrame:
+    """Parse texto colado do PowerBI (TSV).
+
+    Detecta as colunas pelo cabeçalho (aceita sinônimos: Especialidade /
+    DS_GRUPO, etc.). Se não houver cabeçalho, cai num fallback por número
+    de colunas: 5 = formato legado, 6 = formato novo (com CRITICIDADE na
+    frente). Linhas com NU_GUIA vazio são descartadas.
+    """
+    linhas = [l for l in texto.splitlines() if l.strip()]
+    if not linhas:
+        return pd.DataFrame()
+
+    # 1. Procura cabeçalho nas primeiras 5 linhas.
+    mapa_cols = {}
+    dados_inicio = 0
+    for i, linha in enumerate(linhas[:5]):
+        candidato = _detectar_colunas(linha.split("\t"))
+        if candidato:
+            mapa_cols = candidato
+            dados_inicio = i + 1
+            break
+
+    # 2. Fallback: sem cabeçalho, infere pelo número de colunas da 1ª linha.
+    if not mapa_cols:
+        n_cols = len(linhas[0].split("\t"))
+        if n_cols == 5:
+            # Legado: Especialidade, CD, Guia, Liberacao, Qtde
+            mapa_cols = {"especialidade": 0, "cd_procedimento": 1, "nu_guia": 2, "liberacao": 3, "qtde": 4}
+        elif n_cols == 6:
+            # Novo: Criticidade, DS_GRUPO, CD, Guia, Liberacao, Qtde
+            mapa_cols = {"especialidade": 1, "cd_procedimento": 2, "nu_guia": 3, "liberacao": 4, "qtde": 5}
+        else:
+            return pd.DataFrame()
+
+    idx_esp = mapa_cols["especialidade"]
+    idx_cd = mapa_cols["cd_procedimento"]
+    idx_guia = mapa_cols["nu_guia"]
+    idx_qtde = mapa_cols["qtde"]
+    idx_lib = mapa_cols.get("liberacao")
+    max_idx = max(mapa_cols.values())
+
+    registros = []
+    for linha in linhas[dados_inicio:]:
+        partes = linha.split("\t")
+        if len(partes) <= max_idx:
             continue
+        especialidade = partes[idx_esp].strip()
+        cd_proc = partes[idx_cd].strip()
+        nu_guia = partes[idx_guia].strip()
+        liberacao = partes[idx_lib].strip() if idx_lib is not None else ""
+        qtde_bruta = partes[idx_qtde].strip()
+
         if not especialidade or not cd_proc or not nu_guia:
             continue
         try:
@@ -276,9 +337,9 @@ texto = st.text_area(
     height=200,
     key=f"texto_powerbi_v{st.session_state['texto_powerbi_v']}",
     placeholder=(
-        "Especialidade\tCD_PROCEDIMENTO\tNU_GUIA\tLIBERAÇÃO\tQtde itens\n"
-        "ENDODONTIA\t2015\t27029804\tN\t1\n"
-        "PROTESE\t4080\t26411962\tN\t1\n..."
+        "CRITICIDADE\tDS_GRUPO\tCD_PROCEDIMENTO\tNU_GUIA\tLIBERAÇÃO\tQtde itens\n"
+        "SIM\tCIRURGIA\t5010\t26996546\tS\t1\n"
+        "SIM\tCIRURGIA\t5030\t27294440\tS\t1\n..."
     ),
 )
 
@@ -336,9 +397,9 @@ df = parse_powerbi(texto)
 
 if df.empty:
     st.warning(
-        "Nenhuma linha válida encontrada. Esperado: 5 colunas separadas por TAB "
-        "(Especialidade, CD_PROCEDIMENTO, NU_GUIA, LIBERAÇÃO, Qtde). "
-        "Linhas com NU_GUIA vazio são ignoradas."
+        "Nenhuma linha válida encontrada. Esperado: TSV com colunas "
+        "(DS_GRUPO ou Especialidade), CD_PROCEDIMENTO, NU_GUIA, LIBERAÇÃO, Qtde itens. "
+        "O cabeçalho pode vir junto ou não. Linhas com NU_GUIA vazio são ignoradas."
     )
     st.stop()
 
