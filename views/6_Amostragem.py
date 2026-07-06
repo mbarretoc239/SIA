@@ -35,6 +35,18 @@ ORDEM_CRITICAS = [
     "ENDODONTIA",
 ]
 
+# Procedimentos "não-críticos" por especialidade — os mais recorrentes/baratos
+# que passam pelo sorteio de amostragem normal. Guias que contêm QUALQUER
+# procedimento fora desta lista são consideradas importantes e entram na
+# amostra automaticamente.
+#
+# Motivação: certos procedimentos são raros e/ou custosos e não podem cair
+# fora da amostra por acaso do sorteio (ex.: exodontia de incluso na
+# CIRURGIA). Deixá-los "sempre auditar" garante cobertura.
+PROCS_NAO_CRITICOS = {
+    "CIRURGIA": {"5010", "5030", "5031"},
+}
+
 
 def _norm(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("ASCII")
@@ -177,25 +189,95 @@ def sortear_amostra(df_guias: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     return df_guias.sample(n=n, random_state=seed).sort_index()
 
 
+def _guia_tem_proc_critico(procs_str: str, procs_nao_criticos: set) -> bool:
+    """True se a guia contém pelo menos um procedimento fora da lista
+    de não-críticos (procs que ficam sujeitos ao sorteio)."""
+    procs = {p.strip() for p in procs_str.split(",") if p.strip()}
+    return bool(procs - procs_nao_criticos)
+
+
+def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
+                   df_esp_procs_brutos: pd.DataFrame, seed: int) -> pd.DataFrame:
+    """Retorna DataFrame de guias com coluna 'Motivo' preenchida.
+
+    Se a especialidade tem PROCS_NAO_CRITICOS cadastrados:
+      - Guias com algum proc fora da lista → 'Crítica automática'
+      - Guias só com procs da lista → passam pelo sorteio (regra da especialidade
+        aplicada só sobre elas). As sorteadas → 'Sorteio {pct}%'.
+    Senão:
+      - Sorteio direto conforme regra da especialidade → 'Sorteio {pct}%'
+        (ou 'Regra integral' quando a regra é 'todas').
+    """
+    if df_esp_guias.empty:
+        return df_esp_guias.assign(Motivo=[])
+
+    procs_nao_criticos = PROCS_NAO_CRITICOS.get(_norm(especialidade))
+
+    if procs_nao_criticos is None:
+        total_procs = int(df_esp_procs_brutos["Qtde"].sum())
+        n, _ = calcular_amostra(especialidade, total_procs, len(df_esp_guias))
+        amostra = sortear_amostra(df_esp_guias, n, seed=seed).copy()
+        amostra["Motivo"] = "Regra da especialidade"
+        return amostra
+
+    df = df_esp_guias.copy()
+    df["_critica"] = df["Procedimentos"].apply(
+        lambda p: _guia_tem_proc_critico(p, procs_nao_criticos)
+    )
+    df_criticas = df[df["_critica"]].drop(columns=["_critica"]).copy()
+    df_sorteaveis = df[~df["_critica"]].drop(columns=["_critica"]).copy()
+
+    # Total de procs SORTEÁVEIS: só as linhas cujo cd_procedimento está na
+    # lista de não-críticos (define a base pra regra do mínimo aplicar).
+    procs_sorteaveis_total = int(
+        df_esp_procs_brutos[
+            df_esp_procs_brutos["CD_PROCEDIMENTO"].isin(procs_nao_criticos)
+        ]["Qtde"].sum()
+    )
+    n_sortear, desc = calcular_amostra(
+        especialidade, procs_sorteaveis_total, len(df_sorteaveis)
+    )
+    df_sorteadas = sortear_amostra(df_sorteaveis, n_sortear, seed=seed).copy()
+
+    df_criticas["Motivo"] = "Crítica automática"
+    # Texto do motivo do sorteio reflete a regra que caiu
+    if "auditar todas" in desc.lower():
+        df_sorteadas["Motivo"] = "Sorteio (auditar todas)"
+    else:
+        regra = REGRAS_AMOSTRAGEM.get(_norm(especialidade), {})
+        pct = int(regra.get("pct", 0) * 100) if regra.get("tipo") == "percentual" else 0
+        df_sorteadas["Motivo"] = f"Sorteio ({pct}%)" if pct else "Sorteio"
+
+    return pd.concat([df_criticas, df_sorteadas], ignore_index=True)
+
+
 def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int):
     """Renderiza tabela HTML com NU_GUIA como botão clicável (copia ao clicar).
 
     `objetivo` é o tamanho de amostra requerido pela regra da especialidade
     (mostrado como denominador do contador).
     """
+    mostrar_motivo = "Motivo" in df_guias.columns
     linhas_html = []
     for _, row in df_guias.iterrows():
         guia = html.escape(str(row["NU_GUIA"]))
         procs = html.escape(str(row["Procedimentos"]))
         qtde = int(row["Qtde_procs"])
+        motivo_html = ""
+        if mostrar_motivo:
+            motivo = html.escape(str(row.get("Motivo", "")))
+            classe = "motivo-critica" if "crítica" in motivo.lower() or "critica" in motivo.lower() else "motivo-sorteio"
+            motivo_html = f"<td class='{classe}'>{motivo}</td>"
         linhas_html.append(
             f"<tr>"
             f"<td><button class='copy-btn' data-val='{guia}' title='Clique para copiar'>{guia}</button></td>"
             f"<td>{procs}</td>"
             f"<td style='text-align:right'>{qtde}</td>"
+            f"{motivo_html}"
             f"</tr>"
         )
     rows = "\n".join(linhas_html)
+    th_motivo = "<th style='width: 18%'>Motivo</th>" if mostrar_motivo else ""
 
     html_tabela = f"""
     <style>
@@ -238,6 +320,8 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         .pbi-counter strong {{ color: rgba(76, 175, 80, 1); font-weight: 600; }}
         .pbi-counter.atingido strong {{ color: rgba(46, 125, 50, 1); }}
         .pbi-counter.atingido::after {{ content: ' ✓'; color: rgba(46, 125, 50, 1); font-weight: 600; }}
+        .motivo-critica {{ color: #b45309; font-weight: 600; font-size: 12.5px; }}
+        .motivo-sorteio {{ color: rgba(120,120,120,0.85); font-size: 12.5px; }}
 
         @media (prefers-color-scheme: dark) {{
             body {{ color: #e6ecf5; }}
@@ -249,13 +333,15 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
                 border-color: rgba(102, 187, 106, 0.75);
             }}
             .copy-btn.vista:hover {{ background: rgba(76, 175, 80, 0.4); }}
+            .motivo-critica {{ color: #fbbf24; }}
+            .motivo-sorteio {{ color: rgba(255,255,255,0.55); }}
         }}
     </style>
     <div class='pbi-wrap'>
         <div class='pbi-counter'><strong>0</strong> de {objetivo} analisado(s)</div>
         <table class='pbi-table'>
             <thead>
-                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:right'>Qtde</th></tr>
+                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:right'>Qtde</th>{th_motivo}</tr>
             </thead>
             <tbody>{rows}</tbody>
         </table>
@@ -417,15 +503,15 @@ especialidades.sort(
 resumo = []
 for esp in especialidades:
     df_esp_total = df[df["Especialidade"] == esp]
-    df_esp_guias = df_guias[df_guias["Especialidade"] == esp]
+    df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
     total_procs = int(df_esp_total["Qtde"].sum())
     total_guias = len(df_esp_guias)
-    n_amostra, _ = calcular_amostra(esp, total_procs, total_guias)
+    df_amostra_resumo = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=int(seed))
     resumo.append({
         "Especialidade": esp,
         "Guias únicas": total_guias,
         "Total de procs": total_procs,
-        "Amostra sugerida": n_amostra,
+        "Amostra sugerida": len(df_amostra_resumo),
     })
 
 st.markdown("### Resumo")
@@ -440,14 +526,33 @@ for esp in especialidades:
     df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
     total_procs = int(df_esp_total["Qtde"].sum())
     total_guias = len(df_esp_guias)
-    n_amostra, _ = calcular_amostra(esp, total_procs, total_guias)
-    df_amostra = sortear_amostra(df_esp_guias, n_amostra, seed=int(seed))
+
+    df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=int(seed))
+    n_objetivo = len(df_amostra)
+
+    # Para a tabela completa, marca também qual guia é crítica / sorteada,
+    # pra o auditor identificar o motivo mesmo navegando pelo total.
+    procs_nao_criticos = PROCS_NAO_CRITICOS.get(_norm(esp))
+    if procs_nao_criticos is not None:
+        guias_sorteadas = set(
+            df_amostra[df_amostra["Motivo"].str.startswith("Sorteio")]["NU_GUIA"]
+        )
+        def _motivo_completa(row):
+            if _guia_tem_proc_critico(row["Procedimentos"], procs_nao_criticos):
+                return "Crítica automática"
+            if row["NU_GUIA"] in guias_sorteadas:
+                return "Sorteio (selecionada)"
+            return "Sorteio (não selecionada)"
+        df_esp_guias_render = df_esp_guias.copy()
+        df_esp_guias_render["Motivo"] = df_esp_guias_render.apply(_motivo_completa, axis=1)
+    else:
+        df_esp_guias_render = df_esp_guias
 
     st.markdown(f"#### {esp}")
     st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
     with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=True):
-        renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_amostra)
+        renderizar_tabela_guias(df_esp_guias_render, esp, objetivo=n_objetivo)
 
-    with st.expander(f"Sugestão de amostra — {len(df_amostra)} guia(s)", expanded=True):
-        renderizar_tabela_guias(df_amostra, esp, objetivo=n_amostra)
+    with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=True):
+        renderizar_tabela_guias(df_amostra, esp, objetivo=n_objetivo)
