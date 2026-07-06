@@ -198,51 +198,84 @@ def _guia_tem_proc_critico(procs_str: str, procs_nao_criticos: set) -> bool:
 
 def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
                    df_esp_procs_brutos: pd.DataFrame, seed: int) -> pd.DataFrame:
-    """Retorna DataFrame de guias com coluna 'Motivo' preenchida.
+    """Retorna DataFrame de guias com a amostra sugerida.
 
-    Se a especialidade tem PROCS_NAO_CRITICOS cadastrados:
-      - Guias com algum proc fora da lista → 'Crítica automática'
-      - Guias só com procs da lista → passam pelo sorteio (regra da especialidade
-        aplicada só sobre elas). As sorteadas → 'Sorteio {pct}%'.
-    Senão:
-      - Sorteio direto conforme regra da especialidade → 'Sorteio {pct}%'
-        (ou 'Regra integral' quando a regra é 'todas').
+    Fluxo:
+      1. Aplica a regra da especialidade sobre o TOTAL de procs (não separa
+         por critério de criticidade nesse passo). Se cai em 'auditar todas'
+         (integral, ou < mínimo de procs), retorna tudo.
+      2. Caso contrário, o tamanho da amostra = % das guias da especialidade
+         (ex.: 30% pra CIRURGIA). Dentro desse tamanho, prioriza guias com
+         procs críticos:
+           - Se guias críticas ≤ 5: entram todas + completa com sorteio das
+             normais até bater o tamanho da amostra.
+           - Se guias críticas > 5: 50% da amostra vira crítica sorteada +
+             50% vira normal sorteada.
+
+    Coluna 'Motivo' é mantida por compatibilidade (dropada antes de renderizar).
     """
     if df_esp_guias.empty:
         return df_esp_guias.assign(Motivo=[])
 
+    n_total_guias = len(df_esp_guias)
+    total_procs_esp = int(df_esp_procs_brutos["Qtde"].sum())
     procs_nao_criticos = PROCS_NAO_CRITICOS.get(_norm(especialidade))
+    regra = REGRAS_AMOSTRAGEM.get(_norm(especialidade), {})
 
-    if procs_nao_criticos is None:
-        total_procs = int(df_esp_procs_brutos["Qtde"].sum())
-        n, _ = calcular_amostra(especialidade, total_procs, len(df_esp_guias))
-        amostra = sortear_amostra(df_esp_guias, n, seed=seed).copy()
-        amostra["Motivo"] = "Regra da especialidade"
+    # Caminho 1: sem lista de críticos OU regra que manda auditar tudo.
+    def _todas(motivo=""):
+        amostra = df_esp_guias.copy()
+        amostra["Motivo"] = motivo
         return amostra
 
-    df = df_esp_guias.copy()
-    df["_critica"] = df["Procedimentos"].apply(
-        lambda p: _guia_tem_proc_critico(p, procs_nao_criticos)
-    )
-    df_criticas = df[df["_critica"]].drop(columns=["_critica"]).copy()
-    df_sorteaveis = df[~df["_critica"]].drop(columns=["_critica"]).copy()
+    if procs_nao_criticos is None or not regra:
+        n, _ = calcular_amostra(especialidade, total_procs_esp, n_total_guias)
+        amostra = sortear_amostra(df_esp_guias, n, seed=seed).copy()
+        amostra["Motivo"] = ""
+        return amostra
 
-    # Total de procs SORTEÁVEIS: só as linhas cujo cd_procedimento está na
-    # lista de não-críticos (define a base pra regra do mínimo aplicar).
-    procs_sorteaveis_total = int(
-        df_esp_procs_brutos[
-            df_esp_procs_brutos["CD_PROCEDIMENTO"].isin(procs_nao_criticos)
-        ]["Qtde"].sum()
-    )
-    n_sortear, desc = calcular_amostra(
-        especialidade, procs_sorteaveis_total, len(df_sorteaveis)
-    )
-    df_sorteadas = sortear_amostra(df_sorteaveis, n_sortear, seed=seed).copy()
+    if regra.get("tipo") == "todas":
+        return _todas("")
 
-    df_criticas["Motivo"] = "Crítica automática"
-    df_sorteadas["Motivo"] = ""
+    if regra.get("tipo") == "percentual":
+        # Gatilho <N procs = auditar todas — avaliado sobre o TOTAL da
+        # especialidade, sem separar críticas de normais.
+        if total_procs_esp < regra["minimo_procs"]:
+            return _todas("")
 
-    return pd.concat([df_criticas, df_sorteadas], ignore_index=True)
+        pct = regra["pct"]
+        tamanho_amostra = max(1, round(n_total_guias * pct))
+
+        df = df_esp_guias.copy()
+        df["_critica"] = df["Procedimentos"].apply(
+            lambda p: _guia_tem_proc_critico(p, procs_nao_criticos)
+        )
+        df_criticas = df[df["_critica"]].drop(columns=["_critica"]).copy()
+        df_normais = df[~df["_critica"]].drop(columns=["_critica"]).copy()
+        n_crit = len(df_criticas)
+        n_norm = len(df_normais)
+
+        if n_crit <= 5:
+            # Todas as críticas entram (limitadas ao tamanho da amostra) e o
+            # restante da amostra é preenchido com sorteio das normais.
+            n_crit_amostra = min(n_crit, tamanho_amostra)
+            n_norm_amostra = min(tamanho_amostra - n_crit_amostra, n_norm)
+            df_criticas_final = df_criticas
+        else:
+            # Composição 50/50 dentro da amostra.
+            n_crit_amostra = min(tamanho_amostra // 2, n_crit)
+            n_norm_amostra = min(tamanho_amostra - n_crit_amostra, n_norm)
+            df_criticas_final = sortear_amostra(df_criticas, n_crit_amostra, seed=seed)
+
+        df_normais_final = sortear_amostra(df_normais, n_norm_amostra, seed=seed)
+
+        df_criticas_final = df_criticas_final.copy()
+        df_criticas_final["Motivo"] = ""
+        df_normais_final = df_normais_final.copy()
+        df_normais_final["Motivo"] = ""
+        return pd.concat([df_criticas_final, df_normais_final], ignore_index=True)
+
+    return _todas("")
 
 
 def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int):
