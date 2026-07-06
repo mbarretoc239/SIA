@@ -524,22 +524,15 @@ for esp in especialidades:
     df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=int(seed))
     n_objetivo = len(df_amostra)
 
-    # Para a tabela completa, marca também qual guia é crítica / sorteada,
-    # pra o auditor identificar o motivo mesmo navegando pelo total.
-    procs_nao_criticos = PROCS_NAO_CRITICOS.get(_norm(esp))
-    if procs_nao_criticos is not None:
-        df_esp_guias_render = df_esp_guias.copy()
-        df_esp_guias_render["Motivo"] = df_esp_guias_render["Procedimentos"].apply(
-            lambda p: "Crítica automática" if _guia_tem_proc_critico(p, procs_nao_criticos) else ""
-        )
-    else:
-        df_esp_guias_render = df_esp_guias
-
     st.markdown(f"#### {esp}")
     st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
     with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=True):
-        renderizar_tabela_guias(df_esp_guias_render, esp, objetivo=n_objetivo)
+        renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo)
 
     with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=True):
-        renderizar_tabela_guias(df_amostra, esp, objetivo=n_objetivo)
+        renderizar_tabela_guias(
+            df_amostra.drop(columns=["Motivo"], errors="ignore"),
+            esp,
+            objetivo=n_objetivo,
+        )
