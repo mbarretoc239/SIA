@@ -472,21 +472,18 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                         continue
                     if len(grupo) == 1:
                         texto_guia = grupo[0]
+                    elif len(grupo) == 2:
+                        texto_guia = f"{grupo[0]} e {grupo[1]}"
                     else:
-                        texto_guia = ", ".join(grupo[:-1]) + ", além de " + grupo[-1]
-                    itens_ordenados.append((prio_alvo, guia_idx, 1, f"na guia {guia}, {texto_guia}"))
+                        texto_guia = ", ".join(grupo[:-1]) + " e " + grupo[-1]
+                    itens_ordenados.append((prio_alvo, guia_idx, 1, f"{texto_guia} na guia {guia}"))
 
         for ordering_key, clausula, prio in clausulas_globais:
             itens_ordenados.append((prio, ordering_key, 0, clausula))
 
         itens_ordenados.sort(key=lambda x: (x[0], x[1], x[2]))
 
-        clausulas = []
-        for idx, (_, _, _, texto) in enumerate(itens_ordenados):
-            if idx == 0 and len(itens_ordenados) > 1:
-                clausulas.append(f"Foram identificadas glosas nas seguintes guias: {texto}")
-            else:
-                clausulas.append(texto)
+        clausulas = [texto for _, _, _, texto in itens_ordenados]
 
         # Na segunda menção de um mesmo procedimento, omite a descrição e
         # mantém só o código, evitando repetir "cód - descrição" várias vezes
@@ -548,16 +545,15 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         clausulas.extend(clausulas_globais_outras)
         clausulas.extend(clausulas_globais_automaticas)
 
-        # Cada cláusula de alto nível vira sua própria frase, em vez de uma
-        # única frase gigante com vários "; ", para facilitar a leitura.
+        # Mesmo wrapper da Resumida: "O prestador apresentou ... ; e ..."
+        # em uma única frase, com sufixo "na guia X" já embutido em cada
+        # cláusula. Facilita a leitura e conecta bem com o resumo financeiro.
+        clausulas = [c.strip() for c in clausulas if c and c.strip()]
         texto_complementar = ""
-        if clausulas:
-            frases = []
-            for c in clausulas:
-                c = c.strip()
-                if c:
-                    frases.append(c[0].upper() + c[1:] + ".")
-            texto_complementar = " ".join(frases)
+        if len(clausulas) == 1:
+            texto_complementar = "O prestador apresentou " + clausulas[0] + "."
+        elif len(clausulas) > 1:
+            texto_complementar = "O prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1] + "."
 
         texto_final = texto_complementar
         if clausula_480:
