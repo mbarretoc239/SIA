@@ -240,13 +240,7 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
     df_sorteadas = sortear_amostra(df_sorteaveis, n_sortear, seed=seed).copy()
 
     df_criticas["Motivo"] = "Crítica automática"
-    # Texto do motivo do sorteio reflete a regra que caiu
-    if "auditar todas" in desc.lower():
-        df_sorteadas["Motivo"] = "Sorteio (auditar todas)"
-    else:
-        regra = REGRAS_AMOSTRAGEM.get(_norm(especialidade), {})
-        pct = int(regra.get("pct", 0) * 100) if regra.get("tipo") == "percentual" else 0
-        df_sorteadas["Motivo"] = f"Sorteio ({pct}%)" if pct else "Sorteio"
+    df_sorteadas["Motivo"] = ""
 
     return pd.concat([df_criticas, df_sorteadas], ignore_index=True)
 
@@ -534,17 +528,10 @@ for esp in especialidades:
     # pra o auditor identificar o motivo mesmo navegando pelo total.
     procs_nao_criticos = PROCS_NAO_CRITICOS.get(_norm(esp))
     if procs_nao_criticos is not None:
-        guias_sorteadas = set(
-            df_amostra[df_amostra["Motivo"].str.startswith("Sorteio")]["NU_GUIA"]
-        )
-        def _motivo_completa(row):
-            if _guia_tem_proc_critico(row["Procedimentos"], procs_nao_criticos):
-                return "Crítica automática"
-            if row["NU_GUIA"] in guias_sorteadas:
-                return "Sorteio (selecionada)"
-            return "Sorteio (não selecionada)"
         df_esp_guias_render = df_esp_guias.copy()
-        df_esp_guias_render["Motivo"] = df_esp_guias_render.apply(_motivo_completa, axis=1)
+        df_esp_guias_render["Motivo"] = df_esp_guias_render["Procedimentos"].apply(
+            lambda p: "Crítica automática" if _guia_tem_proc_critico(p, procs_nao_criticos) else ""
+        )
     else:
         df_esp_guias_render = df_esp_guias
 
