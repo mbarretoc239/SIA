@@ -103,10 +103,10 @@ def processar_pdf(pdf_file):
         is_critica = cod in glosas_criticas
         oficial = str(mapa_glosas.get(cod, "")).lower()
 
-        if is_auto:
-            tipo = "Automática"
-        elif is_critica:
+        if is_critica:
             tipo = "Crítica"
+        elif is_auto:
+            tipo = "Automática"
         else:
             tipo = mapa_tipos_glosa.get(cod) or "Técnica"
 
@@ -272,10 +272,10 @@ def processar_csv(csv_file):
 
                         oficial = str(mapa_glosas.get(cod, match_glosa.group(2).strip())).lower()
 
-                        if is_auto:
-                            tipo = "Automática"
-                        elif is_critica:
+                        if is_critica:
                             tipo = "Crítica"
+                        elif is_auto:
+                            tipo = "Automática"
                         else:
                             tipo = mapa_tipos_glosa.get(cod) or "Técnica"
 
