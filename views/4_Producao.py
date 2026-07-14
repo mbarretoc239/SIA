@@ -168,7 +168,7 @@ if uploaded_files:
                 
                 ranking_para_csv = []
                 
-                col_lista, col_resumo = st.columns([1, 1])
+                col_lista, col_resumo = st.columns([1.2, 1.8])
                 
                 with col_lista:
                     st.markdown("###  Top 10 Produzidos")

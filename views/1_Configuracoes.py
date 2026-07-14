@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 from shared.database import DatabaseManager
-from core.glass_design_system import render_glass_table
+
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 
 st.set_page_config(page_title="Configurações", page_icon="️", layout="wide")
@@ -178,7 +178,7 @@ if "Aprovação da Equipe" in nomes_abas:
                                 
             st.divider()
             st.markdown(f"**Usuários Ativos e Bloqueados ({len(ativos) + len(df_users[df_users['status'] == 'Bloqueado'])})**")
-            render_glass_table(df_users[df_users["status"] != "Pendente"][["usuario_sigo", "nome_completo", "equipe", "role_interno", "status", "created_at"]])
+            st.dataframe(df_users[df_users["status"] != "Pendente"][["usuario_sigo", "nome_completo", "equipe", "role_interno", "status", "created_at"]], use_container_width=True, hide_index=True)
 
             st.divider()
             st.markdown("**Excluir Usuário**")
@@ -197,13 +197,23 @@ if "Aprovação da Equipe" in nomes_abas:
                 with col_b_del:
                     st.write("")
                     st.write("")
+                    
+                    @st.dialog("Confirmar Exclusão")
+                    def modal_confirmar_exclusao(uid, user_name):
+                        st.warning(f"Você está prestes a excluir permanentemente o usuário **{user_name}**.")
+                        st.markdown("Esta ação não pode ser desfeita.")
+                        if st.button("Sim, excluir permanentemente", type="primary", use_container_width=True):
+                            if db.excluir_usuario(uid, role):
+                                st.success("Usuário excluído com sucesso.")
+                                st.rerun()
+                            else:
+                                st.error("Não foi possível excluir o usuário. Verifique se você é Admin.")
+                        if st.button("Cancelar", use_container_width=True):
+                            st.rerun()
+
                     if st.button("Excluir Usuário", key="btn_del_usuario", type="primary", use_container_width=True):
                         alvo_id = opcoes_del[label_del]
-                        if db.excluir_usuario(alvo_id, role):
-                            st.success("Usuário excluído com sucesso.")
-                            st.rerun()
-                        else:
-                            st.error("Não foi possível excluir o usuário. Verifique se você é Admin.")
+                        modal_confirmar_exclusao(alvo_id, label_del)
 
             st.divider()
             st.markdown("**Redefinir senha de usuário**")
@@ -331,7 +341,7 @@ if "Tabelas Base e Glosas" in nomes_abas:
             if arquivo_procedimentos is not None:
                 try:
                     df_proc = pd.read_csv(arquivo_procedimentos, sep=';', encoding='utf-8')
-                    render_glass_table(df_proc.head())
+                    st.dataframe(df_proc.head(), use_container_width=True, hide_index=True)
                     if role == "Admin":
                         if st.button(" Subir TUSS para o Supabase", type="primary"):
                             with st.spinner("Enviando para o banco..."):
@@ -360,7 +370,7 @@ if "Tabelas Base e Glosas" in nomes_abas:
                     df_glosas = df_glosas[df_glosas["tipo_glosa"] == filtro_tipo]
 
             if not df_glosas.empty:
-                render_glass_table(df_glosas)
+                st.dataframe(df_glosas, use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhuma glosa cadastrada.")
                 

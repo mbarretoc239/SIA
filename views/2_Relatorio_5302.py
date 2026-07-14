@@ -302,7 +302,7 @@ if pdf_file is not None:
                             with st.spinner("Salvando na nuvem..."):
                                 try:
                                     salvar_no_supabase(st.session_state.get("pdf_name", "Desconhecido"), texto_editado, df_final, meta)
-                                    st.success("Análise salva com sucesso no banco de dados!")
+                                    st.toast("✅ Análise salva com sucesso no banco de dados!", icon="☁️")
                                 except Exception as e:
                                     st.error(f"Erro ao salvar no banco. A tabela 'analises_auditoria' foi criada no Supabase? Detalhe: {e}")
                 

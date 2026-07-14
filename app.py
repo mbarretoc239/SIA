@@ -10,9 +10,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Injeta o Design System Liquid Glass
-from core.glass_design_system import inject_glass_css
-inject_glass_css()
 
 # Inicializa Banco de Dados sempre instanciando a classe nova
 db = DatabaseManager()
