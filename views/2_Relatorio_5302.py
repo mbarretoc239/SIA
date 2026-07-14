@@ -118,6 +118,10 @@ if pdf_file is not None:
             st.session_state.df_glosas_state = pd.DataFrame(dados).copy()
             st.session_state.origem_glosas = pdf_file.name
             st.session_state.editor_version = 0
+            # Limpa qualquer edicao/estado de widgets ligados ao arquivo anterior
+            for _k in [k for k in st.session_state.keys() if k.startswith("texto_final_v_")]:
+                del st.session_state[_k]
+            st.session_state.pop("mostrar_texto", None)
 
         def _sync_edicoes_editor():
             """Persiste edições da tabela em df_glosas_state assim que ocorrem.
