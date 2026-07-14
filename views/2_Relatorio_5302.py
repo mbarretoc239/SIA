@@ -241,10 +241,13 @@ if pdf_file is not None:
                     elif "s/ Especialidades" in opcao_prefixo:
                         texto_pronto = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// " + texto_gerado
                     
-                # Key versionada pelas opções: quando qualquer filtro muda e o
-                # texto gerado é diferente, o widget reseta com o novo valor;
-                # edições manuais dentro da mesma combinação de opções são preservadas.
-                key_texto_final = f"texto_final_v_{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}"
+                # Key versionada pelo arquivo + opções: trocar de PDF, mudar
+                # filtros ou prefixo reseta o widget com o novo texto gerado;
+                # edições manuais dentro da mesma combinação são preservadas.
+                key_texto_final = (
+                    f"texto_final_v_{pdf_file.name}_"
+                    f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}"
+                )
                 texto_editado = st.text_area(
                     "Texto Final (Pronto para copiar):",
                     texto_pronto,
