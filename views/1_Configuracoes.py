@@ -46,7 +46,6 @@ abas = st.tabs(nomes_abas)
 with abas[0]:
     st.subheader("Informações da Conta")
     st.info(f"**Nome:** {nome}\n\n**Equipe original:** {st.session_state.get('equipe', 'N/A')}\n\n**Nível de Acesso (Role):** {role}")
-    st.info(f"**Nome:** {nome}\n\n**Equipe original:** {st.session_state.get('equipe', 'N/A')}\n\n**Nível de Acesso (Role):** {role}")
 
 # ==========================================
 # ABA 2: LINKS ÚTEIS (TODOS)

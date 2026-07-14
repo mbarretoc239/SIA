@@ -267,7 +267,7 @@ else:
     paginas = []
     
     # Todos (Dashboard de Entrada/Bem vindo)
-    paginas.append(st.Page("views/0_Dashboard.py", title="Painel Principal"))
+    paginas.append(st.Page("views/0_Dashboard.py", title="Início"))
     
     # Amostragem: visível para todos os logados
     paginas.append(st.Page("views/6_Amostragem.py", title="Amostragem"))
