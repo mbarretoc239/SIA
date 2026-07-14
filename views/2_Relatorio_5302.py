@@ -90,9 +90,9 @@ def limpar_banco_supabase(meses=6):
     response.raise_for_status()
 
 st.title(" Gerador Offline - Relatório 5302")
-st.markdown("Faça o upload do PDF da operadora para iniciar a análise inteligente e extração de glosas. **Tudo ocorre na memória RAM.**")
+st.markdown("Faça o upload do relatório CSV ou PDF previamente salvo no seu computador")
 
-pdf_file = st.file_uploader("Arraste o arquivo PDF ou CSV aqui", type=["pdf", "csv"])
+pdf_file = st.file_uploader("Selecione o arquivo", type=["pdf", "csv"])
 
 if pdf_file is not None:
     if "dados_pdf" not in st.session_state or st.session_state.get("pdf_name") != pdf_file.name:
@@ -112,7 +112,7 @@ if pdf_file is not None:
         st.success(f"Análise concluída! {len(dados)} glosas detectadas. Prestador: **{meta.get('prestador')}** | Processo: **{meta.get('processo')}** | Produção: **{meta.get('producao')}**")
         
         st.markdown("### 1. Auditoria e Justificativas")
-        st.markdown("Todas as glosas vêm marcadas em **Incluir no Relatório**. Use a seleção em massa abaixo para marcar/desmarcar várias por código de uma vez, ou edite linha a linha na tabela.")
+        st.markdown("Todas as glosas vêm marcadas em **Incluir no Relatório**. Use o seletor abaixo para selecionar qual glosa deve estar no texto ou não. Utilize a coluna de Justificativa para adicionar o motivo personalizado da glosa")
 
         if "df_glosas_state" not in st.session_state or st.session_state.get("origem_glosas") != pdf_file.name:
             st.session_state.df_glosas_state = pd.DataFrame(dados).copy()
@@ -189,13 +189,13 @@ if pdf_file is not None:
         # Fallback: também persiste no fim do rerun caso o callback nao tenha rodado
         st.session_state.df_glosas_state = df_editado
 
-        st.markdown("### 2. Motor de Texto Offline")
+        st.markdown("### 2. Configuração do Texto")
         col1, col2 = st.columns([1, 2])
         
         with col1:
             opcao_agrupamento = st.radio(
                 "Nível de Detalhe:",
-                ["Versão Resumida (Agrupada)", "Versão Completa (Detalhada)"],
+                ["Resumido", "Detalhado"],
                 index=1
             )
             
@@ -209,7 +209,7 @@ if pdf_file is not None:
                 [
                     "Nenhum Cabeçalho",
                     "c/ Especialidades Críticas",
-                    "s/ Especialidades Críticas (Apenas Imagens)"
+                    "s/ Especialidades Críticas"
                 ]
             )
             
@@ -253,7 +253,7 @@ if pdf_file is not None:
                     f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}"
                 )
                 texto_editado = st.text_area(
-                    "Texto Final (Pronto para copiar):",
+                    "Texto Final:",
                     texto_pronto,
                     height=180,
                     key=key_texto_final,
@@ -298,7 +298,7 @@ if pdf_file is not None:
 
                 with col_btn_save:
                     if "Nenhuma glosa" not in texto_gerado:
-                        if st.button(" Salvar Análise no Supabase", use_container_width=True):
+                        if st.button(" Salvar Análise na nuvem", use_container_width=True):
                             with st.spinner("Salvando na nuvem..."):
                                 try:
                                     salvar_no_supabase(st.session_state.get("pdf_name", "Desconhecido"), texto_editado, df_final, meta)

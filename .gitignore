@@ -86,3 +86,6 @@ CHANGELOG_GLOSAS.md
 /relatórios/
 *.pdf
 *.jsonl
+
+*.csv
+*.docx

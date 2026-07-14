@@ -24,7 +24,7 @@ if not tem_acesso_modulo(_permissoes, _role, "producao"):
     st.stop()
 
 st.title(" Análise de Produção")
-st.markdown("Envie um ou mais demonstrativos de pagamento para contar e ranquear os procedimentos mais produzidos do prestador.")
+st.markdown("Envie um ou mais demonstrativos pdf para contar e ranquear os procedimentos mais realizados pelo prestador.")
 
 # Funções de Backend adaptadas para in-memory (BytesIO)
 def extrair_nome_prestador(texto):
@@ -134,7 +134,7 @@ def processar_arquivos(uploaded_files):
     }, None
 
 # UI
-uploaded_files = st.file_uploader("Arraste seus PDFs de demonstrativos aqui", type=["pdf"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Faça upload do arquivo aqui", type=["pdf"], accept_multiple_files=True)
 
 if uploaded_files:
     if st.button("Processar Produção", type="primary"):

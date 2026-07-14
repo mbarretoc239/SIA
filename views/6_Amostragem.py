@@ -431,8 +431,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
 
 st.title("Amostragem de Guias")
 st.markdown(
-    "Cole o texto da seleção do PowerBI (**Liberação de IA por procedimento**) abaixo. "
-    "O app deduplica as guias por especialidade e sugere a amostra a auditar."
+    "Cole as guias por especialidade selecionadas no powerBI"
 )
 
 _is_admin = st.session_state.get("role_interno") == "Admin"
@@ -560,10 +559,10 @@ for esp in especialidades:
     st.markdown(f"#### {esp}")
     st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
-    with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=True):
+    with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
         renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo)
 
-    with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=True):
+    with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
         renderizar_tabela_guias(
             df_amostra.drop(columns=["Motivo"], errors="ignore"),
             esp,

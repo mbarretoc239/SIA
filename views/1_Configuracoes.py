@@ -18,8 +18,8 @@ db = st.session_state.db
 role = st.session_state.get("role_interno", "Contas")
 nome = st.session_state.get("auditor_nome", "Usuário")
 
-st.title("️ Painel de Controle e Configurações")
-st.markdown("Gerencie seu perfil, aprove cadastros da equipe e configure as regras do motor inteligente.")
+st.title("️Configurações")
+st.markdown("Gerencie seu perfil, configurações do sistema.")
 
 # Define quais abas o usuário tem acesso
 nomes_abas = []
@@ -45,7 +45,7 @@ abas = st.tabs(nomes_abas)
 # ==========================================
 with abas[0]:
     st.subheader("Informações da Conta")
-    st.info(f"**Nome:** {nome}\n\n**Equipe original:** {st.session_state.get('equipe', 'N/A')}\n\n**Nível de Acesso (Role):** {role}")
+    st.info(f"**Nome:** {nome}\n\n**Equipe:** {st.session_state.get('equipe', 'N/A')}\n\n**Nível de Acesso (Role):** {role}")
 
 # ==========================================
 # ABA 2: LINKS ÚTEIS (TODOS)
@@ -53,7 +53,7 @@ with abas[0]:
 if "Meus Links Úteis" in nomes_abas:
     aba_idx = nomes_abas.index("Meus Links Úteis")
     with abas[aba_idx]:
-        st.subheader("Meus Links e Atalhos Rápidos")
+        st.subheader("Meus Links")
         st.markdown("Cadastre aqui os links que você mais usa. Eles aparecerão na barra lateral para acesso rápido!")
         
         col_head_1, col_head_2 = st.columns([1, 3])
@@ -736,7 +736,7 @@ if "Permissões de Acesso" in nomes_abas:
         from core.settings import MODULOS_CONTROLADOS, ROLES_PERMISSAO
 
         st.subheader("Acesso aos Módulos por Função")
-        st.markdown("Marque quais funções podem acessar cada módulo. **Admin** sempre tem acesso a tudo, independente da configuração abaixo.")
+        st.markdown("Marque quais funções podem acessar cada módulo")
 
         permissoes_atuais = db.carregar_permissoes_modulos()
         mapa_permissoes = {(p["modulo"], p["role"]): bool(p["habilitado"]) for p in permissoes_atuais}
