@@ -145,7 +145,7 @@ def tela_login():
         with tab_cadastrar:
             with st.container(border=True):
                 st.subheader("Novo Cadastro")
-                st.markdown("Crie sua conta para acessar os relatórios e análises.")
+                st.markdown("Crie sua conta para acessar as ferramentas.")
                 
                 novo_usr = st.text_input("Usuário SIGO", help="Mesmo login utilizado no sistema da empresa")
                 novo_nome = st.text_input("Nome Completo")
@@ -277,7 +277,7 @@ else:
     if tem_acesso_modulo(permissoes, role, "relatorio_5302"):
         paginas.append(st.Page("views/2_Relatorio_5302.py", title="Relatório 5302"))
     if tem_acesso_modulo(permissoes, role, "calculadora_glosa"):
-        paginas.append(st.Page("views/3_Calculadora.py", title="Calculadora de Glosa"))
+        paginas.append(st.Page("views/3_Calculadora.py", title="Percentual de Glosa"))
     if tem_acesso_modulo(permissoes, role, "producao"):
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
 
@@ -318,7 +318,7 @@ else:
     st.sidebar.divider()
     
     if tem_acesso_modulo(permissoes, role, "copia_rapida"):
-        st.sidebar.markdown("**Cópia Rápida (Cabeçalhos)**")
+        st.sidebar.markdown("**Cópia Rápida**")
         
         texto_com = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS"
         texto_sem = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS"
