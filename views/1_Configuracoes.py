@@ -22,17 +22,21 @@ st.title("️ Painel de Controle e Configurações")
 st.markdown("Gerencie seu perfil, aprove cadastros da equipe e configure as regras do motor inteligente.")
 
 # Define quais abas o usuário tem acesso
-nomes_abas = [" Meu Perfil", " Meus Links Úteis"]
+nomes_abas = []
+nomes_abas.append("Meu Perfil")
+nomes_abas.append("Meus Links Úteis")
 
 if role == "Admin":
-    nomes_abas.append("️ Aprovação de Equipe")
-    nomes_abas.append(" Debug/Testes")
+    nomes_abas.append("Aprovação da Equipe")
 
 if role in ["Admin", "Gestor"]:
-    nomes_abas.append(" Tabelas Base e Glosas")
-    nomes_abas.append(" Textos Padrões (Motor)")
-    nomes_abas.append(" Permissões de Acesso")
-    nomes_abas.append(" Links Padrão (Home)")
+    nomes_abas.append("Permissões de Acesso")
+    nomes_abas.append("Textos para Prestadores")
+    nomes_abas.append("Links Home")
+    nomes_abas.append("Tabelas Base e Glosas")
+
+if role == "Admin":
+    nomes_abas.append("Debug/Testes")
 
 abas = st.tabs(nomes_abas)
 
@@ -47,8 +51,8 @@ with abas[0]:
 # ==========================================
 # ABA 2: LINKS ÚTEIS (TODOS)
 # ==========================================
-if " Meus Links Úteis" in nomes_abas:
-    aba_idx = nomes_abas.index(" Meus Links Úteis")
+if "Meus Links Úteis" in nomes_abas:
+    aba_idx = nomes_abas.index("Meus Links Úteis")
     with abas[aba_idx]:
         st.subheader("Meus Links e Atalhos Rápidos")
         st.markdown("Cadastre aqui os links que você mais usa. Eles aparecerão na barra lateral para acesso rápido!")
@@ -106,8 +110,8 @@ if " Meus Links Úteis" in nomes_abas:
 # ==========================================
 # ABA 3: APROVAÇÃO DE EQUIPE (ADMIN)
 # ==========================================
-if "️ Aprovação de Equipe" in nomes_abas:
-    aba_idx = nomes_abas.index("️ Aprovação de Equipe")
+if "Aprovação da Equipe" in nomes_abas:
+    aba_idx = nomes_abas.index("Aprovação da Equipe")
     with abas[aba_idx]:
         st.subheader("Fila de Moderação de Cadastros")
         
@@ -184,8 +188,8 @@ if "️ Aprovação de Equipe" in nomes_abas:
 # ==========================================
 # ABA: DEBUG/TESTES (ADMIN)
 # ==========================================
-if " Debug/Testes" in nomes_abas:
-    aba_idx = nomes_abas.index(" Debug/Testes")
+if "Debug/Testes" in nomes_abas:
+    aba_idx = nomes_abas.index("Debug/Testes")
     with abas[aba_idx]:
         st.subheader("Ferramentas de Teste")
         st.caption("Disponível apenas para Admin. Use para validar alinhamentos, popups de ciência e notificações ao vivo.")
@@ -258,8 +262,8 @@ if " Debug/Testes" in nomes_abas:
 # ==========================================
 # ABA 3: TABELAS BASE E GLOSAS (ADMIN/GESTOR)
 # ==========================================
-if " Tabelas Base e Glosas" in nomes_abas:
-    aba_idx = nomes_abas.index(" Tabelas Base e Glosas")
+if "Tabelas Base e Glosas" in nomes_abas:
+    aba_idx = nomes_abas.index("Tabelas Base e Glosas")
     with abas[aba_idx]:
         st.subheader("Base de Conhecimento do Sistema")
         
@@ -507,8 +511,8 @@ if " Tabelas Base e Glosas" in nomes_abas:
 # ==========================================
 # ABA 4: TEXTOS DOS PRESTADORES (GESTOR/ADMIN)
 # ==========================================
-if " Textos Padrões (Motor)" in nomes_abas:
-    aba_idx = nomes_abas.index(" Textos Padrões (Motor)")
+if "Textos para Prestadores" in nomes_abas:
+    aba_idx = nomes_abas.index("Textos para Prestadores")
     with abas[aba_idx]:
         st.subheader("Textos para os Prestadores")
         st.markdown("Cadastre os textos descritivos que aparecerão para as glosas no final do relatório.")
@@ -666,8 +670,8 @@ if " Textos Padrões (Motor)" in nomes_abas:
 # ==========================================
 # ABA 5: PERMISSÕES DE ACESSO (ADMIN/GESTOR)
 # ==========================================
-if " Permissões de Acesso" in nomes_abas:
-    aba_idx = nomes_abas.index(" Permissões de Acesso")
+if "Permissões de Acesso" in nomes_abas:
+    aba_idx = nomes_abas.index("Permissões de Acesso")
     with abas[aba_idx]:
         from core.settings import MODULOS_CONTROLADOS, ROLES_PERMISSAO
 
@@ -710,8 +714,8 @@ if " Permissões de Acesso" in nomes_abas:
 # ==========================================
 # ABA: LINKS PADRÃO (ADMIN/GESTOR)
 # ==========================================
-if " Links Padrão (Home)" in nomes_abas:
-    aba_idx = nomes_abas.index(" Links Padrão (Home)")
+if "Links Home" in nomes_abas:
+    aba_idx = nomes_abas.index("Links Home")
     with abas[aba_idx]:
         st.subheader("Links institucionais exibidos na Home")
         st.caption("Todos os usuários logados enxergam esses links no Painel Principal, agrupados por categoria.")
