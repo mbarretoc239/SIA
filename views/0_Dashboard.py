@@ -34,3 +34,19 @@ with col2:
     st.warning(" **Análise de Produção**\n\nExtração e ranqueamento dos procedimentos mais solicitados através de leitura de PDFs de pagamento.")
 with col3:
     st.error(" **Relatório 5302**\n\nGeração automatizada de relatórios a partir de PDFs da operadora, com motor inteligente de texto.")
+
+# Links úteis (institucionais) - agrupados por categoria
+links_padrao = db.listar_links_padrao()
+if links_padrao:
+    st.markdown("### Links úteis")
+    agrupados = {}
+    for l in links_padrao:
+        agrupados.setdefault(l.get("categoria") or "Geral", []).append(l)
+    for categoria in sorted(agrupados.keys()):
+        with st.container(border=True):
+            st.markdown(f"**{categoria}**")
+            itens = agrupados[categoria]
+            cols = st.columns(min(3, max(1, len(itens))))
+            for i, link in enumerate(itens):
+                with cols[i % len(cols)]:
+                    st.link_button(link.get("titulo") or "(sem título)", url=link.get("url", ""), use_container_width=True)

@@ -201,6 +201,39 @@ class DatabaseManager:
         response = requests.patch(url, headers=self._admin_headers(), json=data)
         return response.status_code in [200, 204]
 
+    # --- Links Padrão (institucionais, exibidos na Home) ---
+    _ROLES_QUE_GERENCIAM_LINKS = {"Admin", "Gestor"}
+
+    def listar_links_padrao(self, incluir_inativos: bool = False):
+        base = f"{self.supabase_url}/rest/v1/links_padrao?select=*&order=categoria.asc,ordem.asc"
+        if not incluir_inativos:
+            base += "&ativo=eq.true"
+        r = requests.get(base, headers=self.headers)
+        return r.json() if r.status_code == 200 else []
+
+    def inserir_link_padrao(self, titulo, url, categoria, ordem, atuante_role):
+        if str(atuante_role) not in self._ROLES_QUE_GERENCIAM_LINKS:
+            return False
+        endpoint = f"{self.supabase_url}/rest/v1/links_padrao"
+        data = {"titulo": titulo, "url": url, "categoria": categoria or "Geral", "ordem": int(ordem or 100)}
+        r = requests.post(endpoint, headers=self._admin_headers(), json=data)
+        return r.status_code in (200, 201)
+
+    def atualizar_link_padrao(self, link_id, titulo, url, categoria, ordem, ativo, atuante_role):
+        if str(atuante_role) not in self._ROLES_QUE_GERENCIAM_LINKS:
+            return False
+        endpoint = f"{self.supabase_url}/rest/v1/links_padrao?id=eq.{link_id}"
+        data = {"titulo": titulo, "url": url, "categoria": categoria or "Geral", "ordem": int(ordem or 100), "ativo": bool(ativo)}
+        r = requests.patch(endpoint, headers=self._admin_headers(), json=data)
+        return r.status_code in (200, 204)
+
+    def deletar_link_padrao(self, link_id, atuante_role):
+        if str(atuante_role) not in self._ROLES_QUE_GERENCIAM_LINKS:
+            return False
+        endpoint = f"{self.supabase_url}/rest/v1/links_padrao?id=eq.{link_id}"
+        r = requests.delete(endpoint, headers=self._admin_headers())
+        return r.status_code in (200, 204)
+
     def trocar_senha_propria(self, usuario_id, nova_senha):
         """Usuário troca a própria senha. Zera a flag `senha_temporaria`."""
         url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_id}"

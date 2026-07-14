@@ -32,6 +32,7 @@ if role in ["Admin", "Gestor"]:
     nomes_abas.append(" Tabelas Base e Glosas")
     nomes_abas.append(" Textos Padrões (Motor)")
     nomes_abas.append(" Permissões de Acesso")
+    nomes_abas.append(" Links Padrão (Home)")
 
 abas = st.tabs(nomes_abas)
 
@@ -706,3 +707,70 @@ if " Permissões de Acesso" in nomes_abas:
                     st.rerun()
                 else:
                     st.error(f"{erros} permissões falharam ao salvar.")
+
+# ==========================================
+# ABA: LINKS PADRÃO (ADMIN/GESTOR)
+# ==========================================
+if " Links Padrão (Home)" in nomes_abas:
+    aba_idx = nomes_abas.index(" Links Padrão (Home)")
+    with abas[aba_idx]:
+        st.subheader("Links institucionais exibidos na Home")
+        st.caption("Todos os usuários logados enxergam esses links no Painel Principal, agrupados por categoria.")
+
+        # Formulário de novo link
+        with st.form("form_novo_link_padrao", clear_on_submit=True):
+            fc1, fc2, fc3, fc4 = st.columns([3, 4, 2, 1])
+            with fc1:
+                lp_titulo = st.text_input("Título", placeholder="Ex: SharePoint Auditoria")
+            with fc2:
+                lp_url = st.text_input("URL", placeholder="https://...")
+            with fc3:
+                lp_categoria = st.text_input("Categoria", value="Geral", help="Ex: Portais, Guias, Contatos")
+            with fc4:
+                lp_ordem = st.number_input("Ordem", min_value=1, value=100, step=10, help="Menor aparece antes")
+            submeteu_lp = st.form_submit_button("Adicionar", type="primary", use_container_width=True)
+
+            if submeteu_lp:
+                if not lp_titulo or not lp_url:
+                    st.warning("Título e URL são obrigatórios.")
+                elif not lp_url.startswith(("http://", "https://")):
+                    st.error("URL deve começar com http:// ou https://.")
+                else:
+                    if db.inserir_link_padrao(lp_titulo, lp_url, lp_categoria, lp_ordem, atuante_role=role):
+                        st.success("Link adicionado!")
+                        st.rerun()
+                    else:
+                        st.error("Não foi possível adicionar. Verifique se você é Admin/Gestor e se a service_role está configurada.")
+
+        st.divider()
+        st.markdown("**Links cadastrados**")
+        todos_links = db.listar_links_padrao(incluir_inativos=True)
+        if not todos_links:
+            st.info("Nenhum link cadastrado ainda.")
+        else:
+            for l in todos_links:
+                with st.container(border=True):
+                    lc1, lc2, lc3, lc4, lc5 = st.columns([3, 4, 2, 1, 1])
+                    with lc1:
+                        novo_tit = st.text_input("Título", value=l.get("titulo", ""), key=f"lp_tit_{l['id']}")
+                    with lc2:
+                        nova_url = st.text_input("URL", value=l.get("url", ""), key=f"lp_url_{l['id']}")
+                    with lc3:
+                        nova_cat = st.text_input("Categoria", value=l.get("categoria", "Geral"), key=f"lp_cat_{l['id']}")
+                    with lc4:
+                        nova_ord = st.number_input("Ordem", value=int(l.get("ordem", 100)), key=f"lp_ord_{l['id']}", step=10)
+                    with lc5:
+                        novo_ativo = st.checkbox("Ativo", value=bool(l.get("ativo", True)), key=f"lp_ativo_{l['id']}")
+
+                    b_save, b_del = st.columns([1, 1])
+                    if b_save.button("Salvar", key=f"lp_save_{l['id']}", type="primary"):
+                        if db.atualizar_link_padrao(l["id"], novo_tit, nova_url, nova_cat, nova_ord, novo_ativo, atuante_role=role):
+                            st.success("Salvo.")
+                            st.rerun()
+                        else:
+                            st.error("Erro ao salvar.")
+                    if b_del.button("Excluir", key=f"lp_del_{l['id']}"):
+                        if db.deletar_link_padrao(l["id"], atuante_role=role):
+                            st.rerun()
+                        else:
+                            st.error("Erro ao excluir.")
