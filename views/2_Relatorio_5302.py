@@ -241,31 +241,60 @@ if pdf_file is not None:
                     elif "s/ Especialidades" in opcao_prefixo:
                         texto_pronto = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// " + texto_gerado
                     
-                st.text_area("Texto Final (Pronto para copiar):", texto_pronto, height=180)
-                
+                # Key versionada pelas opções: quando qualquer filtro muda e o
+                # texto gerado é diferente, o widget reseta com o novo valor;
+                # edições manuais dentro da mesma combinação de opções são preservadas.
+                key_texto_final = f"texto_final_v_{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}"
+                texto_editado = st.text_area(
+                    "Texto Final (Pronto para copiar):",
+                    texto_pronto,
+                    height=180,
+                    key=key_texto_final,
+                )
+
                 col_btn_copy, col_btn_save, _ = st.columns([2, 3, 5])
                 with col_btn_copy:
-                    # Botão de Copiar via Componente HTML (funciona no Streamlit Cloud)
+                    # Botão de Copiar via Componente HTML — lê o valor ATUAL do
+                    # textarea via window.parent.document (em vez de embutir o
+                    # texto no HTML), assim uma edição feita logo antes do clique
+                    # já é copiada, mesmo sem rerun.
                     import streamlit.components.v1 as components
-                    texto_seguro_final = texto_pronto.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-                    components.html(f"""
+                    components.html("""
                     <script>
-                    function copyText() {{
-                        navigator.clipboard.writeText(`{texto_seguro_final}`).then(function() {{
+                    function copyText() {
+                        let texto = '';
+                        try {
+                            const doc = window.parent.document;
+                            const textareas = doc.querySelectorAll('textarea');
+                            for (const ta of textareas) {
+                                const lbl = (ta.getAttribute('aria-label') || '').toLowerCase();
+                                if (lbl.includes('pronto para copiar')) {
+                                    texto = ta.value;
+                                    break;
+                                }
+                            }
+                        } catch (e) { texto = ''; }
+                        if (!texto) {
+                            document.getElementById('btn_copiar').innerText = ' Erro ao copiar';
+                            return;
+                        }
+                        navigator.clipboard.writeText(texto).then(function() {
                             document.getElementById('btn_copiar').innerText = ' Copiado!';
-                            setTimeout(() => document.getElementById('btn_copiar').innerText = ' Copiar Texto', 2000);
-                        }});
-                    }}
+                            setTimeout(function() {
+                                document.getElementById('btn_copiar').innerText = ' Copiar Texto';
+                            }, 2000);
+                        });
+                    }
                     </script>
                     <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Texto</button>
                     """, height=65)
-                
+
                 with col_btn_save:
                     if "Nenhuma glosa" not in texto_gerado:
                         if st.button(" Salvar Análise no Supabase", use_container_width=True):
                             with st.spinner("Salvando na nuvem..."):
                                 try:
-                                    salvar_no_supabase(st.session_state.get("pdf_name", "Desconhecido"), texto_pronto, df_final, meta)
+                                    salvar_no_supabase(st.session_state.get("pdf_name", "Desconhecido"), texto_editado, df_final, meta)
                                     st.success("Análise salva com sucesso no banco de dados!")
                                 except Exception as e:
                                     st.error(f"Erro ao salvar no banco. A tabela 'analises_auditoria' foi criada no Supabase? Detalhe: {e}")
