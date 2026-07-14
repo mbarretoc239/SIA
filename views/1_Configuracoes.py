@@ -97,7 +97,7 @@ if " Meus Links Úteis" in nomes_abas:
                 with st.container(border=True):
                     col_btn, col_del = st.columns([6, 1])
                     with col_btn:
-                        st.markdown(f"**{link.get('titulo')}** — [{link.get('url')}]({link.get('url')})")
+                        st.markdown(f"**{link.get('titulo')}** — [🔗 Acessar]({link.get('url')})")
                     with col_del:
                         if st.button("Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
                             if db.deletar_link_util(link.get('id')):
@@ -782,7 +782,7 @@ if " Links Padrão (Home)" in nomes_abas:
                     lc1, lc2, lc3, lc4 = st.columns([4, 3, 2, 3])
                     status = "🟢 Ativo" if l.get('ativo', True) else "🔴 Inativo"
                     lc1.markdown(f"**{l.get('titulo', 'Sem Título')}**")
-                    lc2.markdown(f"[{l.get('url', '')}]({l.get('url', '')})")
+                    lc2.markdown(f"[🔗 Acessar Link]({l.get('url', '')})")
                     lc3.markdown(f"{l.get('categoria', 'Geral')} ({l.get('ordem', 100)}) | {status}")
                     
                     b_edit, b_del = lc4.columns([1, 1])
