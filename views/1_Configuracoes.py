@@ -518,14 +518,13 @@ if " Textos Padrões (Motor)" in nomes_abas:
         textos = [t for t in textos_brutos if t.get("glosas_relacionadas") != "__LINK__"]
         
         # Controles Superiores
-        c_busca, c_add = st.columns([4, 1])
-        with c_busca:
-            busca_txt = st.text_input(" Pesquisar Texto (Título ou Glosa):")
-        with c_add:
+        col_head_1, col_head_2 = st.columns([1, 2])
+        with col_head_1:
             st.write("")
-            st.write("")
-            if st.button(" Adicionar Novo", type="primary", use_container_width=True, key="btn_add_txt"):
+            if st.button("➕ Adicionar Novo Texto", type="primary", use_container_width=True, key="btn_add_txt"):
                 st.session_state["texto_em_edicao"] = "NOVO"
+        with col_head_2:
+            busca_txt = st.text_input("🔍 Pesquisar (Título ou Glosa):", placeholder="Ex: 480 ou Falta Imagem...")
                 
         # Filtro
         resultados_txt = textos
@@ -537,7 +536,7 @@ if " Textos Padrões (Motor)" in nomes_abas:
         em_edicao = st.session_state.get("texto_em_edicao", None)
         if em_edicao:
             st.divider()
-            st.subheader("️ Editor de Texto" if em_edicao != "NOVO" else " Novo Texto")
+            st.subheader("✏️ Editor de Texto" if em_edicao != "NOVO" else "✨ Novo Texto")
             
             with st.container(border=True):
                 # Encontra o texto se estiver editando
@@ -640,7 +639,7 @@ if " Textos Padrões (Motor)" in nomes_abas:
         else:
             for t in resultados_txt:
                 with st.container(border=True):
-                    c1, c2, c3, c4 = st.columns([2, 2, 4, 2])
+                    c1, c2, c3, c4 = st.columns([2, 2, 4, 3])
                     c1.markdown(f"**{t.get('titulo', 'Sem Título')}**")
                     c2.markdown(f" Glosas: `{t.get('glosas_relacionadas', '')}`")
                     c3.markdown(f" *{t.get('texto', '')[:60]}...*")
@@ -657,10 +656,10 @@ if " Textos Padrões (Motor)" in nomes_abas:
 
                     # Coluna de botões (Editar e Excluir)
                     b_edit, b_del = c4.columns([1, 1])
-                    if b_edit.button("️", key=f"edit_txt_{t['id']}", help="Editar"):
+                    if b_edit.button("✏️ Editar", key=f"edit_txt_{t['id']}", use_container_width=True):
                         st.session_state["texto_em_edicao"] = t['id']
                         st.rerun()
-                    if b_del.button("", key=f"del_txt_{t['id']}", help="Excluir Definitivamente"):
+                    if b_del.button("🗑️ Excluir", key=f"del_txt_{t['id']}", use_container_width=True):
                         if db.deletar_texto_prestador(t['id']):
                             st.rerun()
 

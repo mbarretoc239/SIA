@@ -579,14 +579,14 @@ class DatabaseManager:
     # --- Operações de Banco (Permissões de Módulos por Role) ---
     def carregar_permissoes_modulos(self):
         url = f"{self.supabase_url}/rest/v1/permissoes_modulos?select=*"
-        response = requests.get(url, headers=self.headers)
+        response = requests.get(url, headers=self._admin_headers())
         if response.status_code == 200:
             return response.json()
         return []
 
     def atualizar_permissao_modulo(self, modulo, role, habilitado):
         url = f"{self.supabase_url}/rest/v1/permissoes_modulos?on_conflict=modulo,role"
-        headers_upsert = self.headers.copy()
+        headers_upsert = self._admin_headers()
         headers_upsert["Prefer"] = "resolution=merge-duplicates"
         data = {"modulo": modulo, "role": role, "habilitado": habilitado}
         response = requests.post(url, headers=headers_upsert, json=data)
