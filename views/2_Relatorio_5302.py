@@ -306,7 +306,7 @@ if pdf_file is not None:
                                 except Exception as e:
                                     st.error(f"Erro ao salvar no banco. A tabela 'analises_auditoria' foi criada no Supabase? Detalhe: {e}")
                 
-                st.markdown("###  Textos Adicionais ao Prestador")
+                st.markdown("###  Texto de orientação ao Prestador")
                 if "Nenhuma glosa" not in texto_gerado:
                     glosas_presentes = set(df_final['Glosa'].unique())
 
