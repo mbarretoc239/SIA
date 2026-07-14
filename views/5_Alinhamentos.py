@@ -89,27 +89,40 @@ with aba_historico:
         if not filtrados:
             st.info("Nenhum alinhamento encontrado com esses filtros.")
         else:
-            df_visual = pd.DataFrame([
-                {
-                    "Status": _status_html(a.get("ativo", True)),
-                    "Criado em": pd.to_datetime(a["created_at"]).date(),
-                    "Título": _titulo_html(a.get("titulo", ""), a.get("ativo", True)),
-                    "Deliberação": _conteudo_html(a.get("conteudo", "")),
-                    "Categoria": a.get("categoria", "Geral"),
-                    "Direcionado a": a.get("nivel_minimo", "Auditor"),
-                }
-                for a in filtrados
-            ])
-            st.dataframe(
-                df_visual, 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Criado em": st.column_config.DateColumn("Criado em", format="DD/MM/YYYY"),
-                    "Título": st.column_config.TextColumn("Título", width="medium"),
-                    "Deliberação": st.column_config.TextColumn("Deliberação", width="large"),
-                }
-            )
+            # Agrupa por público-alvo (nivel_minimo). A seção do próprio nível
+            # do usuário vem aberta por padrão; as demais (níveis abaixo, que
+            # cargos mais altos também enxergam) ficam colapsadas para não
+            # poluir a visão de quem acumula vários níveis.
+            por_nivel = {}
+            for a in filtrados:
+                por_nivel.setdefault(a.get("nivel_minimo", "Auditor"), []).append(a)
+
+            niveis_presentes = [n for n in NIVEIS if n in por_nivel]
+
+            for nivel in niveis_presentes:
+                itens_nivel = por_nivel[nivel]
+                aberto_por_padrao = (nivel == role)
+                with st.expander(f"{nivel} ({len(itens_nivel)})", expanded=aberto_por_padrao):
+                    df_visual = pd.DataFrame([
+                        {
+                            "Status": _status_html(a.get("ativo", True)),
+                            "Criado em": pd.to_datetime(a["created_at"]).date(),
+                            "Título": _titulo_html(a.get("titulo", ""), a.get("ativo", True)),
+                            "Deliberação": _conteudo_html(a.get("conteudo", "")),
+                            "Categoria": a.get("categoria", "Geral"),
+                        }
+                        for a in itens_nivel
+                    ])
+                    st.dataframe(
+                        df_visual,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Criado em": st.column_config.DateColumn("Criado em", format="DD/MM/YYYY"),
+                            "Título": st.column_config.TextColumn("Título", width="medium"),
+                            "Deliberação": st.column_config.TextColumn("Deliberação", width="large"),
+                        }
+                    )
 
 
 if pode_gerenciar:
