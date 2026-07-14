@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import hashlib
 import bcrypt
+from datetime import datetime, timezone
 from cryptography.fernet import Fernet
 
 class DatabaseManager:
@@ -421,19 +422,60 @@ class DatabaseManager:
         return response.status_code in [200, 204]
 
     # --- Operações de Banco (Alinhamentos Internos) ---
-    def carregar_alinhamentos(self):
+    def carregar_alinhamentos(self, incluir_excluidos=False):
         url = f"{self.supabase_url}/rest/v1/alinhamentos?select=*&order=created_at.desc"
+        if not incluir_excluidos:
+            url += "&excluido=eq.false"
         response = requests.get(url, headers=self.headers)
         if response.status_code == 200:
             return response.json()
         return []
+
+    def carregar_alinhamentos_excluidos(self):
+        """Lista alinhamentos excluídos (soft-delete), mais recentes primeiro.
+        Visível apenas na área "Excluídos" da tela de Alinhamentos (Gestor/Admin)."""
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?select=*&excluido=eq.true&order=excluido_em.desc"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def excluir_alinhamento_com_motivo(self, alinhamento_id, motivo, usuario_id):
+        """Exclusão suave: marca como excluído com motivo obrigatório, autor e
+        timestamp, mas mantém o registro (e o histórico de ciência associado)
+        no banco para fins de auditoria."""
+        if not str(motivo or "").strip():
+            return False
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
+        data = {
+            "excluido": True,
+            "motivo_exclusao": motivo.strip(),
+            "excluido_em": datetime.now(timezone.utc).isoformat(),
+            "excluido_por": usuario_id,
+        }
+        response = requests.patch(url, headers=self.headers, json=data)
+        return response.status_code in (200, 204)
+
+    def restaurar_alinhamento(self, alinhamento_id):
+        url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
+        data = {
+            "excluido": False,
+            "motivo_exclusao": None,
+            "excluido_em": None,
+            "excluido_por": None,
+        }
+        response = requests.patch(url, headers=self.headers, json=data)
+        return response.status_code in (200, 204)
 
     def carregar_alinhamentos_visiveis(self, role):
         from core.settings import NIVEL_HIERARQUIA
         nivel_usuario = NIVEL_HIERARQUIA.get(role, 1)
         niveis_visiveis = [n for n, v in NIVEL_HIERARQUIA.items() if v <= nivel_usuario]
         niveis_filtro = ",".join(niveis_visiveis)
-        url = f"{self.supabase_url}/rest/v1/alinhamentos?nivel_minimo=in.({niveis_filtro})&select=*&order=created_at.desc"
+        url = (
+            f"{self.supabase_url}/rest/v1/alinhamentos"
+            f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false&select=*&order=created_at.desc"
+        )
         response = requests.get(url, headers=self.headers)
         if response.status_code == 200:
             return response.json()
@@ -458,7 +500,7 @@ class DatabaseManager:
 
         url = (
             f"{self.supabase_url}/rest/v1/alinhamentos"
-            f"?nivel_minimo=in.({niveis_filtro})&select=*&order=created_at.asc"
+            f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false&select=*&order=created_at.asc"
         )
         response = requests.get(url, headers=self.headers)
         if response.status_code != 200:
