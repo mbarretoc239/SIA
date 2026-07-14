@@ -54,6 +54,7 @@ test*.py
 *.log
 *.txt
 !requirements.txt
+!requirements-dev.txt
 # Imagens geradas temporariamente para testes
 *.png
 *.jpg
