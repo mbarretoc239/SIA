@@ -46,7 +46,7 @@ abas = st.tabs(nomes_abas)
 with abas[0]:
     st.subheader("Informações da Conta")
     st.info(f"**Nome:** {nome}\n\n**Equipe original:** {st.session_state.get('equipe', 'N/A')}\n\n**Nível de Acesso (Role):** {role}")
-    st.markdown("*(A alteração de senha individual estará disponível em breve).*")
+    st.info(f"**Nome:** {nome}\n\n**Equipe original:** {st.session_state.get('equipe', 'N/A')}\n\n**Nível de Acesso (Role):** {role}")
 
 # ==========================================
 # ABA 2: LINKS ÚTEIS (TODOS)
@@ -94,14 +94,37 @@ if "Meus Links Úteis" in nomes_abas:
         
         meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
         
+        em_edicao_id = st.session_state.get("meu_link_editando_id", None)
+        if em_edicao_id:
+            link_alvo = next((l for l in meus_links if l.get('id') == em_edicao_id), None)
+            if link_alvo:
+                st.divider()
+                st.subheader("Editar Título do Link")
+                with st.container(border=True):
+                    novo_tit = st.text_input("Novo Título", value=link_alvo.get("titulo", ""), key="ml_edit_tit")
+                    c1, c2 = st.columns(2)
+                    if c1.button("Salvar", type="primary", use_container_width=True):
+                        if novo_tit:
+                            if db.atualizar_titulo_link_util(link_alvo.get("id"), novo_tit):
+                                st.session_state["meu_link_editando_id"] = None
+                                st.rerun()
+                    if c2.button("Cancelar", use_container_width=True):
+                        st.session_state["meu_link_editando_id"] = None
+                        st.rerun()
+                st.divider()
+
         if not meus_links:
             st.info("Você ainda não possui links cadastrados.")
         else:
             for link in meus_links:
                 with st.container(border=True):
-                    col_btn, col_del = st.columns([6, 1])
+                    col_btn, col_edit, col_del = st.columns([5, 1, 1])
                     with col_btn:
                         st.markdown(f"**{link.get('titulo')}** — [🔗 Acessar]({link.get('url')})")
+                    with col_edit:
+                        if st.button("Editar", key=f"edit_link_{link.get('id')}", use_container_width=True):
+                            st.session_state["meu_link_editando_id"] = link.get('id')
+                            st.rerun()
                     with col_del:
                         if st.button("Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
                             if db.deletar_link_util(link.get('id')):
@@ -138,16 +161,50 @@ if "Aprovação da Equipe" in nomes_abas:
                         with c3:
                             novo_role = st.selectbox("Role do Sistema", ["Contas", "Auditor", "CISO", "Gestor", "Admin"], index=["Contas", "Auditor", "CISO", "Gestor", "Admin"].index(row['role_interno']), key=f"r_{row['id']}")
                         
-                        if st.button("Salvar Alteração", key=f"btn_{row['id']}", type="primary"):
-                            if db.atualizar_usuario_admin(row['id'], novo_status, novo_role, nova_equipe):
-                                st.success("Usuário atualizado com sucesso!")
-                                st.rerun()
-                            else:
-                                st.error("Erro ao atualizar usuário no Supabase.")
+                        col_save, col_del = st.columns(2)
+                        with col_save:
+                            if st.button("Salvar Alteração", key=f"btn_{row['id']}", type="primary", use_container_width=True):
+                                if db.atualizar_usuario_admin(row['id'], novo_status, novo_role, nova_equipe):
+                                    st.success("Usuário atualizado com sucesso!")
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao atualizar usuário no Supabase.")
+                        with col_del:
+                            if st.button("Excluir", key=f"btn_del_pend_{row['id']}", use_container_width=True):
+                                if db.excluir_usuario(row['id'], role):
+                                    st.success("Usuário excluído.")
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao excluir usuário no Supabase.")
                                 
             st.divider()
             st.markdown(f"**Usuários Ativos e Bloqueados ({len(ativos) + len(df_users[df_users['status'] == 'Bloqueado'])})**")
             render_glass_table(df_users[df_users["status"] != "Pendente"][["usuario_sigo", "nome_completo", "equipe", "role_interno", "status", "created_at"]])
+
+            st.divider()
+            st.markdown("**Excluir Usuário**")
+            st.caption("Remove permanentemente o cadastro de um usuário.")
+            df_del = df_users[df_users["status"] != "Pendente"].copy()
+            if df_del.empty:
+                st.info("Nenhum usuário ativo/bloqueado disponível para exclusão.")
+            else:
+                opcoes_del = {
+                    f"{r['nome_completo']} ({r['usuario_sigo']})": r["id"]
+                    for _, r in df_del.iterrows()
+                }
+                col_u_del, col_b_del = st.columns([3, 1])
+                with col_u_del:
+                    label_del = st.selectbox("Selecione o Usuário", list(opcoes_del.keys()), key="del_alvo_usuario")
+                with col_b_del:
+                    st.write("")
+                    st.write("")
+                    if st.button("Excluir Usuário", key="btn_del_usuario", type="primary", use_container_width=True):
+                        alvo_id = opcoes_del[label_del]
+                        if db.excluir_usuario(alvo_id, role):
+                            st.success("Usuário excluído com sucesso.")
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível excluir o usuário. Verifique se você é Admin.")
 
             st.divider()
             st.markdown("**Redefinir senha de usuário**")
@@ -646,7 +703,11 @@ if "Textos para Prestadores" in nomes_abas:
                     c1, c2, c3, c4 = st.columns([2, 2, 4, 3])
                     c1.markdown(f"**{t.get('titulo', 'Sem Título')}**")
                     c2.markdown(f" Glosas: `{t.get('glosas_relacionadas', '')}`")
-                    c3.markdown(f" *{t.get('texto', '')[:60]}...*")
+                    with c3:
+                        texto_curto = t.get('texto', '')[:40] + "..." if len(t.get('texto', '')) > 40 else t.get('texto', '')
+                        st.markdown(f" *{texto_curto}*")
+                        with st.expander("Ver Texto Completo"):
+                            st.markdown(t.get('texto', ''))
 
                     sub_rel = str(t.get('sub_glosas_relacionadas') or '').strip()
                     proc_rel = str(t.get('procedimentos_relacionados') or '').strip()

@@ -5,31 +5,13 @@ import streamlit as st
 
 from shared.database import DatabaseManager
 
-st.title(" Painel de Controle")
+st.title(" Início")
 
 if "db" not in st.session_state:
     st.session_state.db = DatabaseManager()
 db = st.session_state.db
 
 role = st.session_state.get("role_interno", "Contas")
-
-# Links úteis (institucionais) - agrupados por categoria
-links_padrao = db.listar_links_padrao()
-with st.expander(" Links úteis", expanded=True):
-    if not links_padrao:
-        st.caption("Nenhum link cadastrado ainda.")
-    else:
-        agrupados = {}
-        for l in links_padrao:
-            agrupados.setdefault(l.get("categoria") or "Geral", []).append(l)
-        for categoria in sorted(agrupados.keys()):
-            with st.container(border=True):
-                st.markdown(f"**{categoria}**")
-                itens = agrupados[categoria]
-                cols = st.columns(min(3, max(1, len(itens))))
-                for i, link in enumerate(itens):
-                    with cols[i % len(cols)]:
-                        st.link_button(link.get("titulo") or "(sem título)", url=link.get("url", ""), use_container_width=True)
 
 # Último alinhamento visível para o role do usuário logado
 st.markdown("### Último alinhamento")
@@ -54,3 +36,21 @@ else:
         st.caption(f"{ultimo.get('categoria', 'Geral')} · Direcionado a {ultimo.get('nivel_minimo', 'Auditor')} · {data_criacao}")
 
     st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
+
+# Links úteis (institucionais) - agrupados por categoria
+links_padrao = db.listar_links_padrao()
+with st.expander(" Links úteis", expanded=False):
+    if not links_padrao:
+        st.caption("Nenhum link cadastrado ainda.")
+    else:
+        agrupados = {}
+        for l in links_padrao:
+            agrupados.setdefault(l.get("categoria") or "Geral", []).append(l)
+        for categoria in sorted(agrupados.keys()):
+            with st.container(border=True):
+                st.markdown(f"**{categoria}**")
+                itens = agrupados[categoria]
+                cols = st.columns(min(3, max(1, len(itens))))
+                for i, link in enumerate(itens):
+                    with cols[i % len(cols)]:
+                        st.link_button(link.get("titulo") or "(sem título)", url=link.get("url", ""), use_container_width=True)

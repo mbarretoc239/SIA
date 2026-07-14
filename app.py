@@ -153,7 +153,7 @@ def tela_login():
                 
                 col_s1, col_s2 = st.columns(2)
                 with col_s1:
-                    nova_senha = st.text_input("Senha", type="password", help="Mínimo 6 chars, 1 Maiúscula, 1 Número, 1 Especial")
+                    nova_senha = st.text_input("Senha", type="password")
                 with col_s2:
                     confirma_senha = st.text_input("Confirmar Senha", type="password")
                 
@@ -205,7 +205,7 @@ def tela_trocar_senha_obrigatoria():
     col_v1, col_form, col_v2 = st.columns([1, 2, 1])
     with col_form:
         with st.container(border=True):
-            nova = st.text_input("Nova senha", type="password", key="reset_nova", help="Mínimo 6 chars, 1 Maiúscula, 1 Número, 1 Especial")
+            nova = st.text_input("Nova senha", type="password", key="reset_nova")
             confirma = st.text_input("Confirmar nova senha", type="password", key="reset_confirma")
 
             if st.button("Salvar nova senha", use_container_width=True, type="primary"):

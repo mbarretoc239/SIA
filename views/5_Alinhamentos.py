@@ -283,6 +283,8 @@ if pode_gerenciar:
                 titulo_txt = a.get("titulo", "") if ativo else f"~~{a.get('titulo', '')}~~"
                 st.markdown(f"**{titulo_txt}**")
                 st.caption(f"{data_fmt} · {a.get('categoria', 'Geral')} · {a.get('nivel_minimo', 'Auditor')}{ciencia_label}")
+                with st.expander("Ler texto completo"):
+                    st.markdown(_conteudo_html(a.get("conteudo", "")))
             with col_status:
                 if ativo:
                     st.caption("🟢 Ativo")

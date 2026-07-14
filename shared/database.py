@@ -187,6 +187,13 @@ class DatabaseManager:
         response = requests.patch(url, headers=self.headers, json=data)
         return response.status_code in [200, 204]
 
+    def excluir_usuario(self, usuario_id, atuante_role):
+        if str(atuante_role) != "Admin":
+            return False
+        url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_id}"
+        response = requests.delete(url, headers=self._admin_headers())
+        return response.status_code in [200, 204]
+
     def resetar_senha(self, usuario_alvo_id, nova_senha_temp, atuante_role):
         """Reseta a senha de OUTRO usuário. Só permitido para Admin.
         Grava a flag `senha_temporaria = true` para forçar troca no proximo login.
@@ -398,6 +405,12 @@ class DatabaseManager:
         headers_usr["Prefer"] = "resolution=ignore-duplicates"
         r_usr = requests.post(url_usr, headers=headers_usr, json=data_usr)
         return r_usr.status_code in [200, 201]
+
+    def atualizar_titulo_link_util(self, id_relacao, novo_titulo):
+        url = f"{self.supabase_url}/rest/v1/usuario_links?id=eq.{id_relacao}"
+        data = {"titulo": novo_titulo}
+        response = requests.patch(url, headers=self.headers, json=data)
+        return response.status_code in [200, 204]
 
     def carregar_meus_links(self, usuario_id):
         # O PostgREST suporta Joins através de foreign keys:
