@@ -131,11 +131,13 @@ def tela_login():
                                         st.session_state["role_interno"] = user_data["role_interno"]
                                         st.session_state["equipe"] = user_data["equipe"]
                                         st.session_state["usuario_id"] = user_data["id"]
-                                        
+                                        # Flag de senha temporária (bloqueia acesso ao app até trocar)
+                                        st.session_state["senha_temporaria"] = bool(user_data.get("senha_temporaria", False))
+
                                         from core.auth import criar_token_sessao
                                         token = criar_token_sessao(user_data["id"], primeiro_nome, user_data["role_interno"], user_data["equipe"])
                                         st.session_state["_set_auth_cookie"] = token
-                                        
+
                                         st.rerun()
                                 else:
                                     st.error("Usuário ou senha incorretos.")
@@ -194,9 +196,52 @@ if not st.session_state.get("logado", False):
                 st.session_state["equipe"] = dados.get("equipe")
                 st.rerun()
 
+def tela_trocar_senha_obrigatoria():
+    """Tela exibida logo apos o login quando o usuario tem senha_temporaria=True.
+    Bloqueia acesso ao restante do app ate que ele defina uma senha propria."""
+    st.markdown("<h1 style='text-align: center; color: #2C3E50;'>Redefinir senha</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #7F8C8D;'>Sua senha foi redefinida por um administrador. Escolha uma nova senha para continuar.</p>", unsafe_allow_html=True)
+
+    col_v1, col_form, col_v2 = st.columns([1, 2, 1])
+    with col_form:
+        with st.container(border=True):
+            nova = st.text_input("Nova senha", type="password", key="reset_nova", help="Mínimo 6 chars, 1 Maiúscula, 1 Número, 1 Especial")
+            confirma = st.text_input("Confirmar nova senha", type="password", key="reset_confirma")
+
+            if st.button("Salvar nova senha", use_container_width=True, type="primary"):
+                if not nova or not confirma:
+                    st.warning("Preencha os dois campos.")
+                elif nova != confirma:
+                    st.error("As senhas não coincidem.")
+                else:
+                    valido, msg_erro = validar_senha(nova)
+                    if not valido:
+                        st.error(msg_erro)
+                    else:
+                        uid = st.session_state.get("usuario_id")
+                        if db.trocar_senha_propria(uid, nova):
+                            st.session_state["senha_temporaria"] = False
+                            st.success("Senha atualizada. Redirecionando...")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Erro ao atualizar a senha. Tente novamente.")
+
+            if st.button("Sair", use_container_width=True):
+                # Logout limpo mantendo o mesmo padrao do resto do app
+                for k in ["logado", "usuario_id", "auditor_nome", "role_interno", "equipe", "senha_temporaria"]:
+                    st.session_state.pop(k, None)
+                st.session_state["_remove_auth_cookie"] = True
+                st.session_state["_skip_autologin"] = 2
+                _expirar_cookie_sessao()
+                st.rerun()
+
+
 # --- CONTROLE DE ROTAS (RBAC) ---
 if not st.session_state.get("logado", False):
     tela_login()
+elif st.session_state.get("senha_temporaria", False):
+    tela_trocar_senha_obrigatoria()
 else:
     role = st.session_state.get("role_interno", "Contas")
     permissoes = db.carregar_permissoes_modulos()

@@ -8,16 +8,32 @@ class DatabaseManager:
         # Acessa os segredos do Streamlit
         self.supabase_url = st.secrets["supabase"]["url"]
         self.supabase_key = st.secrets["supabase"]["key"]
-        
+        # service_role: chave privilegiada usada apenas em operações admin
+        # (ex: reset de senha). NUNCA deve sair do servidor.
+        self._service_role = st.secrets["supabase"].get("service_role", "")
+
         # Inicializa a criptografia Fernet
         self.fernet = Fernet(st.secrets["seguranca"]["fernet_key"].encode('utf-8'))
-        
+
         # Headers padrão para a API REST do Supabase (PostgREST)
         self.headers = {
             "apikey": self.supabase_key,
             "Authorization": f"Bearer {self.supabase_key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation"
+        }
+
+    def _admin_headers(self):
+        """Headers com service_role para operações que exigem privilégio total.
+        Nunca chamado a partir de código que possa ser acionado por usuário
+        não-Admin — a checagem de role é feita antes por quem invoca."""
+        if not self._service_role:
+            raise RuntimeError("service_role não configurada em st.secrets['supabase']")
+        return {
+            "apikey": self._service_role,
+            "Authorization": f"Bearer {self._service_role}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
         }
 
     def _get(self, endpoint: str) -> list:
@@ -123,6 +139,30 @@ class DatabaseManager:
             "status": status,
             "role_interno": role_interno,
             "equipe": equipe
+        }
+        response = requests.patch(url, headers=self.headers, json=data)
+        return response.status_code in [200, 204]
+
+    def resetar_senha(self, usuario_alvo_id, nova_senha_temp, atuante_role):
+        """Reseta a senha de OUTRO usuário. Só permitido para Admin.
+        Grava a flag `senha_temporaria = true` para forçar troca no proximo login.
+        Usa service_role para escrever ignorando RLS."""
+        if str(atuante_role) != "Admin":
+            return False
+        url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_alvo_id}"
+        data = {
+            "senha_hash": self._hash_senha(nova_senha_temp),
+            "senha_temporaria": True,
+        }
+        response = requests.patch(url, headers=self._admin_headers(), json=data)
+        return response.status_code in [200, 204]
+
+    def trocar_senha_propria(self, usuario_id, nova_senha):
+        """Usuário troca a própria senha. Zera a flag `senha_temporaria`."""
+        url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_id}"
+        data = {
+            "senha_hash": self._hash_senha(nova_senha),
+            "senha_temporaria": False,
         }
         response = requests.patch(url, headers=self.headers, json=data)
         return response.status_code in [200, 204]

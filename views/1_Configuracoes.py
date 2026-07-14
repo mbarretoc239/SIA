@@ -133,6 +133,42 @@ if "️ Aprovação de Equipe" in nomes_abas:
             st.markdown(f"**Usuários Ativos e Bloqueados ({len(ativos) + len(df_users[df_users['status'] == 'Bloqueado'])})**")
             render_glass_table(df_users[df_users["status"] != "Pendente"][["usuario_sigo", "nome_completo", "equipe", "role_interno", "status", "created_at"]])
 
+            st.divider()
+            st.markdown("**Redefinir senha de usuário**")
+            st.caption("Define uma senha temporária. No próximo login, o usuário será obrigado a criar uma senha própria.")
+
+            df_reset = df_users[df_users["status"] != "Pendente"].copy()
+            if df_reset.empty:
+                st.info("Nenhum usuário ativo disponível para reset.")
+            else:
+                opcoes_reset = {
+                    f"{r['nome_completo']} ({r['usuario_sigo']})": r["id"]
+                    for _, r in df_reset.iterrows()
+                }
+                col_u, col_s = st.columns([2, 2])
+                with col_u:
+                    label_alvo = st.selectbox("Usuário", list(opcoes_reset.keys()), key="reset_alvo")
+                with col_s:
+                    senha_temp = st.text_input(
+                        "Senha temporária",
+                        type="password",
+                        key="reset_senha_temp",
+                        help="Mínimo 6 chars, 1 Maiúscula, 1 Número, 1 Especial",
+                    )
+
+                if st.button("Redefinir senha", key="btn_reset_senha", type="primary"):
+                    import re
+                    if not senha_temp:
+                        st.warning("Digite a senha temporária.")
+                    elif len(senha_temp) < 6 or not re.search(r"[A-Z]", senha_temp) or not re.search(r"[0-9]", senha_temp) or not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]", senha_temp):
+                        st.error("A senha temporária não atende aos requisitos mínimos (6 chars, 1 Maiúscula, 1 Número, 1 Especial).")
+                    else:
+                        alvo_id = opcoes_reset[label_alvo]
+                        if db.resetar_senha(alvo_id, senha_temp, atuante_role=role):
+                            st.success(f"Senha redefinida. Passe a senha temporária para o usuário — ele será obrigado a trocá-la no próximo login.")
+                        else:
+                            st.error("Não foi possível redefinir a senha. Verifique se você é Admin e se a service_role está configurada.")
+
 # ==========================================
 # ABA: DEBUG/TESTES (ADMIN)
 # ==========================================
