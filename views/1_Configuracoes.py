@@ -53,26 +53,37 @@ if " Meus Links Úteis" in nomes_abas:
         st.subheader("Meus Links e Atalhos Rápidos")
         st.markdown("Cadastre aqui os links que você mais usa. Eles aparecerão na barra lateral para acesso rápido!")
         
-        with st.form("form_novo_link", clear_on_submit=True):
-            c1, c2, c3 = st.columns([2, 3, 1])
-            with c1:
-                link_titulo = st.text_input("Título do Link", placeholder="Ex: Portal TUSS")
-            with c2:
-                link_url = st.text_input("URL (Endereço)", placeholder="Ex: https://...")
-            with c3:
-                st.write("")
-                st.write("")
-                submeteu = st.form_submit_button("Salvar Link", type="primary", use_container_width=True)
-            
-            if submeteu:
-                if link_titulo and link_url:
-                    if db.inserir_link_util(st.session_state.get("usuario_id", ""), link_titulo, link_url):
-                        st.success("Link salvo com sucesso!")
-                        st.rerun()
+        col_head_1, col_head_2 = st.columns([1, 3])
+        with col_head_1:
+            st.write("")
+            if st.button("➕ Adicionar Novo Link", type="primary", use_container_width=True, key="btn_add_meu_link"):
+                st.session_state["meu_link_em_edicao"] = "NOVO"
+
+        em_edicao = st.session_state.get("meu_link_em_edicao", None)
+        if em_edicao:
+            st.divider()
+            st.subheader("Novo Link")
+            with st.container(border=True):
+                c1, c2 = st.columns([2, 3])
+                with c1:
+                    link_titulo = st.text_input("Título do Link", placeholder="Ex: Portal TUSS", key="ml_titulo")
+                with c2:
+                    link_url = st.text_input("URL (Endereço)", placeholder="Ex: https://...", key="ml_url")
+                
+                b1, b2, b3 = st.columns([2, 2, 8])
+                if b1.button(" Salvar", type="primary", use_container_width=True, key="ml_salvar"):
+                    if link_titulo and link_url:
+                        if db.inserir_link_util(st.session_state.get("usuario_id", ""), link_titulo, link_url):
+                            st.success("Link salvo com sucesso!")
+                            st.session_state["meu_link_em_edicao"] = None
+                            st.rerun()
+                        else:
+                            st.error("Erro ao salvar link.")
                     else:
-                        st.error("Erro ao salvar link.")
-                else:
-                    st.warning("Preencha o título e a URL.")
+                        st.warning("Preencha o título e a URL.")
+                if b2.button("Cancelar", use_container_width=True, key="ml_cancelar"):
+                    st.session_state["meu_link_em_edicao"] = None
+                    st.rerun()
                     
         st.divider()
         st.markdown("### Links Cadastrados")
@@ -88,7 +99,7 @@ if " Meus Links Úteis" in nomes_abas:
                     with col_btn:
                         st.markdown(f"**{link.get('titulo')}** — [{link.get('url')}]({link.get('url')})")
                     with col_del:
-                        if st.button("️ Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
+                        if st.button("Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
                             if db.deletar_link_util(link.get('id')):
                                 st.rerun()
 
@@ -322,26 +333,15 @@ if " Tabelas Base e Glosas" in nomes_abas:
                     "origem": "Customizada"
                 }
                 
-            # Barra de pesquisa
-            with st.form("busca_glosa_form", border=False):
-                col_inp, col_btn = st.columns([6, 1])
-                with col_inp:
-                    busca_val = st.text_input(
-                        " Pesquisar Glosa (Código ou Descrição):",
-                        value=st.session_state.get("busca_glosa", ""),
-                        placeholder="Ex: 438 ou 'procedimento não corresponde'"
-                    )
-                with col_btn:
-                    st.write(""); st.write("")
-                    submitted = st.form_submit_button(" Buscar", use_container_width=True, type="primary")
-                if submitted:
-                    st.session_state["busca_glosa"] = busca_val
-
-            busca = st.session_state.get("busca_glosa", "")
-
-            if st.button(" Adicionar Nova Glosa", type="secondary"):
-                st.session_state["glosa_em_edicao"] = "NOVA"
-                st.rerun()
+            # Controles Superiores
+            col_head_1, col_head_2 = st.columns([1, 2])
+            with col_head_1:
+                st.write("")
+                if st.button("➕ Adicionar Nova Glosa", type="primary", use_container_width=True):
+                    st.session_state["glosa_em_edicao"] = "NOVA"
+                    st.rerun()
+            with col_head_2:
+                busca = st.text_input("🔍 Pesquisar (Código ou Descrição):", placeholder="Ex: 438 ou 'procedimento não corresponde'")
                     
             # Filtro
             resultados = list(dict_glosas.values())
@@ -656,10 +656,10 @@ if " Textos Padrões (Motor)" in nomes_abas:
 
                     # Coluna de botões (Editar e Excluir)
                     b_edit, b_del = c4.columns([1, 1])
-                    if b_edit.button("✏️ Editar", key=f"edit_txt_{t['id']}", use_container_width=True):
+                    if b_edit.button("Editar", key=f"edit_txt_{t['id']}", use_container_width=True):
                         st.session_state["texto_em_edicao"] = t['id']
                         st.rerun()
-                    if b_del.button("🗑️ Excluir", key=f"del_txt_{t['id']}", use_container_width=True):
+                    if b_del.button("Excluir", key=f"del_txt_{t['id']}", use_container_width=True):
                         if db.deletar_texto_prestador(t['id']):
                             st.rerun()
 
@@ -716,59 +716,80 @@ if " Links Padrão (Home)" in nomes_abas:
         st.subheader("Links institucionais exibidos na Home")
         st.caption("Todos os usuários logados enxergam esses links no Painel Principal, agrupados por categoria.")
 
-        # Formulário de novo link
-        with st.form("form_novo_link_padrao", clear_on_submit=True):
-            fc1, fc2, fc3, fc4 = st.columns([3, 4, 2, 1])
-            with fc1:
-                lp_titulo = st.text_input("Título", placeholder="Ex: SharePoint Auditoria")
-            with fc2:
-                lp_url = st.text_input("URL", placeholder="https://...")
-            with fc3:
-                lp_categoria = st.text_input("Categoria", value="Geral", help="Ex: Portais, Guias, Contatos")
-            with fc4:
-                lp_ordem = st.number_input("Ordem", min_value=1, value=100, step=10, help="Menor aparece antes")
-            submeteu_lp = st.form_submit_button("Adicionar", type="primary", use_container_width=True)
+        col_head_1, col_head_2 = st.columns([1, 3])
+        with col_head_1:
+            st.write("")
+            if st.button("➕ Adicionar Novo Link", type="primary", use_container_width=True, key="btn_add_link_padrao"):
+                st.session_state["link_padrao_em_edicao"] = "NOVO"
+                
+        todos_links = db.listar_links_padrao(incluir_inativos=True)
 
-            if submeteu_lp:
-                if not lp_titulo or not lp_url:
-                    st.warning("Título e URL são obrigatórios.")
-                elif not lp_url.startswith(("http://", "https://")):
-                    st.error("URL deve começar com http:// ou https://.")
-                else:
-                    if db.inserir_link_padrao(lp_titulo, lp_url, lp_categoria, lp_ordem, atuante_role=role):
-                        st.success("Link adicionado!")
-                        st.rerun()
+        em_edicao = st.session_state.get("link_padrao_em_edicao", None)
+        if em_edicao:
+            st.divider()
+            st.subheader("Editor de Link" if em_edicao != "NOVO" else "Novo Link")
+            with st.container(border=True):
+                l_alvo = {"id": None, "titulo": "", "url": "", "categoria": "Geral", "ordem": 100, "ativo": True}
+                if em_edicao != "NOVO":
+                    for l in todos_links:
+                        if l['id'] == em_edicao:
+                            l_alvo = l
+                            break
+                            
+                fc1, fc2, fc3, fc4 = st.columns([3, 4, 2, 1])
+                with fc1:
+                    lp_titulo = st.text_input("Título", value=l_alvo.get("titulo", ""), placeholder="Ex: SharePoint Auditoria")
+                with fc2:
+                    lp_url = st.text_input("URL", value=l_alvo.get("url", ""), placeholder="https://...")
+                with fc3:
+                    lp_categoria = st.text_input("Categoria", value=l_alvo.get("categoria", "Geral"))
+                with fc4:
+                    lp_ordem = st.number_input("Ordem", min_value=1, value=int(l_alvo.get("ordem", 100)), step=10)
+                lp_ativo = st.checkbox("Ativo", value=bool(l_alvo.get("ativo", True)))
+                
+                b1, b2, b3 = st.columns([2, 2, 8])
+                if b1.button(" Salvar", type="primary", use_container_width=True, key="btn_salvar_lp"):
+                    if not lp_titulo or not lp_url:
+                        st.warning("Título e URL são obrigatórios.")
+                    elif not lp_url.startswith(("http://", "https://")):
+                        st.error("URL deve começar com http:// ou https://.")
                     else:
-                        st.error("Não foi possível adicionar. Verifique se você é Admin/Gestor e se a service_role está configurada.")
+                        if em_edicao == "NOVO":
+                            if db.inserir_link_padrao(lp_titulo, lp_url, lp_categoria, lp_ordem, atuante_role=role):
+                                st.success("Link adicionado!")
+                                st.session_state["link_padrao_em_edicao"] = None
+                                st.rerun()
+                            else:
+                                st.error("Erro ao salvar.")
+                        else:
+                            if db.atualizar_link_padrao(l_alvo["id"], lp_titulo, lp_url, lp_categoria, lp_ordem, lp_ativo, atuante_role=role):
+                                st.success("Link atualizado!")
+                                st.session_state["link_padrao_em_edicao"] = None
+                                st.rerun()
+                            else:
+                                st.error("Erro ao atualizar.")
+                if b2.button("Cancelar", use_container_width=True, key="btn_canc_lp"):
+                    st.session_state["link_padrao_em_edicao"] = None
+                    st.rerun()
 
         st.divider()
         st.markdown("**Links cadastrados**")
-        todos_links = db.listar_links_padrao(incluir_inativos=True)
         if not todos_links:
             st.info("Nenhum link cadastrado ainda.")
         else:
             for l in todos_links:
                 with st.container(border=True):
-                    lc1, lc2, lc3, lc4, lc5 = st.columns([3, 4, 2, 1, 1])
-                    with lc1:
-                        novo_tit = st.text_input("Título", value=l.get("titulo", ""), key=f"lp_tit_{l['id']}")
-                    with lc2:
-                        nova_url = st.text_input("URL", value=l.get("url", ""), key=f"lp_url_{l['id']}")
-                    with lc3:
-                        nova_cat = st.text_input("Categoria", value=l.get("categoria", "Geral"), key=f"lp_cat_{l['id']}")
-                    with lc4:
-                        nova_ord = st.number_input("Ordem", value=int(l.get("ordem", 100)), key=f"lp_ord_{l['id']}", step=10)
-                    with lc5:
-                        novo_ativo = st.checkbox("Ativo", value=bool(l.get("ativo", True)), key=f"lp_ativo_{l['id']}")
-
-                    b_save, b_del = st.columns([1, 1])
-                    if b_save.button("Salvar", key=f"lp_save_{l['id']}", type="primary"):
-                        if db.atualizar_link_padrao(l["id"], novo_tit, nova_url, nova_cat, nova_ord, novo_ativo, atuante_role=role):
-                            st.success("Salvo.")
-                            st.rerun()
-                        else:
-                            st.error("Erro ao salvar.")
-                    if b_del.button("Excluir", key=f"lp_del_{l['id']}"):
+                    lc1, lc2, lc3, lc4 = st.columns([4, 3, 2, 3])
+                    status = "🟢 Ativo" if l.get('ativo', True) else "🔴 Inativo"
+                    lc1.markdown(f"**{l.get('titulo', 'Sem Título')}**")
+                    lc2.markdown(f"[{l.get('url', '')}]({l.get('url', '')})")
+                    lc3.markdown(f"{l.get('categoria', 'Geral')} ({l.get('ordem', 100)}) | {status}")
+                    
+                    b_edit, b_del = lc4.columns([1, 1])
+                    if b_edit.button("Editar", key=f"lp_edit_{l['id']}", use_container_width=True):
+                        st.session_state["link_padrao_em_edicao"] = l['id']
+                        st.rerun()
+                    if b_del.button("Excluir", key=f"lp_del_{l['id']}", use_container_width=True):
                         if db.deletar_link_padrao(l["id"], atuante_role=role):
                             st.rerun()
                         else:

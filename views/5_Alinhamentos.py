@@ -136,24 +136,24 @@ with aba_historico:
 
 if pode_gerenciar:
     with aba_gerenciar:
-        col_busca2, col_cat2, col_ano2, col_add = st.columns([3, 1.3, 1, 1.4])
-
         todos_base = db.carregar_alinhamentos()  # exclui excluídos por padrão
         anos_disponiveis2 = sorted({
             pd.to_datetime(a["created_at"]).year for a in todos_base if a.get("created_at")
         }, reverse=True)
 
+        col_add, col_busca2, col_cat2, col_ano2 = st.columns([1.5, 3, 1.3, 1])
+
+        with col_add:
+            st.write("")
+            if st.button("➕ Novo Alinhamento", type="primary", use_container_width=True, key="btn_novo_alinh"):
+                st.session_state["alinhamento_em_edicao"] = "NOVO"
+                st.rerun()
         with col_busca2:
             busca2 = st.text_input("Pesquisar", placeholder="Ex: biometria, glosa 480...", key="gerenciar_busca")
         with col_cat2:
             categoria_filtro2 = st.selectbox("Categoria", ["Todas"] + CATEGORIAS, key="gerenciar_categoria")
         with col_ano2:
             ano_filtro2 = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis2], key="gerenciar_ano")
-        with col_add:
-            st.write("")
-            if st.button("+ Novo Alinhamento", type="primary", use_container_width=True, key="btn_novo_alinh"):
-                st.session_state["alinhamento_em_edicao"] = "NOVO"
-                st.rerun()
 
         # Carregados uma vez, usados tanto no formulário (ciência detalhada do
         # item selecionado) quanto na lista (mini indicador por linha).
@@ -278,7 +278,7 @@ if pode_gerenciar:
                 confirmaram_n = len([u for u in obrigados if u["id"] in leituras_item])
                 ciencia_label = f" · {confirmaram_n}/{len(obrigados)} cientes"
 
-            col_info, col_status, col_edit, col_del = st.columns([5, 1.8, 0.6, 0.6])
+            col_info, col_status, col_edit, col_del = st.columns([4, 1.8, 1, 1])
             with col_info:
                 titulo_txt = a.get("titulo", "") if ativo else f"~~{a.get('titulo', '')}~~"
                 st.markdown(f"**{titulo_txt}**")
@@ -304,11 +304,11 @@ if pode_gerenciar:
                         else:
                             st.error("Erro ao reativar.")
             with col_edit:
-                if st.button("✏️", key=f"edit_alinh_{aid}", help="Editar", use_container_width=True):
+                if st.button("Editar", key=f"edit_alinh_{aid}", use_container_width=True):
                     st.session_state["alinhamento_em_edicao"] = aid
                     st.rerun()
             with col_del:
-                with st.popover("🗑️", use_container_width=True, help="Excluir"):
+                with st.popover("Excluir", use_container_width=True):
                     st.markdown(f"Excluir **{a.get('titulo', '')}**?")
                     st.caption("O alinhamento vai para a área \"Excluídos\" — nada é apagado de fato.")
                     motivo_excl = st.text_area("Motivo da exclusão (obrigatório)", key=f"motivo_excl_{aid}", height=80)
