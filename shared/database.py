@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import hashlib
+import bcrypt
 from cryptography.fernet import Fernet
 
 class DatabaseManager:
@@ -61,10 +62,27 @@ class DatabaseManager:
         except Exception:
             return "[ERRO: DADO CORROMPIDO OU CHAVE INVÁLIDA]"
             
+    _SHA256_SALT_LEGADO = "SIA_SALT_V5_A7B2!"
+
+    def _hash_sha256_legado(self, senha: str) -> str:
+        """Hash antigo (sha256 + salt estatico). Mantido APENAS para validar
+        senhas de usuarios que ainda nao foram remigrados. Nao usar para novos
+        cadastros nem para escrever no banco."""
+        return hashlib.sha256((senha + self._SHA256_SALT_LEGADO).encode('utf-8')).hexdigest()
+
     def _hash_senha(self, senha: str) -> str:
-        # Usa um salt estático simples embutido no código
-        salt = "SIA_SALT_V5_A7B2!"
-        return hashlib.sha256((senha + salt).encode('utf-8')).hexdigest()
+        """Gera hash bcrypt para uso atual (novos cadastros / reset / troca)."""
+        return bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def _verificar_senha(self, senha_plain: str, senha_hash: str, algo: str) -> bool:
+        """Valida senha respeitando o algoritmo com que ela foi gravada."""
+        if algo == "bcrypt":
+            try:
+                return bcrypt.checkpw(senha_plain.encode('utf-8'), senha_hash.encode('utf-8'))
+            except Exception:
+                return False
+        # Fallback: sha256 legado
+        return self._hash_sha256_legado(senha_plain) == senha_hash
 
     # --- Autenticação e Usuários (SISTEMA DE LOGIN SIGO) ---
     def criar_usuario(self, usuario_sigo, nome_completo, senha, equipe):
@@ -84,6 +102,7 @@ class DatabaseManager:
             "usuario_sigo": usuario_sigo,
             "nome_completo": nome_completo,
             "senha_hash": self._hash_senha(senha),
+            "senha_algo": "bcrypt",
             "equipe": equipe,
             "role_interno": role_map.get(equipe, "Contas"),
             "status": "Pendente"
@@ -117,14 +136,38 @@ class DatabaseManager:
     def autenticar_usuario(self, usuario_sigo, senha):
         url = f"{self.supabase_url}/rest/v1/usuarios?usuario_sigo=eq.{usuario_sigo}&select=*"
         response = requests.get(url, headers=self.headers)
-        
-        if response.status_code == 200:
-            usuarios = response.json()
-            if usuarios:
-                user = usuarios[0]
-                if user["senha_hash"] == self._hash_senha(senha):
-                    return user # Retorna os dados do usuário se a senha bater
-        return None
+
+        if response.status_code != 200:
+            return None
+        usuarios = response.json()
+        if not usuarios:
+            return None
+        user = usuarios[0]
+
+        algo = user.get("senha_algo") or "sha256_v5"
+        if not self._verificar_senha(senha, user["senha_hash"], algo):
+            return None
+
+        # Rehash-on-login: se a senha do usuario ainda esta com o hash antigo,
+        # regravamos com bcrypt agora (transparente). A senha em texto claro so
+        # existe aqui neste request, ja validada.
+        if algo != "bcrypt":
+            try:
+                novo_hash = self._hash_senha(senha)
+                patch_url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{user['id']}"
+                requests.patch(
+                    patch_url,
+                    headers=self.headers,
+                    json={"senha_hash": novo_hash, "senha_algo": "bcrypt"},
+                )
+                user["senha_hash"] = novo_hash
+                user["senha_algo"] = "bcrypt"
+            except Exception:
+                # Se o rehash falhar, o login prossegue normalmente com o hash
+                # antigo — apenas nao migramos desta vez.
+                pass
+
+        return user
 
     def listar_usuarios(self):
         url = f"{self.supabase_url}/rest/v1/usuarios?select=*"
@@ -152,6 +195,7 @@ class DatabaseManager:
         url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_alvo_id}"
         data = {
             "senha_hash": self._hash_senha(nova_senha_temp),
+            "senha_algo": "bcrypt",
             "senha_temporaria": True,
         }
         response = requests.patch(url, headers=self._admin_headers(), json=data)
@@ -162,6 +206,7 @@ class DatabaseManager:
         url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_id}"
         data = {
             "senha_hash": self._hash_senha(nova_senha),
+            "senha_algo": "bcrypt",
             "senha_temporaria": False,
         }
         response = requests.patch(url, headers=self.headers, json=data)
