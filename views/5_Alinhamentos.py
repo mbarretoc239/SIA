@@ -23,7 +23,7 @@ usuario_id = st.session_state.get("usuario_id")
 CATEGORIAS = ["Geral", "Técnico", "Administrativo", "CAP"]
 NIVEIS = ["Contas", "Auditor", "CISO", "Gestor"]
 
-st.title(" Alinhamentos")
+st.title("Alinhamentos")
 st.markdown("Histórico de alinhamentos internos.")
 
 pode_gerenciar = role in ["Gestor", "Admin"]
@@ -43,7 +43,7 @@ def _status_html(ativo):
 def _titulo_html(titulo, ativo):
     if ativo:
         return str(titulo)
-    return f"❌ {titulo} (INATIVO)"
+    return f"{titulo} (INATIVO)"
 
 
 def _conteudo_html(conteudo):
@@ -145,7 +145,7 @@ if pode_gerenciar:
 
         with col_add:
             st.write("")
-            if st.button("➕ Novo Alinhamento", type="primary", use_container_width=True, key="btn_novo_alinh"):
+            if st.button("Novo Alinhamento", type="primary", use_container_width=True, key="btn_novo_alinh"):
                 st.session_state["alinhamento_em_edicao"] = "NOVO"
                 st.rerun()
         with col_busca2:
@@ -237,7 +237,7 @@ if pode_gerenciar:
                             df_ciencia = pd.DataFrame([
                                 {
                                     "Usuário": u["nome_completo"],
-                                    "Status": "✅ Confirmou" if u["id"] in leituras_item else "⏳ Pendente",
+                                    "Status": "Confirmou" if u["id"] in leituras_item else "Pendente",
                                     "Lido em": pd.to_datetime(leituras_item[u["id"]]).strftime("%d/%m/%Y %H:%M") if u["id"] in leituras_item else "—",
                                 }
                                 for u in pendentes_ciencia + confirmaram
@@ -347,7 +347,7 @@ if pode_gerenciar:
                     st.caption(f"Motivo: {a.get('motivo_exclusao') or '—'}")
                 with col_act:
                     st.write("")
-                    if st.button("↩️ Restaurar", key=f"restaurar_{aid}", use_container_width=True):
+                    if st.button("Restaurar", key=f"restaurar_{aid}", use_container_width=True):
                         if db.restaurar_alinhamento(aid):
                             st.success("Restaurado.")
                             st.rerun()

@@ -591,6 +591,10 @@ class DatabaseManager:
 
     # --- Operações de Banco (Permissões de Módulos por Role) ---
     def carregar_permissoes_modulos(self):
+        # permissoes_modulos tem RLS habilitado sem nenhuma policy — só
+        # service_role (que ignora RLS) consegue ler. Isso é intencional
+        # (ver commit "uso de service_role para RLS"); não trocar para
+        # self.headers, a chave anon simplesmente não teria acesso.
         url = f"{self.supabase_url}/rest/v1/permissoes_modulos?select=*"
         response = requests.get(url, headers=self._admin_headers())
         if response.status_code == 200:

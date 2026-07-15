@@ -5,7 +5,7 @@ import streamlit as st
 
 from shared.database import DatabaseManager
 
-st.title(" Início")
+st.title("Início")
 
 if "db" not in st.session_state:
     st.session_state.db = DatabaseManager()
@@ -23,7 +23,7 @@ else:
     with st.container(border=True):
         titulo = ultimo.get("titulo", "")
         if not ultimo.get("ativo", True):
-            titulo = f"❌ {titulo} (INATIVO)"
+            titulo = f"{titulo} (INATIVO)"
         st.markdown(f"**{titulo}**")
 
         conteudo = str(ultimo.get("conteudo") or "")
@@ -39,7 +39,7 @@ else:
 
 # Links úteis (institucionais) - agrupados por categoria
 links_padrao = db.listar_links_padrao()
-with st.expander(" Links úteis", expanded=False):
+with st.expander("Links úteis", expanded=False):
     if not links_padrao:
         st.caption("Nenhum link cadastrado ainda.")
     else:

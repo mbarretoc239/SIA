@@ -89,7 +89,7 @@ def limpar_banco_supabase(meses=6):
         raise ValueError("Sem permissão de exclusão. Adicione uma política de DELETE para a role anon.")
     response.raise_for_status()
 
-st.title(" Gerador Offline - Relatório 5302")
+st.title("Gerador Offline - Relatório 5302")
 st.markdown("Faça o upload do relatório CSV ou PDF previamente salvo no seu computador")
 
 pdf_file = st.file_uploader("Selecione o arquivo", type=["pdf", "csv"])
@@ -305,15 +305,15 @@ if pdf_file is not None:
 
                 with col_btn_save:
                     if "Nenhuma glosa" not in texto_gerado:
-                        if st.button(" Salvar Análise na nuvem", use_container_width=True):
+                        if st.button("Salvar Análise na nuvem", use_container_width=True):
                             with st.spinner("Salvando na nuvem..."):
                                 try:
                                     salvar_no_supabase(st.session_state.get("pdf_name", "Desconhecido"), texto_editado, df_final, meta)
-                                    st.toast("✅ Análise salva com sucesso no banco de dados!", icon="☁️")
+                                    st.toast("Análise salva com sucesso no banco de dados!")
                                 except Exception as e:
                                     st.error(f"Erro ao salvar no banco. A tabela 'analises_auditoria' foi criada no Supabase? Detalhe: {e}")
                 
-                st.markdown("###  Texto de orientação ao Prestador")
+                st.markdown("### Texto de orientação ao Prestador")
                 if "Nenhuma glosa" not in texto_gerado:
                     glosas_presentes = set(df_final['Glosa'].unique())
 
@@ -380,7 +380,7 @@ if pdf_file is not None:
                     else:
                         st.info("Nenhum texto adicional mapeado para as glosas detectadas.")
             else:
-                st.info(" Selecione os filtros ao lado e clique em Gerar Texto.")
+                st.info("Selecione os filtros ao lado e clique em Gerar Texto.")
             
     else:
         st.warning("Nenhuma glosa identificada neste documento com os padrões atuais.")

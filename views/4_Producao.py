@@ -23,7 +23,7 @@ if not tem_acesso_modulo(_permissoes, _role, "producao"):
     st.error("Você não tem permissão para acessar este módulo.")
     st.stop()
 
-st.title(" Análise de Produção")
+st.title("Análise de Produção")
 st.markdown("Envie um ou mais demonstrativos pdf para contar e ranquear os procedimentos mais realizados pelo prestador.")
 
 # Funções de Backend adaptadas para in-memory (BytesIO)
@@ -147,7 +147,7 @@ if uploaded_files:
                 st.success("Análise concluída com sucesso!")
                 
                 # Métricas principais
-                st.markdown("###  Visão Geral")
+                st.markdown("### Visão Geral")
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Prestador", dados["prestador"][:20] + "..." if len(dados["prestador"]) > 20 else dados["prestador"])
                 c2.metric("Total de PDFs", dados["qtd_pdfs"])
@@ -171,7 +171,7 @@ if uploaded_files:
                 col_lista, col_resumo = st.columns([1.2, 1.8])
                 
                 with col_lista:
-                    st.markdown("###  Top 10 Produzidos")
+                    st.markdown("### Top 10 Produzidos")
                     for pos, (procedimento, qtd) in enumerate(dados["ranking"][:10], 1):
                         pct = (qtd / dados["total_linhas"]) * 100
                         valor = dados["valores"].get(procedimento, 0.0)
@@ -198,7 +198,7 @@ if uploaded_files:
                 texto_resumo = "\n".join(linhas_resumo)
                 
                 with col_resumo:
-                    st.markdown("###  Resumo Copiável")
+                    st.markdown("### Resumo Copiável")
                     st.text_area("Texto para anexar:", texto_resumo, height=400)
                     
                     df_csv = pd.DataFrame(ranking_para_csv)

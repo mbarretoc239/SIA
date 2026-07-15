@@ -51,7 +51,7 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
     st.caption(f"Categoria: {alinhamento.get('categoria', 'Geral')}")
     
     if is_inativacao:
-        st.error("⚠️ **AVISO DE REVOGAÇÃO DE REGRA**")
+        st.error("**AVISO DE REVOGAÇÃO DE REGRA**")
         st.markdown(f"~~{alinhamento['titulo']}~~")
         st.markdown(alinhamento["conteudo"])
         st.warning(f"**Motivo da Inativação:**\n{alinhamento.get('justificativa_inativacao', 'Sem justificativa fornecida.')}")
@@ -167,7 +167,7 @@ def tela_login():
                             with st.spinner("Registrando..."):
                                 # No futuro, o ideal é checar se usuario_sigo já existe antes do insert
                                 if db.criar_usuario(novo_usr, novo_nome, nova_senha, nova_equipe):
-                                    st.success(" Aguarde aprovação do seu cadastro. Em breve será feito contato.")
+                                    st.success("Aguarde aprovação do seu cadastro. Em breve será feito contato.")
                                 else:
                                     st.error("Erro ao cadastrar. O usuário SIGO já existe?")
 
@@ -299,7 +299,7 @@ else:
     st.sidebar.divider()
     
     # Expansível de Links Úteis (Disponível para todos)
-    with st.sidebar.expander(" Links", expanded=False):
+    with st.sidebar.expander("Links", expanded=False):
         meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
         
         if meus_links:
