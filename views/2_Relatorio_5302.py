@@ -252,8 +252,13 @@ if pdf_file is not None:
                     f"texto_final_v_{pdf_file.name}_"
                     f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}"
                 )
+                # Label centralizado numa variável: o botão "Copiar Texto" busca
+                # o textarea por este mesmo texto exato no DOM. Definir os dois
+                # a partir da mesma variável evita que uma edição futura no
+                # rótulo (sem tocar o JS) quebre a busca silenciosamente.
+                LABEL_TEXTO_FINAL = "Texto Final:"
                 texto_editado = st.text_area(
-                    "Texto Final:",
+                    LABEL_TEXTO_FINAL,
                     texto_pronto,
                     height=180,
                     key=key_texto_final,
@@ -264,34 +269,36 @@ if pdf_file is not None:
                     # Botão de Copiar via Componente HTML — lê o valor ATUAL do
                     # textarea via window.parent.document (em vez de embutir o
                     # texto no HTML), assim uma edição feita logo antes do clique
-                    # já é copiada, mesmo sem rerun.
+                    # já é copiada, mesmo sem rerun (clicar num componente de
+                    # outro iframe tira o foco do textarea, mas o rerun que isso
+                    # dispara é assíncrono e pode não terminar antes do clique).
                     import streamlit.components.v1 as components
-                    components.html("""
+                    label_js = LABEL_TEXTO_FINAL.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                    components.html(f"""
                     <script>
-                    function copyText() {
+                    function copyText() {{
                         let texto = '';
-                        try {
+                        try {{
                             const doc = window.parent.document;
                             const textareas = doc.querySelectorAll('textarea');
-                            for (const ta of textareas) {
-                                const lbl = (ta.getAttribute('aria-label') || '').toLowerCase();
-                                if (lbl.includes('pronto para copiar')) {
+                            for (const ta of textareas) {{
+                                if ((ta.getAttribute('aria-label') || '') === `{label_js}`) {{
                                     texto = ta.value;
                                     break;
-                                }
-                            }
-                        } catch (e) { texto = ''; }
-                        if (!texto) {
+                                }}
+                            }}
+                        }} catch (e) {{ texto = ''; }}
+                        if (!texto) {{
                             document.getElementById('btn_copiar').innerText = ' Erro ao copiar';
                             return;
-                        }
-                        navigator.clipboard.writeText(texto).then(function() {
+                        }}
+                        navigator.clipboard.writeText(texto).then(function() {{
                             document.getElementById('btn_copiar').innerText = ' Copiado!';
-                            setTimeout(function() {
+                            setTimeout(function() {{
                                 document.getElementById('btn_copiar').innerText = ' Copiar Texto';
-                            }, 2000);
-                        });
-                    }
+                            }}, 2000);
+                        }});
+                    }}
                     </script>
                     <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Texto</button>
                     """, height=65)
