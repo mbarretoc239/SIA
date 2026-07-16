@@ -146,7 +146,7 @@ if pode_gerenciar:
             pd.to_datetime(a["created_at"]).year for a in todos_base if a.get("created_at")
         }, reverse=True)
 
-        col_add, col_busca2, col_cat2, col_ano2 = st.columns([1.5, 3, 1.3, 1])
+        col_add, col_busca2, col_cat2, col_equipe2, col_ano2 = st.columns([1.3, 2.4, 1.1, 1.1, 0.9])
 
         with col_add:
             st.write("")
@@ -157,6 +157,8 @@ if pode_gerenciar:
             busca2 = st.text_input("Pesquisar", placeholder="Ex: biometria, glosa 480...", key="gerenciar_busca")
         with col_cat2:
             categoria_filtro2 = st.selectbox("Categoria", ["Todas"] + CATEGORIAS, key="gerenciar_categoria")
+        with col_equipe2:
+            equipe_filtro2 = st.selectbox("Equipe", ["Todas"] + NIVEIS, key="gerenciar_equipe")
         with col_ano2:
             ano_filtro2 = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis2], key="gerenciar_ano")
 
@@ -267,6 +269,8 @@ if pode_gerenciar:
         todos = todos_base
         if categoria_filtro2 != "Todas":
             todos = [a for a in todos if a.get("categoria") == categoria_filtro2]
+        if equipe_filtro2 != "Todas":
+            todos = [a for a in todos if a.get("nivel_minimo") == equipe_filtro2]
         if ano_filtro2 != "Todos":
             todos = [a for a in todos if str(pd.to_datetime(a["created_at"]).year) == ano_filtro2]
         if busca2:
