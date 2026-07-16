@@ -119,6 +119,7 @@ with aba_historico:
                             "Título": _titulo_html(a.get("titulo", ""), a.get("ativo", True)),
                             "Deliberação": _conteudo_html(a.get("conteudo", "")),
                             "Categoria": a.get("categoria", "Geral"),
+                            "Anexo": a.get("anexo_url") or "",
                         }
                         for a in itens_nivel
                     ])
@@ -126,10 +127,14 @@ with aba_historico:
                         df_visual,
                         use_container_width=True,
                         hide_index=True,
+                        column_order=["Status", "Criado em", "Categoria", "Título", "Deliberação", "Anexo"],
                         column_config={
-                            "Criado em": st.column_config.DateColumn("Criado em", format="DD/MM/YYYY"),
+                            "Status": st.column_config.TextColumn("Status", width="small"),
+                            "Criado em": st.column_config.DateColumn("Criado em", format="DD/MM/YYYY", width="small"),
+                            "Categoria": st.column_config.TextColumn("Categoria", width="small"),
                             "Título": st.column_config.TextColumn("Título", width="medium"),
                             "Deliberação": st.column_config.TextColumn("Deliberação", width="large"),
+                            "Anexo": st.column_config.LinkColumn("Anexo", display_text="Abrir", width="small"),
                         }
                     )
 
@@ -173,7 +178,7 @@ if pode_gerenciar:
             st.subheader("Editar Alinhamento" if em_edicao != "NOVO" else "Novo Alinhamento")
 
             with st.container(border=True):
-                a_alvo = {"id": None, "titulo": "", "conteudo": "", "categoria": CATEGORIAS[0], "nivel_minimo": NIVEIS[1], "created_at": None}
+                a_alvo = {"id": None, "titulo": "", "conteudo": "", "categoria": CATEGORIAS[0], "nivel_minimo": NIVEIS[1], "created_at": None, "anexo_url": ""}
                 if em_edicao != "NOVO":
                     for a in todos_base:
                         if a["id"] == em_edicao:
@@ -182,6 +187,12 @@ if pode_gerenciar:
 
                 e_titulo = st.text_input("Título / Assunto", value=a_alvo.get("titulo", ""), key="edit_alinh_titulo")
                 e_conteudo = st.text_area("Conteúdo / Deliberação", value=a_alvo.get("conteudo", ""), height=140, key="edit_alinh_conteudo")
+                e_anexo = st.text_input(
+                    "Link de anexo (opcional)",
+                    value=a_alvo.get("anexo_url") or "",
+                    key="edit_alinh_anexo",
+                    placeholder="https://... (planilha, documento, etc.)",
+                )
 
                 col_c1, col_c2, col_c3 = st.columns(3)
                 with col_c1:
@@ -199,10 +210,13 @@ if pode_gerenciar:
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
                     if st.button("Salvar", type="primary", use_container_width=True, key="btn_salvar_alinh"):
+                        anexo_invalido = e_anexo.strip() and not e_anexo.strip().startswith(("http://", "https://"))
                         if not e_titulo or not e_conteudo:
                             st.warning("Preencha título e conteúdo.")
+                        elif anexo_invalido:
+                            st.warning("O link de anexo deve começar com http:// ou https://.")
                         elif em_edicao == "NOVO":
-                            if db.inserir_alinhamento(e_titulo, e_conteudo, e_categoria, e_nivel, usuario_id):
+                            if db.inserir_alinhamento(e_titulo, e_conteudo, e_categoria, e_nivel, usuario_id, e_anexo):
                                 st.success("Alinhamento publicado!")
                                 st.session_state["alinhamento_em_edicao"] = None
                                 st.rerun()
@@ -211,7 +225,7 @@ if pode_gerenciar:
                         else:
                             data_original = pd.to_datetime(a_alvo["created_at"]).date() if a_alvo.get("created_at") else None
                             nova_data = e_data.strftime("%Y-%m-%d") if (e_data and e_data != data_original) else None
-                            if db.atualizar_alinhamento(em_edicao, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data):
+                            if db.atualizar_alinhamento(em_edicao, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data, e_anexo):
                                 st.success("Alinhamento atualizado!")
                                 st.session_state["alinhamento_em_edicao"] = None
                                 st.rerun()
@@ -285,6 +299,8 @@ if pode_gerenciar:
                 st.caption(f"{data_fmt} · {a.get('categoria', 'Geral')} · {a.get('nivel_minimo', 'Auditor')}{ciencia_label}")
                 with st.expander("Ler texto completo"):
                     st.markdown(_conteudo_html(a.get("conteudo", "")))
+                    if a.get("anexo_url"):
+                        st.link_button("Abrir anexo", a["anexo_url"])
             with col_status:
                 if ativo:
                     st.caption("🟢 Ativo")

@@ -541,7 +541,7 @@ class DatabaseManager:
 
         return pendentes
 
-    def inserir_alinhamento(self, titulo, conteudo, categoria, nivel_minimo, autor_id):
+    def inserir_alinhamento(self, titulo, conteudo, categoria, nivel_minimo, autor_id, anexo_url=""):
         url = f"{self.supabase_url}/rest/v1/alinhamentos"
         data = {
             "titulo": titulo,
@@ -549,6 +549,7 @@ class DatabaseManager:
             "categoria": categoria,
             "nivel_minimo": nivel_minimo,
             "autor_id": autor_id,
+            "anexo_url": anexo_url.strip() if anexo_url else None,
         }
         response = requests.post(url, headers=self.headers, json=data)
         if response.status_code not in [200, 201]:
@@ -561,13 +562,14 @@ class DatabaseManager:
             pass
         return True
 
-    def atualizar_alinhamento(self, alinhamento_id, titulo, conteudo, categoria, nivel_minimo, created_at=None):
+    def atualizar_alinhamento(self, alinhamento_id, titulo, conteudo, categoria, nivel_minimo, created_at=None, anexo_url=""):
         url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
         data = {
             "titulo": titulo,
             "conteudo": conteudo,
             "categoria": categoria,
             "nivel_minimo": nivel_minimo,
+            "anexo_url": anexo_url.strip() if anexo_url else None,
         }
         if created_at:
             data["created_at"] = created_at

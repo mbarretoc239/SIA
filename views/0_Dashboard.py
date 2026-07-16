@@ -35,6 +35,9 @@ else:
         data_criacao = pd.to_datetime(ultimo["created_at"]).strftime("%d/%m/%Y") if ultimo.get("created_at") else ""
         st.caption(f"{ultimo.get('categoria', 'Geral')} · Direcionado a {ultimo.get('nivel_minimo', 'Auditor')} · {data_criacao}")
 
+        if ultimo.get("anexo_url"):
+            st.link_button("Abrir anexo", ultimo["anexo_url"])
+
     st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
 
 # Links úteis (institucionais) - agrupados por categoria
