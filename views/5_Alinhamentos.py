@@ -127,7 +127,7 @@ with aba_historico:
                         df_visual,
                         use_container_width=True,
                         hide_index=True,
-                        column_order=["Status", "Criado em", "Categoria", "Título", "Deliberação", "Anexo"],
+                        column_order=["Status", "Criado em", "Título", "Deliberação", "Anexo", "Categoria"],
                         column_config={
                             "Status": st.column_config.TextColumn("Status", width="small"),
                             "Criado em": st.column_config.DateColumn("Criado em", format="DD/MM/YYYY", width="small"),
