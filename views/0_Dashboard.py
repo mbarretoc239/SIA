@@ -30,6 +30,11 @@ else:
         m = re.match(r"^_(.*?)_\n\n(.*)$", conteudo, re.DOTALL)
         if m:
             conteudo = m.group(2)
+        # Markdown só quebra linha visualmente com \n\n ou duas espaços antes
+        # do \n — uma quebra simples (comum ao digitar várias linhas no campo)
+        # vira espaço normal. Converte em quebra "dura" para preservar o
+        # formato original do texto.
+        conteudo = re.sub(r"(?<!\n)\n(?!\n)", "  \n", conteudo)
         st.markdown(conteudo)
 
         data_criacao = pd.to_datetime(ultimo["created_at"]).strftime("%d/%m/%Y") if ultimo.get("created_at") else ""

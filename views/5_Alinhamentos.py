@@ -54,6 +54,16 @@ def _conteudo_html(conteudo):
     return texto
 
 
+def _conteudo_markdown(conteudo):
+    """Para uso com st.markdown: Markdown só quebra linha visualmente com
+    \\n\\n ou duas espaços antes do \\n — uma quebra simples (comum ao digitar
+    várias linhas no campo) vira espaço normal. Converte em quebra "dura"
+    para preservar o formato original do texto. Não usar no valor que vai
+    para o st.dataframe (coluna Deliberação), que não interpreta Markdown."""
+    texto = _conteudo_html(conteudo)
+    return re.sub(r"(?<!\n)\n(?!\n)", "  \n", texto)
+
+
 def _obrigados_ciencia(alinhamento, usuarios_ativos):
     """Usuários que precisam confirmar ciência deste alinhamento (role sujeito
     a ciência obrigatória e hierarquia >= nível-alvo do alinhamento)."""
@@ -302,7 +312,7 @@ if pode_gerenciar:
                 st.markdown(f"**{titulo_txt}**")
                 st.caption(f"{data_fmt} · {a.get('categoria', 'Geral')} · {a.get('nivel_minimo', 'Auditor')}{ciencia_label}")
                 with st.expander("Ler texto completo"):
-                    st.markdown(_conteudo_html(a.get("conteudo", "")))
+                    st.markdown(_conteudo_markdown(a.get("conteudo", "")))
                     if a.get("anexo_url"):
                         st.link_button("Abrir anexo", a["anexo_url"])
             with col_status:
