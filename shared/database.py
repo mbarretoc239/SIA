@@ -43,6 +43,18 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
+    def buscar_guias_vistas(self, nu_guias: list) -> set:
+        """Guias (NU_GUIA) já marcadas como auditadas/vistas, dentre as informadas.
+
+        Sem vínculo a usuário — é uma marcação compartilhada entre todos.
+        """
+        if not nu_guias:
+            return set()
+        filtro = ",".join(str(g) for g in nu_guias)
+        url = f"{self.supabase_url}/rest/v1/amostragem_guias_vistas?nu_guia=in.({filtro})&select=nu_guia"
+        r = requests.get(url, headers=self.headers)
+        return {item["nu_guia"] for item in r.json()} if r.ok else set()
+
     # --- Base IA (Amostragem BETA): guias LIBERACAO=N importadas mensalmente ---
     def buscar_guias_ia_por_processo(self, nu_ordem: str) -> list:
         """Guias com LIBERACAO=N da base IA para um número de processo (NU_ORDEM)."""

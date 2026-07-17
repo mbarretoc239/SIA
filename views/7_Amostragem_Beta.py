@@ -164,6 +164,7 @@ if df.empty:
 st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N.")
 
 df_guias = consolidar_por_guia(df)
+guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
 especialidades = df_guias["Especialidade"].unique().tolist()
 especialidades.sort(
@@ -208,11 +209,12 @@ for esp in especialidades:
     st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
     with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
-        renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo)
+        renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo, guias_vistas=guias_vistas)
 
     with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
         renderizar_tabela_guias(
             df_amostra.drop(columns=["Motivo"], errors="ignore"),
             esp,
             objetivo=n_objetivo,
+            guias_vistas=guias_vistas,
         )

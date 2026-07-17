@@ -2,6 +2,7 @@ import html
 import unicodedata
 
 import pandas as pd
+import streamlit as st
 import streamlit.components.v1 as components
 
 
@@ -266,18 +267,29 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
     return _todas("")
 
 
-def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int):
+def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int,
+                             guias_vistas: set = frozenset()):
     """Renderiza tabela HTML com NU_GUIA como botão clicável (copia ao clicar).
 
     `objetivo` é o tamanho de amostra requerido pela regra da especialidade
     (mostrado como denominador do contador).
+
+    `guias_vistas`: NU_GUIA já marcados como auditados (vindos do Supabase —
+    compartilhado entre qualquer um que abrir a mesma guia depois). Ao clicar,
+    a marcação é gravada direto do navegador na tabela
+    amostragem_guias_vistas (chave publicável do Supabase, sem vínculo a
+    usuário por enquanto).
     """
+    supabase_url = st.secrets["supabase"]["url"].rstrip("/")
+    supabase_key = st.secrets["supabase"]["key"]
+
     mostrar_motivo = "Motivo" in df_guias.columns
     linhas_html = []
     for _, row in df_guias.iterrows():
         guia = html.escape(str(row["NU_GUIA"]))
         procs = html.escape(str(row["Procedimentos"]))
         qtde = int(row["Qtde_procs"])
+        classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
         motivo_html = ""
         if mostrar_motivo:
             motivo = html.escape(str(row.get("Motivo", "")))
@@ -285,7 +297,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
             motivo_html = f"<td class='{classe}'>{motivo}</td>"
         linhas_html.append(
             f"<tr>"
-            f"<td><button class='copy-btn' data-val='{guia}' title='Clique para copiar'>{guia}</button></td>"
+            f"<td><button class='copy-btn{classe_vista}' data-val='{guia}' title='Clique para copiar'>{guia}</button></td>"
             f"<td>{procs}</td>"
             f"<td style='text-align:right'>{qtde}</td>"
             f"{motivo_html}"
@@ -363,6 +375,21 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     </div>
     <script>
         const PREFIX = 'amostragem_guia_vista_';
+        const SUPABASE_URL = '{supabase_url}';
+        const SUPABASE_KEY = '{supabase_key}';
+
+        function marcarVistaNoServidor(nu_guia) {{
+            fetch(`${{SUPABASE_URL}}/rest/v1/amostragem_guias_vistas`, {{
+                method: 'POST',
+                headers: {{
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${{SUPABASE_KEY}}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates,return=minimal',
+                }},
+                body: JSON.stringify({{ nu_guia: nu_guia }}),
+            }}).catch(() => {{}});
+        }}
 
         const OBJETIVO = {objetivo};
         function atualizarContador() {{
@@ -397,6 +424,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
                 const val = btn.getAttribute('data-val');
                 navigator.clipboard.writeText(val).then(() => {{
                     localStorage.setItem(PREFIX + val, '1');
+                    marcarVistaNoServidor(val);
                     btn.classList.add('vista');
                     atualizarContador();
                     const orig = btn.innerText;
