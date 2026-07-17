@@ -1,5 +1,4 @@
-import io
-
+import openpyxl
 import streamlit as st
 import pandas as pd
 
@@ -10,6 +9,7 @@ from core.amostragem import (
     marcar_amostra,
     renderizar_tabela_guias,
 )
+from shared.database import DatabaseManager
 
 st.set_page_config(page_title="Amostragem BETA", page_icon="", layout="wide")
 
@@ -17,51 +17,90 @@ if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
     st.stop()
 
+if "db" not in st.session_state:
+    st.session_state.db = DatabaseManager()
 
 # Colunas mínimas esperadas na planilha mensal da base IA (mesma que alimenta
 # o PowerBI). Nomes normalizados via _norm (maiúsculo, sem acento).
-COLUNAS_NECESSARIAS = {"NU_ORDEM", "NU_GUIA", "CD_PROCEDIMENTO", "DS_GRUPO", "LIBERACAO"}
+COLUNAS_NECESSARIAS = {"NU_ORDEM", "NU_GUIA", "CD_PROCEDIMENTO", "DS_GRUPO", "LIBERACAO", "DT_CREATED_AT"}
 
 SEED_PADRAO = 42
+_is_admin = st.session_state.get("role_interno") == "Admin"
 
 
-@st.cache_data(show_spinner="Lendo planilha da base IA (pode levar alguns segundos, é um arquivo grande)...")
-def _carregar_base_ia(arquivo_bytes: bytes, aba_preferida: str) -> pd.DataFrame:
-    """Lê a planilha mensal exportada (mesma base que alimenta o PowerBI) e
-    normaliza as colunas necessárias para busca por processo."""
-    excel = pd.ExcelFile(io.BytesIO(arquivo_bytes))
-    aba = aba_preferida if aba_preferida in excel.sheet_names else excel.sheet_names[0]
-    df = excel.parse(aba)
-    df.columns = [_norm(str(c)) for c in df.columns]
+def _preparar_registros(arquivo) -> tuple[list, str, int]:
+    """Lê a planilha mensal e devolve (registros_para_inserir, mes_referencia, total_bruto).
 
-    faltantes = COLUNAS_NECESSARIAS - set(df.columns)
+    Lê linha a linha via openpyxl (read_only) em vez de pandas.read_excel —
+    a planilha tem ~500 mil linhas e carregar tudo num DataFrame de uma vez
+    consome memória demais (gerou MemoryError em máquina com pouca RAM livre).
+
+    Só mantém linhas com LIBERACAO == 'N' (é só isso que a amostragem usa).
+    `mes_referencia` é derivado de DT_CREATED_AT (constante por arquivo,
+    ex: planilha 'IA 07 2026' tem DT_CREATED_AT = 2026-07-01).
+    """
+    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
+    aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
+    ws = wb[aba]
+    linhas = ws.iter_rows(values_only=True)
+
+    header = [_norm(str(c)) for c in next(linhas)]
+    idx = {nome: i for i, nome in enumerate(header)}
+    faltantes = COLUNAS_NECESSARIAS - set(idx)
     if faltantes:
         raise ValueError(
             "Colunas não encontradas na planilha (aba '" + aba + "'): "
             + ", ".join(sorted(faltantes))
         )
 
-    df["NU_ORDEM"] = pd.to_numeric(df["NU_ORDEM"], errors="coerce").astype("Int64").astype(str)
-    df["NU_GUIA"] = df["NU_GUIA"].astype(str).str.strip()
-    df["CD_PROCEDIMENTO"] = df["CD_PROCEDIMENTO"].astype(str).str.strip()
-    df["DS_GRUPO"] = df["DS_GRUPO"].astype(str).str.strip()
-    df["LIBERACAO"] = df["LIBERACAO"].astype(str).str.strip().str.upper()
-    return df[list(COLUNAS_NECESSARIAS)]
+    i_ordem, i_guia = idx["NU_ORDEM"], idx["NU_GUIA"]
+    i_cd, i_grupo = idx["CD_PROCEDIMENTO"], idx["DS_GRUPO"]
+    i_lib, i_dt = idx["LIBERACAO"], idx["DT_CREATED_AT"]
+
+    registros = []
+    mes_referencia = None
+    total_bruto = 0
+    for linha in linhas:
+        if linha[i_ordem] is None:
+            continue
+        total_bruto += 1
+        if mes_referencia is None and linha[i_dt] is not None:
+            dt = linha[i_dt]
+            mes_referencia = dt.strftime("%Y-%m") if hasattr(dt, "strftime") else str(dt)[:7]
+
+        liberacao = str(linha[i_lib] or "").strip().upper()
+        if liberacao != "N":
+            continue
+
+        registros.append({
+            "nu_ordem": str(int(linha[i_ordem])),
+            "nu_guia": str(linha[i_guia]).strip(),
+            "cd_procedimento": str(linha[i_cd]).strip(),
+            "ds_grupo": str(linha[i_grupo]).strip(),
+            "liberacao": "N",
+            "mes_referencia": None,
+        })
+
+    wb.close()
+
+    if mes_referencia is None:
+        raise ValueError("Não foi possível ler DT_CREATED_AT para determinar o mês de referência.")
+
+    for registro in registros:
+        registro["mes_referencia"] = mes_referencia
+
+    return registros, mes_referencia, total_bruto
 
 
-def _guias_do_processo(df_base: pd.DataFrame, processo: str) -> pd.DataFrame:
-    """Filtra a base pelo processo, só guias NÃO liberadas pela IA
-    (LIBERACAO == 'N'), no mesmo formato que parse_powerbi() produz —
-    assim o resto do pipeline (consolidar_por_guia, marcar_amostra) não
-    precisa mudar nada."""
-    processo = processo.strip()
-    sub = df_base[(df_base["NU_ORDEM"] == processo) & (df_base["LIBERACAO"] == "N")]
-    if sub.empty:
+def _guias_para_df(guias: list) -> pd.DataFrame:
+    """Converte o retorno do Supabase para o mesmo formato que
+    parse_powerbi() produz, pra reaproveitar consolidar_por_guia/marcar_amostra."""
+    if not guias:
         return pd.DataFrame()
     return pd.DataFrame({
-        "Especialidade": sub["DS_GRUPO"].values,
-        "CD_PROCEDIMENTO": sub["CD_PROCEDIMENTO"].values,
-        "NU_GUIA": sub["NU_GUIA"].values,
+        "Especialidade": [g["ds_grupo"] for g in guias],
+        "CD_PROCEDIMENTO": [g["cd_procedimento"] for g in guias],
+        "NU_GUIA": [g["nu_guia"] for g in guias],
         "Qtde": 1,
     })
 
@@ -70,37 +109,37 @@ def _guias_do_processo(df_base: pd.DataFrame, processo: str) -> pd.DataFrame:
 
 st.title("Amostragem de Guias (BETA)")
 st.caption(
-    "Sobe a planilha mensal da base IA (a mesma que alimenta o PowerBI) e "
-    "digita o número do processo — as guias com LIBERAÇÃO = N são buscadas "
-    "automaticamente e a amostra é gerada igual ao fluxo atual. Prestador e "
-    "percentuais continuam só no PowerBI; aqui entra apenas processo e guias."
+    "Digite o número do processo — as guias com LIBERAÇÃO = N são buscadas "
+    "automaticamente na base importada mensalmente e a amostra é gerada "
+    "igual ao fluxo atual. Prestador e percentuais continuam só no PowerBI."
 )
 
-arquivo = st.file_uploader(
-    "Planilha mensal da base IA (.xlsx)",
-    type=["xlsx"],
-    help="Arquivo com as colunas NU_ORDEM, NU_GUIA, CD_PROCEDIMENTO, DS_GRUPO e LIBERAÇÃO.",
-)
+if _is_admin:
+    with st.expander("Importar planilha mensal da base IA (Admin)", expanded=False):
+        st.caption(
+            "Sobe a planilha do mês (mesma que alimenta o PowerBI). Substitui "
+            "os dados do mês detectado e mantém só os 2 meses mais recentes na base."
+        )
+        arquivo = st.file_uploader("Planilha mensal (.xlsx)", type=["xlsx"], key="upload_base_ia")
+        if arquivo and st.button("Importar"):
+            try:
+                with st.spinner("Lendo e importando (pode levar alguns minutos)..."):
+                    registros, mes_referencia, total_bruto = _preparar_registros(arquivo)
+                    if not registros:
+                        st.warning("Nenhuma linha com LIBERAÇÃO = N encontrada nesta planilha.")
+                    else:
+                        total_inserido = st.session_state.db.importar_base_ia(registros, mes_referencia)
+                        st.success(
+                            f"Mês {mes_referencia}: {total_inserido} de {total_bruto} linha(s) "
+                            f"(LIBERAÇÃO = N) importadas com sucesso."
+                        )
+            except ValueError as erro:
+                st.error(str(erro))
 
-if not arquivo:
-    st.info("Envie a planilha do mês para começar.")
-    st.stop()
+st.divider()
 
-try:
-    df_base = _carregar_base_ia(arquivo.getvalue(), "Planilha1")
-except ValueError as erro:
-    st.error(str(erro))
-    st.stop()
-
-n_processos = df_base["NU_ORDEM"].nunique()
-st.caption(f"{len(df_base):,} linha(s) carregada(s) — {n_processos:,} processo(s) único(s).".replace(",", "."))
-
-col_processo, col_buscar = st.columns([3, 1])
-with col_processo:
-    processo_digitado = st.text_input("Número do processo", placeholder="Ex: 8202650447")
-with col_buscar:
-    st.write("")
-    buscar = st.button("Buscar guias", use_container_width=True)
+processo_digitado = st.text_input("Número do processo", placeholder="Ex: 8202650447")
+buscar = st.button("Buscar guias")
 
 if buscar:
     st.session_state["_amostragem_beta_processo"] = processo_digitado.strip()
@@ -111,13 +150,14 @@ if not processo_ativo:
     st.info("Digite o número do processo e clique em Buscar guias.")
     st.stop()
 
-df = _guias_do_processo(df_base, processo_ativo)
+guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
+df = _guias_para_df(guias)
 
 if df.empty:
     st.warning(
         f"Nenhuma guia com LIBERAÇÃO = N encontrada para o processo "
-        f"'{processo_ativo}' nesta planilha. Confira o número ou se o "
-        f"processo está no mês certo."
+        f"'{processo_ativo}' na base importada. Confira o número ou se o "
+        f"mês do processo ainda está entre os 2 meses mantidos na base."
     )
     st.stop()
 

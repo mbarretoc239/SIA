@@ -43,6 +43,44 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
+    # --- Base IA (Amostragem BETA): guias LIBERACAO=N importadas mensalmente ---
+    def buscar_guias_ia_por_processo(self, nu_ordem: str) -> list:
+        """Guias com LIBERACAO=N da base IA para um número de processo (NU_ORDEM)."""
+        url = (
+            f"{self.supabase_url}/rest/v1/base_ia_guias"
+            f"?nu_ordem=eq.{nu_ordem}&select=nu_guia,cd_procedimento,ds_grupo"
+        )
+        r = requests.get(url, headers=self.headers)
+        return r.json() if r.ok else []
+
+    def importar_base_ia(self, registros: list, mes_referencia: str, lote: int = 2000) -> int:
+        """Substitui os dados do `mes_referencia` informado (reimportação
+        idempotente) e mantém só os 2 meses mais recentes na tabela.
+
+        `registros`: lista de dicts com nu_ordem/nu_guia/cd_procedimento/
+        ds_grupo/liberacao/mes_referencia já prontos para inserir.
+        """
+        url = f"{self.supabase_url}/rest/v1/base_ia_guias"
+        headers_insert = {**self.headers, "Prefer": "return=minimal"}
+
+        requests.delete(f"{url}?mes_referencia=eq.{mes_referencia}", headers=self.headers).raise_for_status()
+
+        total = 0
+        for i in range(0, len(registros), lote):
+            pedaco = registros[i:i + lote]
+            requests.post(url, headers=headers_insert, json=pedaco).raise_for_status()
+            total += len(pedaco)
+
+        r_meses = requests.get(f"{url}?select=mes_referencia", headers=self.headers)
+        if r_meses.ok:
+            meses = sorted({item["mes_referencia"] for item in r_meses.json()}, reverse=True)
+            antigos = meses[2:]
+            if antigos:
+                filtro = ",".join(antigos)
+                requests.delete(f"{url}?mes_referencia=in.({filtro})", headers=self.headers).raise_for_status()
+
+        return total
+
     def carregar_dicionario_glosas(self) -> dict:
         """Carrega o dicionário de correção de textos de glosas do Supabase"""
         url = f"{self.supabase_url}/rest/v1/glosas_dicionario?select=texto_original,texto_corrigido"
