@@ -89,3 +89,7 @@ CHANGELOG_GLOSAS.md
 
 *.csv
 *.docx
+
+# --- Planilhas mensais reais da base IA (dados de guias/processos) ---
+IA *.xlsx
+.~lock.*#

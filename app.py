@@ -268,6 +268,7 @@ else:
     
     # Amostragem: visível para todos os logados
     paginas.append(st.Page("views/6_Amostragem.py", title="Amostragem"))
+    paginas.append(st.Page("views/7_Amostragem_Beta.py", title="Amostragem BETA"))
 
     # Permissões Módulos Clínicos (configurável por role em Configurações)
     from core.settings import tem_acesso_modulo
