@@ -12,6 +12,7 @@ from core.amostragem import (
     marcar_amostra,
     renderizar_tabela_guias,
 )
+from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 
 st.set_page_config(page_title="Amostragem", page_icon="", layout="wide")
 
@@ -111,7 +112,32 @@ if df.empty:
     )
     st.stop()
 
+# --- Filtro opcional: procedimentos que não precisam ser analisados ---
+# (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
+# a guia continua listada mesmo que fique sem nenhum procedimento restante.
+mapa_procedimentos = carregar_mapa_procedimentos()
+codigos_presentes = sorted(df["CD_PROCEDIMENTO"].unique().tolist())
+opcoes_excluir = {
+    f"{cod} - {mapa_procedimentos.get(cod, 'descrição não encontrada')}": cod
+    for cod in codigos_presentes
+}
+labels_excluidos = st.multiselect(
+    "Ignorar procedimentos nesta análise (opcional)",
+    options=sorted(opcoes_excluir.keys()),
+    key=f"amostragem_procs_excluidos_v{st.session_state['texto_powerbi_v']}",
+    help="O procedimento selecionado não entra na contagem nem no sorteio. A guia continua na lista, sem esse procedimento.",
+)
+codigos_excluidos = {opcoes_excluir[lbl] for lbl in labels_excluidos}
+
+todas_guias = df[["Especialidade", "NU_GUIA"]].drop_duplicates()
+df = df[~df["CD_PROCEDIMENTO"].isin(codigos_excluidos)] if codigos_excluidos else df
+
 df_guias = consolidar_por_guia(df)
+if codigos_excluidos:
+    df_guias = todas_guias.merge(df_guias, on=["Especialidade", "NU_GUIA"], how="left")
+    df_guias["Procedimentos"] = df_guias["Procedimentos"].fillna("")
+    df_guias["Qtde_procs"] = df_guias["Qtde_procs"].fillna(0).astype(int)
+
 guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
 especialidades = df_guias["Especialidade"].unique().tolist()
