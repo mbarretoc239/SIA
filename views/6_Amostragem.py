@@ -12,6 +12,7 @@ from core.amostragem import (
     marcar_amostra,
     renderizar_tabela_guias,
     selecionar_procedimentos_ignorados,
+    gerenciar_procedimentos_ignorados,
 )
 
 st.set_page_config(page_title="Amostragem", page_icon="", layout="wide")
@@ -30,6 +31,8 @@ st.title("Amostragem de Guias")
 st.markdown(
     "Cole as guias por especialidade selecionadas no powerBI"
 )
+
+gerenciar_procedimentos_ignorados(st.session_state.db, key_prefix="amostragem")
 
 _is_admin = st.session_state.get("role_interno") == "Admin"
 

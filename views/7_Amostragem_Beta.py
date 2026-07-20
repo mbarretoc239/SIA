@@ -9,6 +9,7 @@ from core.amostragem import (
     marcar_amostra,
     renderizar_tabela_guias,
     selecionar_procedimentos_ignorados,
+    gerenciar_procedimentos_ignorados,
 )
 from shared.database import DatabaseManager
 
@@ -114,6 +115,8 @@ st.caption(
     "automaticamente na base importada mensalmente e a amostra é gerada "
     "igual ao fluxo atual. Prestador e percentuais continuam só no PowerBI."
 )
+
+gerenciar_procedimentos_ignorados(st.session_state.db, key_prefix="amostragem_beta")
 
 if _is_admin:
     with st.expander("Importar planilha mensal da base IA (Admin)", expanded=False):

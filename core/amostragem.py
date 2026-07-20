@@ -142,6 +142,99 @@ def parse_powerbi(texto: str) -> pd.DataFrame:
     return pd.DataFrame(registros)
 
 
+# Especialidades (DS_GRUPO) conhecidas na base — usado só para popular o
+# seletor do painel de gerenciamento; não limita o que pode ser sorteado.
+ESPECIALIDADES_CONHECIDAS = [
+    "CIRURGIA",
+    "CONSULTA INICIAL",
+    "ENDODONTIA",
+    "ESTETICA",
+    "EXAMES COMPLEMENTARES",
+    "IMPLANTE",
+    "ODONTOLOGIA CLINICA",
+    "ODONTOPEDIATRIA",
+    "ORTODONTIA",
+    "PERIODONTIA",
+    "PREVENCAO",
+    "PROTESE",
+    "PROTESE ESPECIAL",
+    "RADIOLOGIA",
+    "RADIOLOGIA ESPECIAL",
+    "URGENCIA/EMERGENCIA",
+]
+
+
+def gerenciar_procedimentos_ignorados(db, key_prefix: str):
+    """Painel para adicionar/remover procedimentos ignorados buscando em todo
+    o catálogo (services.relatorio_5302.glosa_matcher.carregar_mapa_procedimentos),
+    não só os presentes numa análise já carregada. Complementa
+    selecionar_procedimentos_ignorados, que só oferece o que já está no
+    dataset da análise atual."""
+    from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
+
+    with st.expander("Gerenciar procedimentos ignorados (todas as especialidades)"):
+        salvos = db.carregar_procs_ignorados()
+
+        if any(salvos.values()):
+            st.markdown("**Já salvos**")
+            for esp in sorted(k for k, v in salvos.items() if v):
+                codigos = sorted(salvos[esp])
+                col_esp, col_codigos, col_rem = st.columns([2, 4, 3])
+                with col_esp:
+                    st.markdown(f"**{esp}**")
+                with col_codigos:
+                    st.caption(", ".join(codigos))
+                with col_rem:
+                    remover_selecionados = st.multiselect(
+                        "Remover",
+                        options=codigos,
+                        key=f"{key_prefix}_gerenciar_remover_{esp}",
+                        label_visibility="collapsed",
+                        placeholder="Remover código...",
+                    )
+                    if remover_selecionados and st.button(
+                        "Remover", key=f"{key_prefix}_gerenciar_btn_remover_{esp}", use_container_width=True
+                    ):
+                        pares = [(esp, cod) for cod in remover_selecionados]
+                        if db.remover_procs_ignorados(pares):
+                            st.toast(f"Removido(s) de {esp}.")
+                            st.rerun()
+                        else:
+                            st.error("Erro ao remover.")
+            st.divider()
+
+        st.markdown("**Adicionar novo**")
+        mapa_procedimentos = carregar_mapa_procedimentos()
+        opcoes_todas = {
+            f"{cod} - {desc}": cod
+            for cod, desc in sorted(mapa_procedimentos.items(), key=lambda x: x[1])
+        }
+        col_esp_novo, col_proc_novo = st.columns([1, 3])
+        with col_esp_novo:
+            especialidade_nova = st.selectbox(
+                "Especialidade",
+                ESPECIALIDADES_CONHECIDAS,
+                key=f"{key_prefix}_gerenciar_esp_nova",
+            )
+        with col_proc_novo:
+            labels_novos = st.multiselect(
+                "Procedimentos a ignorar",
+                options=sorted(opcoes_todas.keys()),
+                key=f"{key_prefix}_gerenciar_proc_novo",
+                placeholder="Busque por código ou descrição...",
+            )
+        if st.button("Adicionar à lista", key=f"{key_prefix}_gerenciar_btn_add"):
+            if not labels_novos:
+                st.warning("Selecione ao menos um procedimento.")
+            else:
+                pares = [(especialidade_nova, opcoes_todas[lbl]) for lbl in labels_novos]
+                if db.salvar_procs_ignorados(pares):
+                    st.toast(f"Adicionado(s) a {especialidade_nova}.")
+                    st.rerun()
+                else:
+                    st.error("Erro ao adicionar.")
+
+
 def selecionar_procedimentos_ignorados(df: pd.DataFrame, db, key_prefix: str) -> set:
     """Renderiza o multiselect "Ignorar procedimentos nesta análise" + botão
     para salvar a seleção como padrão (por especialidade, persistido em
