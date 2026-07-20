@@ -93,6 +93,42 @@ class DatabaseManager:
 
         return total
 
+    # --- Procedimentos ignorados na Amostragem (persistente, por especialidade) ---
+    def carregar_procs_ignorados(self) -> dict:
+        """Retorna {especialidade: set(codigos)} com tudo que já foi salvo
+        como 'não precisa analisar' em qualquer sessão anterior."""
+        url = f"{self.supabase_url}/rest/v1/amostragem_procs_ignorados?select=especialidade,cd_procedimento"
+        r = requests.get(url, headers=self.headers)
+        resultado = {}
+        if r.ok:
+            for item in r.json():
+                resultado.setdefault(item["especialidade"], set()).add(item["cd_procedimento"])
+        return resultado
+
+    def salvar_procs_ignorados(self, pares: list) -> bool:
+        """Insere pares (especialidade, cd_procedimento) como padrão a ignorar
+        dali em diante. Pares já existentes são ignorados (idempotente)."""
+        if not pares:
+            return True
+        url = f"{self.supabase_url}/rest/v1/amostragem_procs_ignorados?on_conflict=especialidade,cd_procedimento"
+        headers_insert = {**self.headers, "Prefer": "resolution=ignore-duplicates,return=minimal"}
+        data = [{"especialidade": esp, "cd_procedimento": cod} for esp, cod in pares]
+        r = requests.post(url, headers=headers_insert, json=data)
+        return r.ok
+
+    def remover_procs_ignorados(self, pares: list) -> bool:
+        """Remove pares (especialidade, cd_procedimento) da lista salva —
+        volta a considerar o procedimento na análise por padrão."""
+        ok = True
+        for esp, cod in pares:
+            url = (
+                f"{self.supabase_url}/rest/v1/amostragem_procs_ignorados"
+                f"?especialidade=eq.{esp}&cd_procedimento=eq.{cod}"
+            )
+            r = requests.delete(url, headers=self.headers)
+            ok = ok and r.ok
+        return ok
+
     def carregar_dicionario_glosas(self) -> dict:
         """Carrega o dicionário de correção de textos de glosas do Supabase"""
         url = f"{self.supabase_url}/rest/v1/glosas_dicionario?select=texto_original,texto_corrigido"

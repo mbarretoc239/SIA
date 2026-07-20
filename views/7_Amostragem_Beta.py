@@ -8,9 +8,9 @@ from core.amostragem import (
     consolidar_por_guia,
     marcar_amostra,
     renderizar_tabela_guias,
+    selecionar_procedimentos_ignorados,
 )
 from shared.database import DatabaseManager
-from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 
 st.set_page_config(page_title="Amostragem BETA", page_icon="", layout="wide")
 
@@ -167,19 +167,11 @@ st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N."
 # --- Filtro opcional: procedimentos que não precisam ser analisados ---
 # (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
 # a guia continua listada mesmo que fique sem nenhum procedimento restante.
-mapa_procedimentos = carregar_mapa_procedimentos()
-codigos_presentes = sorted(df["CD_PROCEDIMENTO"].unique().tolist())
-opcoes_excluir = {
-    f"{cod} - {mapa_procedimentos.get(cod, 'descrição não encontrada')}": cod
-    for cod in codigos_presentes
-}
-labels_excluidos = st.multiselect(
-    "Ignorar procedimentos nesta análise (opcional)",
-    options=sorted(opcoes_excluir.keys()),
-    key=f"amostragem_beta_procs_excluidos_{processo_ativo}",
-    help="O procedimento selecionado não entra na contagem nem no sorteio. A guia continua na lista, sem esse procedimento.",
+# A seleção pode ser salva como padrão (por especialidade), aplicado
+# automaticamente nas próximas análises.
+codigos_excluidos = selecionar_procedimentos_ignorados(
+    df, st.session_state.db, key_prefix=f"amostragem_beta_{processo_ativo}"
 )
-codigos_excluidos = {opcoes_excluir[lbl] for lbl in labels_excluidos}
 
 todas_guias = df[["Especialidade", "NU_GUIA"]].drop_duplicates()
 df = df[~df["CD_PROCEDIMENTO"].isin(codigos_excluidos)] if codigos_excluidos else df

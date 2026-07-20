@@ -142,6 +142,82 @@ def parse_powerbi(texto: str) -> pd.DataFrame:
     return pd.DataFrame(registros)
 
 
+def selecionar_procedimentos_ignorados(df: pd.DataFrame, db, key_prefix: str) -> set:
+    """Renderiza o multiselect "Ignorar procedimentos nesta análise" + botão
+    para salvar a seleção como padrão (por especialidade, persistido em
+    amostragem_procs_ignorados). A seleção salva vira default automático nas
+    próximas análises, mas pode ser ajustada só-nesta-sessão sem salvar.
+
+    `key_prefix` deve variar por dataset (ex.: versão do texto colado, ou o
+    processo buscado) para o multiselect resetar corretamente ao trocar de
+    entrada — mesmo padrão já usado no key do texto/processo.
+
+    Retorna o set de códigos selecionados AGORA (salvos ou não), pronto para
+    filtrar o `df`.
+    """
+    from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
+
+    mapa_procedimentos = carregar_mapa_procedimentos()
+
+    # Primeira especialidade em que cada código aparece neste dataset —
+    # usado pra saber em qual especialidade salvar/remover o código.
+    cod_para_especialidade = {}
+    for _, row in df[["CD_PROCEDIMENTO", "Especialidade"]].drop_duplicates().iterrows():
+        cod_para_especialidade.setdefault(row["CD_PROCEDIMENTO"], row["Especialidade"])
+
+    codigos_presentes = sorted(cod_para_especialidade.keys())
+    opcoes = {
+        f"{cod} - {mapa_procedimentos.get(cod, 'descrição não encontrada')}": cod
+        for cod in codigos_presentes
+    }
+
+    salvos = db.carregar_procs_ignorados()  # {especialidade: set(codigos)}
+    default_labels = [
+        lbl for lbl, cod in opcoes.items()
+        if cod in salvos.get(cod_para_especialidade[cod], set())
+    ]
+
+    col_multi, col_salvar = st.columns([5, 1.2])
+    with col_multi:
+        labels_selecionados = st.multiselect(
+            "Ignorar procedimentos nesta análise",
+            options=sorted(opcoes.keys()),
+            default=default_labels,
+            key=f"{key_prefix}_procs_ignorados",
+            help=(
+                "Selecionados aqui não entram na contagem nem no sorteio. "
+                "Clique em \"Salvar como padrão\" para aplicar automaticamente "
+                "nas próximas análises, sem precisar marcar de novo."
+            ),
+        )
+    codigos_selecionados = {opcoes[lbl] for lbl in labels_selecionados}
+
+    with col_salvar:
+        st.write("")
+        if st.button("Salvar como padrão", key=f"{key_prefix}_salvar_procs", use_container_width=True):
+            pares_para_salvar = [
+                (cod_para_especialidade[cod], cod)
+                for cod in codigos_selecionados
+                if cod not in salvos.get(cod_para_especialidade[cod], set())
+            ]
+            pares_para_remover = [
+                (esp, cod)
+                for cod, esp in cod_para_especialidade.items()
+                if cod in salvos.get(esp, set()) and cod not in codigos_selecionados
+            ]
+            ok = True
+            if pares_para_salvar:
+                ok = ok and db.salvar_procs_ignorados(pares_para_salvar)
+            if pares_para_remover:
+                ok = ok and db.remover_procs_ignorados(pares_para_remover)
+            if ok:
+                st.toast("Padrão salvo — aplicado automaticamente nas próximas análises.")
+            else:
+                st.error("Erro ao salvar o padrão.")
+
+    return codigos_selecionados
+
+
 def consolidar_por_guia(df: pd.DataFrame) -> pd.DataFrame:
     """Agrupa por (Especialidade, NU_GUIA), juntando procedimentos."""
     if df.empty:
