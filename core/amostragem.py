@@ -372,6 +372,13 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
     Coluna 'Motivo' é mantida por compatibilidade (dropada antes de renderizar).
     """
+    # Guias sem nenhum procedimento remanescente (todos os procedimentos
+    # foram marcados como ignorados) não têm o que auditar — ficam de fora
+    # do sorteio/regra de amostra, mas continuam aparecendo na tabela
+    # completa (fora desta função, que só recebe as elegíveis pra amostra).
+    if "Qtde_procs" in df_esp_guias.columns:
+        df_esp_guias = df_esp_guias[df_esp_guias["Qtde_procs"] > 0]
+
     if df_esp_guias.empty:
         return df_esp_guias.assign(Motivo=[])
 

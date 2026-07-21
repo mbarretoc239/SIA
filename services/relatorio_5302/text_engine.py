@@ -168,7 +168,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         
     prefixo = ""
     
-    if tipo_geracao == "Versão Completa (Detalhada)":
+    if tipo_geracao == "Detalhado":
         def formatar_lista_guias(lista):
             if len(lista) == 1: return lista[0]
             if len(lista) == 2: return f"{lista[0]} e {lista[1]}"

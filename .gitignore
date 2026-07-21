@@ -49,7 +49,8 @@ temp/
 # Scripts de scratch criados durante o desenvolvimento
 scratch/
 shoot*.py
-test*.py
+# Só na raiz (scripts avulsos de teste manual) — não pega tests/ (suíte pytest real)
+/test*.py
 # Logs e outputs textuais soltos
 *.log
 *.txt

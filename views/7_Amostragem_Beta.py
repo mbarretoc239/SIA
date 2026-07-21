@@ -116,126 +116,128 @@ st.caption(
     "igual ao fluxo atual. Prestador e percentuais continuam só no PowerBI."
 )
 
-gerenciar_procedimentos_ignorados(st.session_state.db, key_prefix="amostragem_beta")
+aba_busca, aba_config = st.tabs(["Amostragem", "Configurações"])
 
-if _is_admin:
-    with st.expander("Importar planilha mensal da base IA (Admin)", expanded=False):
-        st.caption(
-            "Sobe a planilha do mês (mesma que alimenta o PowerBI). Substitui "
-            "os dados do mês detectado e mantém só os 2 meses mais recentes na base."
+with aba_config:
+    gerenciar_procedimentos_ignorados(st.session_state.db, key_prefix="amostragem_beta")
+
+    if _is_admin:
+        with st.expander("Importar planilha mensal da base IA (Admin)", expanded=False):
+            st.caption(
+                "Sobe a planilha do mês (mesma que alimenta o PowerBI). Substitui "
+                "os dados do mês detectado e mantém só os 2 meses mais recentes na base."
+            )
+            arquivo = st.file_uploader("Planilha mensal (.xlsx)", type=["xlsx"], key="upload_base_ia")
+            if arquivo and st.button("Importar"):
+                try:
+                    with st.spinner("Lendo e importando (pode levar alguns minutos)..."):
+                        registros, mes_referencia, total_bruto = _preparar_registros(arquivo)
+                        if not registros:
+                            st.warning("Nenhuma linha com LIBERAÇÃO = N encontrada nesta planilha.")
+                        else:
+                            total_inserido = st.session_state.db.importar_base_ia(registros, mes_referencia)
+                            st.success(
+                                f"Mês {mes_referencia}: {total_inserido} de {total_bruto} linha(s) "
+                                f"(LIBERAÇÃO = N) importadas com sucesso."
+                            )
+                except ValueError as erro:
+                    st.error(str(erro))
+
+with aba_busca:
+    processo_digitado = st.text_input("Número do processo", placeholder="Ex: 8202650447")
+    buscar = st.button("Buscar guias")
+
+    if buscar:
+        st.session_state["_amostragem_beta_processo"] = processo_digitado.strip()
+
+    processo_ativo = st.session_state.get("_amostragem_beta_processo", "")
+
+    if not processo_ativo:
+        st.info("Digite o número do processo e clique em Buscar guias.")
+        st.stop()
+
+    guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
+    df = _guias_para_df(guias)
+
+    if df.empty:
+        st.warning(
+            f"Nenhuma guia com LIBERAÇÃO = N encontrada para o processo "
+            f"'{processo_ativo}' na base importada. Confira o número ou se o "
+            f"mês do processo ainda está entre os 2 meses mantidos na base."
         )
-        arquivo = st.file_uploader("Planilha mensal (.xlsx)", type=["xlsx"], key="upload_base_ia")
-        if arquivo and st.button("Importar"):
-            try:
-                with st.spinner("Lendo e importando (pode levar alguns minutos)..."):
-                    registros, mes_referencia, total_bruto = _preparar_registros(arquivo)
-                    if not registros:
-                        st.warning("Nenhuma linha com LIBERAÇÃO = N encontrada nesta planilha.")
-                    else:
-                        total_inserido = st.session_state.db.importar_base_ia(registros, mes_referencia)
-                        st.success(
-                            f"Mês {mes_referencia}: {total_inserido} de {total_bruto} linha(s) "
-                            f"(LIBERAÇÃO = N) importadas com sucesso."
-                        )
-            except ValueError as erro:
-                st.error(str(erro))
+        st.stop()
 
-st.divider()
+    st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N.")
 
-processo_digitado = st.text_input("Número do processo", placeholder="Ex: 8202650447")
-buscar = st.button("Buscar guias")
-
-if buscar:
-    st.session_state["_amostragem_beta_processo"] = processo_digitado.strip()
-
-processo_ativo = st.session_state.get("_amostragem_beta_processo", "")
-
-if not processo_ativo:
-    st.info("Digite o número do processo e clique em Buscar guias.")
-    st.stop()
-
-guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
-df = _guias_para_df(guias)
-
-if df.empty:
-    st.warning(
-        f"Nenhuma guia com LIBERAÇÃO = N encontrada para o processo "
-        f"'{processo_ativo}' na base importada. Confira o número ou se o "
-        f"mês do processo ainda está entre os 2 meses mantidos na base."
+    # --- Filtro opcional: procedimentos que não precisam ser analisados ---
+    # (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
+    # a guia continua listada mesmo que fique sem nenhum procedimento restante.
+    # A seleção pode ser salva como padrão (por especialidade), aplicado
+    # automaticamente nas próximas análises.
+    codigos_excluidos = selecionar_procedimentos_ignorados(
+        df, st.session_state.db, key_prefix=f"amostragem_beta_{processo_ativo}"
     )
-    st.stop()
 
-st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N.")
+    todas_guias = df[["Especialidade", "NU_GUIA"]].drop_duplicates()
+    df = df[~df["CD_PROCEDIMENTO"].isin(codigos_excluidos)] if codigos_excluidos else df
 
-# --- Filtro opcional: procedimentos que não precisam ser analisados ---
-# (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
-# a guia continua listada mesmo que fique sem nenhum procedimento restante.
-# A seleção pode ser salva como padrão (por especialidade), aplicado
-# automaticamente nas próximas análises.
-codigos_excluidos = selecionar_procedimentos_ignorados(
-    df, st.session_state.db, key_prefix=f"amostragem_beta_{processo_ativo}"
-)
+    df_guias = consolidar_por_guia(df)
+    if codigos_excluidos:
+        df_guias = todas_guias.merge(df_guias, on=["Especialidade", "NU_GUIA"], how="left")
+        df_guias["Procedimentos"] = df_guias["Procedimentos"].fillna("")
+        df_guias["Qtde_procs"] = df_guias["Qtde_procs"].fillna(0).astype(int)
 
-todas_guias = df[["Especialidade", "NU_GUIA"]].drop_duplicates()
-df = df[~df["CD_PROCEDIMENTO"].isin(codigos_excluidos)] if codigos_excluidos else df
+    guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
-df_guias = consolidar_por_guia(df)
-if codigos_excluidos:
-    df_guias = todas_guias.merge(df_guias, on=["Especialidade", "NU_GUIA"], how="left")
-    df_guias["Procedimentos"] = df_guias["Procedimentos"].fillna("")
-    df_guias["Qtde_procs"] = df_guias["Qtde_procs"].fillna(0).astype(int)
-
-guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
-
-especialidades = df_guias["Especialidade"].unique().tolist()
-especialidades.sort(
-    key=lambda e: (
-        ORDEM_CRITICAS.index(_norm(e)) if _norm(e) in ORDEM_CRITICAS else 999,
-        _norm(e),
-    )
-)
-
-# --- Resumo ---
-resumo = []
-for esp in especialidades:
-    df_esp_total = df[df["Especialidade"] == esp]
-    df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
-    total_procs = int(df_esp_total["Qtde"].sum())
-    total_guias = len(df_esp_guias)
-    df_amostra_resumo = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
-    resumo.append({
-        "Especialidade": esp,
-        "Guias únicas": total_guias,
-        "Total de procs": total_procs,
-        "Amostra sugerida": len(df_amostra_resumo),
-    })
-
-st.markdown("### Resumo")
-st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True)
-
-# --- Detalhamento ---
-st.markdown("### Detalhamento por especialidade")
-st.caption("Clique no número da guia para copiar.")
-
-for esp in especialidades:
-    df_esp_total = df[df["Especialidade"] == esp]
-    df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
-    total_procs = int(df_esp_total["Qtde"].sum())
-    total_guias = len(df_esp_guias)
-
-    df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
-    n_objetivo = len(df_amostra)
-
-    st.markdown(f"#### {esp}")
-    st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
-
-    with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
-        renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo, guias_vistas=guias_vistas)
-
-    with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
-        renderizar_tabela_guias(
-            df_amostra.drop(columns=["Motivo"], errors="ignore"),
-            esp,
-            objetivo=n_objetivo,
-            guias_vistas=guias_vistas,
+    especialidades = df_guias["Especialidade"].unique().tolist()
+    especialidades.sort(
+        key=lambda e: (
+            ORDEM_CRITICAS.index(_norm(e)) if _norm(e) in ORDEM_CRITICAS else 999,
+            _norm(e),
         )
+    )
+
+    # --- Resumo ---
+    resumo = []
+    for esp in especialidades:
+        df_esp_total = df[df["Especialidade"] == esp]
+        df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
+        total_procs = int(df_esp_total["Qtde"].sum())
+        total_guias = len(df_esp_guias)
+        df_amostra_resumo = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
+        resumo.append({
+            "Especialidade": esp,
+            "Guias únicas": total_guias,
+            "Total de procs": total_procs,
+            "Amostra sugerida": len(df_amostra_resumo),
+        })
+
+    st.markdown("### Resumo")
+    st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True)
+
+    # --- Detalhamento ---
+    st.markdown("### Detalhamento por especialidade")
+    st.caption("Clique no número da guia para copiar.")
+
+    for esp in especialidades:
+        df_esp_total = df[df["Especialidade"] == esp]
+        df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
+        total_procs = int(df_esp_total["Qtde"].sum())
+        total_guias = len(df_esp_guias)
+
+        df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
+        n_objetivo = len(df_amostra)
+
+        st.markdown(f"#### {esp}")
+        st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
+
+        with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
+            renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo, guias_vistas=guias_vistas)
+
+        with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
+            renderizar_tabela_guias(
+                df_amostra.drop(columns=["Motivo"], errors="ignore"),
+                esp,
+                objetivo=n_objetivo,
+                guias_vistas=guias_vistas,
+            )
