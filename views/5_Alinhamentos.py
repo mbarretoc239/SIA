@@ -180,101 +180,99 @@ if pode_gerenciar:
         for l in leituras:
             leituras_por_alinhamento.setdefault(l["alinhamento_id"], {})[l["usuario_id"]] = l["lido_em"]
 
-        # ------------------------------------------------------------
-        # Formulário único: Novo ou Editar (nunca os dois ao mesmo tempo,
-        # nunca um formulário por item da lista).
-        # ------------------------------------------------------------
-        em_edicao = st.session_state.get("alinhamento_em_edicao")
-        if em_edicao:
-            st.divider()
-            st.subheader("Editar Alinhamento" if em_edicao != "NOVO" else "Novo Alinhamento")
+        def _form_edicao(a_alvo, em_edicao):
+            """Campos + Salvar/Cancelar + status de ciência. Reaproveitado
+            tanto pro 'Novo Alinhamento' (topo) quanto pra edição de um item
+            já existente (dentro do próprio expander dele)."""
+            e_titulo = st.text_input("Título / Assunto", value=a_alvo.get("titulo", ""), key="edit_alinh_titulo")
+            e_conteudo = st.text_area("Conteúdo / Deliberação", value=a_alvo.get("conteudo", ""), height=140, key="edit_alinh_conteudo")
+            e_anexo = st.text_input(
+                "Link de anexo (opcional)",
+                value=a_alvo.get("anexo_url") or "",
+                key="edit_alinh_anexo",
+                placeholder="https://... (planilha, documento, etc.)",
+            )
 
-            with st.container(border=True):
-                a_alvo = {"id": None, "titulo": "", "conteudo": "", "categoria": CATEGORIAS[0], "nivel_minimo": NIVEIS[1], "created_at": None, "anexo_url": ""}
-                if em_edicao != "NOVO":
-                    for a in todos_base:
-                        if a["id"] == em_edicao:
-                            a_alvo = a
-                            break
+            col_c1, col_c2, col_c3 = st.columns(3)
+            with col_c1:
+                idx_cat = CATEGORIAS.index(a_alvo.get("categoria")) if a_alvo.get("categoria") in CATEGORIAS else 0
+                e_categoria = st.selectbox("Categoria", CATEGORIAS, index=idx_cat, key="edit_alinh_categoria")
+            with col_c2:
+                idx_nivel = NIVEIS.index(a_alvo.get("nivel_minimo")) if a_alvo.get("nivel_minimo") in NIVEIS else 1
+                e_nivel = st.selectbox("Nível mínimo (quem recebe e precisa confirmar ciência)", NIVEIS, index=idx_nivel, key="edit_alinh_nivel")
+            with col_c3:
+                e_data = None
+                if em_edicao != "NOVO" and a_alvo.get("created_at"):
+                    data_original = pd.to_datetime(a_alvo["created_at"]).date()
+                    e_data = st.date_input("Criado em", value=data_original, format="DD/MM/YYYY", key="edit_alinh_data")
 
-                e_titulo = st.text_input("Título / Assunto", value=a_alvo.get("titulo", ""), key="edit_alinh_titulo")
-                e_conteudo = st.text_area("Conteúdo / Deliberação", value=a_alvo.get("conteudo", ""), height=140, key="edit_alinh_conteudo")
-                e_anexo = st.text_input(
-                    "Link de anexo (opcional)",
-                    value=a_alvo.get("anexo_url") or "",
-                    key="edit_alinh_anexo",
-                    placeholder="https://... (planilha, documento, etc.)",
-                )
-
-                col_c1, col_c2, col_c3 = st.columns(3)
-                with col_c1:
-                    idx_cat = CATEGORIAS.index(a_alvo.get("categoria")) if a_alvo.get("categoria") in CATEGORIAS else 0
-                    e_categoria = st.selectbox("Categoria", CATEGORIAS, index=idx_cat, key="edit_alinh_categoria")
-                with col_c2:
-                    idx_nivel = NIVEIS.index(a_alvo.get("nivel_minimo")) if a_alvo.get("nivel_minimo") in NIVEIS else 1
-                    e_nivel = st.selectbox("Nível mínimo (quem recebe e precisa confirmar ciência)", NIVEIS, index=idx_nivel, key="edit_alinh_nivel")
-                with col_c3:
-                    e_data = None
-                    if em_edicao != "NOVO" and a_alvo.get("created_at"):
-                        data_original = pd.to_datetime(a_alvo["created_at"]).date()
-                        e_data = st.date_input("Criado em", value=data_original, format="DD/MM/YYYY", key="edit_alinh_data")
-
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
-                    if st.button("Salvar", type="primary", use_container_width=True, key="btn_salvar_alinh"):
-                        anexo_invalido = e_anexo.strip() and not e_anexo.strip().startswith(("http://", "https://"))
-                        if not e_titulo or not e_conteudo:
-                            st.warning("Preencha título e conteúdo.")
-                        elif anexo_invalido:
-                            st.warning("O link de anexo deve começar com http:// ou https://.")
-                        elif em_edicao == "NOVO":
-                            if db.inserir_alinhamento(e_titulo, e_conteudo, e_categoria, e_nivel, usuario_id, e_anexo):
-                                st.success("Alinhamento publicado!")
-                                st.session_state["alinhamento_em_edicao"] = None
-                                st.rerun()
-                            else:
-                                st.error("Erro ao publicar o alinhamento.")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("Salvar", type="primary", use_container_width=True, key="btn_salvar_alinh"):
+                    anexo_invalido = e_anexo.strip() and not e_anexo.strip().startswith(("http://", "https://"))
+                    if not e_titulo or not e_conteudo:
+                        st.warning("Preencha título e conteúdo.")
+                    elif anexo_invalido:
+                        st.warning("O link de anexo deve começar com http:// ou https://.")
+                    elif em_edicao == "NOVO":
+                        if db.inserir_alinhamento(e_titulo, e_conteudo, e_categoria, e_nivel, usuario_id, e_anexo):
+                            st.success("Alinhamento publicado!")
+                            st.session_state["alinhamento_em_edicao"] = None
+                            st.rerun()
                         else:
-                            data_original = pd.to_datetime(a_alvo["created_at"]).date() if a_alvo.get("created_at") else None
-                            nova_data = e_data.strftime("%Y-%m-%d") if (e_data and e_data != data_original) else None
-                            if db.atualizar_alinhamento(em_edicao, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data, e_anexo):
-                                st.success("Alinhamento atualizado!")
-                                st.session_state["alinhamento_em_edicao"] = None
-                                st.rerun()
-                            else:
-                                st.error("Erro ao atualizar o alinhamento.")
-                with col_b2:
-                    if st.button("Cancelar", use_container_width=True, key="btn_cancelar_alinh"):
-                        st.session_state["alinhamento_em_edicao"] = None
-                        st.rerun()
+                            st.error("Erro ao publicar o alinhamento.")
+                    else:
+                        data_original = pd.to_datetime(a_alvo["created_at"]).date() if a_alvo.get("created_at") else None
+                        nova_data = e_data.strftime("%Y-%m-%d") if (e_data and e_data != data_original) else None
+                        if db.atualizar_alinhamento(em_edicao, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data, e_anexo):
+                            st.success("Alinhamento atualizado!")
+                            st.session_state["alinhamento_em_edicao"] = None
+                            st.rerun()
+                        else:
+                            st.error("Erro ao atualizar o alinhamento.")
+            with col_b2:
+                if st.button("Cancelar", use_container_width=True, key="btn_cancelar_alinh"):
+                    st.session_state["alinhamento_em_edicao"] = None
+                    st.rerun()
 
-                if em_edicao != "NOVO":
-                    obrigados = _obrigados_ciencia(a_alvo, usuarios_ativos)
-                    if obrigados:
-                        leituras_item = leituras_por_alinhamento.get(em_edicao, {})
-                        confirmaram = [u for u in obrigados if u["id"] in leituras_item]
-                        pendentes_ciencia = [u for u in obrigados if u["id"] not in leituras_item]
+            if em_edicao != "NOVO":
+                obrigados = _obrigados_ciencia(a_alvo, usuarios_ativos)
+                if obrigados:
+                    leituras_item = leituras_por_alinhamento.get(em_edicao, {})
+                    confirmaram = [u for u in obrigados if u["id"] in leituras_item]
+                    pendentes_ciencia = [u for u in obrigados if u["id"] not in leituras_item]
 
-                        st.markdown("**Status de Ciência**")
-                        st.progress(len(confirmaram) / len(obrigados))
-                        st.caption(f"{len(confirmaram)}/{len(obrigados)} confirmaram a ciência")
+                    st.markdown("**Status de Ciência**")
+                    st.progress(len(confirmaram) / len(obrigados))
+                    st.caption(f"{len(confirmaram)}/{len(obrigados)} confirmaram a ciência")
 
-                        with st.expander(f"Ver detalhes ({len(obrigados)} pessoas)"):
-                            df_ciencia = pd.DataFrame([
-                                {
-                                    "Usuário": u["nome_completo"],
-                                    "Status": "Confirmou" if u["id"] in leituras_item else "Pendente",
-                                    "Lido em": pd.to_datetime(leituras_item[u["id"]]).strftime("%d/%m/%Y %H:%M") if u["id"] in leituras_item else "—",
-                                }
-                                for u in pendentes_ciencia + confirmaram
-                            ])
-                            st.dataframe(df_ciencia, use_container_width=True, hide_index=True)
+                    with st.expander(f"Ver detalhes ({len(obrigados)} pessoas)"):
+                        df_ciencia = pd.DataFrame([
+                            {
+                                "Usuário": u["nome_completo"],
+                                "Status": "Confirmou" if u["id"] in leituras_item else "Pendente",
+                                "Lido em": pd.to_datetime(leituras_item[u["id"]]).strftime("%d/%m/%Y %H:%M") if u["id"] in leituras_item else "—",
+                            }
+                            for u in pendentes_ciencia + confirmaram
+                        ])
+                        st.dataframe(df_ciencia, use_container_width=True, hide_index=True)
 
+        em_edicao = st.session_state.get("alinhamento_em_edicao")
+
+        # "Novo Alinhamento" não tem card pra ancorar em — continua no topo.
+        if em_edicao == "NOVO":
+            st.divider()
+            st.subheader("Novo Alinhamento")
+            with st.container(border=True):
+                a_novo = {"id": None, "titulo": "", "conteudo": "", "categoria": CATEGORIAS[0], "nivel_minimo": NIVEIS[1], "created_at": None, "anexo_url": ""}
+                _form_edicao(a_novo, "NOVO")
             st.divider()
 
         # ------------------------------------------------------------
-        # Lista (Action Cards): informação à esquerda, ações à direita.
-        # Uma linha fina por item, sem formulário embutido.
+        # Lista: um expander fechado por item (título + status visíveis
+        # sem abrir). Editar abre o formulário dentro do próprio expander,
+        # ancorado onde o usuário clicou — sem formulário solto no topo.
+        # Paginada pra não empilhar dezenas de itens de uma vez.
         # ------------------------------------------------------------
         todos = todos_base
         if categoria_filtro2 != "Todas":
@@ -290,11 +288,22 @@ if pode_gerenciar:
                 if busca2_lower in a.get("titulo", "").lower() or busca2_lower in a.get("conteudo", "").lower()
             ]
 
-        st.markdown(f"**{len(todos)} alinhamento(s)**")
+        POR_PAGINA = 15
+        filtro_assinatura = (busca2, categoria_filtro2, equipe_filtro2, ano_filtro2)
+        if st.session_state.get("alinh_filtro_assinatura") != filtro_assinatura:
+            st.session_state["alinh_filtro_assinatura"] = filtro_assinatura
+            st.session_state["alinh_pagina"] = 0
+
+        total_paginas = max(1, -(-len(todos) // POR_PAGINA))
+        pagina_atual = min(st.session_state.get("alinh_pagina", 0), total_paginas - 1)
+        inicio = pagina_atual * POR_PAGINA
+        pagina_itens = todos[inicio:inicio + POR_PAGINA]
+
+        st.markdown(f"**{len(todos)} alinhamento(s)** · página {pagina_atual + 1} de {total_paginas}")
         if not todos:
             st.info("Nenhum alinhamento encontrado com esses filtros.")
 
-        for a in todos:
+        for a in pagina_itens:
             aid = a["id"]
             ativo = a.get("ativo", True)
             data_fmt = pd.to_datetime(a["created_at"]).strftime("%d/%m/%Y") if a.get("created_at") else "—"
@@ -306,52 +315,67 @@ if pode_gerenciar:
                 confirmaram_n = len([u for u in obrigados if u["id"] in leituras_item])
                 ciencia_label = f" · {confirmaram_n}/{len(obrigados)} cientes"
 
-            col_info, col_status, col_edit, col_del = st.columns([4, 1.8, 1, 1])
-            with col_info:
-                titulo_txt = a.get("titulo", "") if ativo else f"~~{a.get('titulo', '')}~~"
-                st.markdown(f"**{titulo_txt}**")
-                st.caption(f"{data_fmt} · {a.get('categoria', 'Geral')} · {a.get('nivel_minimo', 'Auditor')}{ciencia_label}")
-                with st.expander("Ler texto completo"):
-                    st.markdown(_conteudo_markdown(a.get("conteudo", "")))
-                    if a.get("anexo_url"):
-                        st.link_button("Abrir anexo", a["anexo_url"])
-            with col_status:
-                if ativo:
-                    st.caption("🟢 Ativo")
-                    with st.popover("Inativar", use_container_width=True):
-                        st.markdown(f"Inativar **{a.get('titulo', '')}**?")
-                        motivo_inativ = st.text_area("Justificativa (obrigatória)", key=f"motivo_inativ_{aid}", height=80)
-                        if st.button("Confirmar inativação", key=f"conf_inativ_{aid}", type="primary", use_container_width=True):
-                            if not motivo_inativ.strip():
-                                st.warning("Justificativa obrigatória.")
-                            elif db.toggle_ativo_alinhamento(aid, False, justificativa=motivo_inativ.strip()):
+            status_emoji = "🟢" if ativo else "🔴"
+            label = f"{status_emoji} {a.get('titulo', '')} · {data_fmt} · {a.get('categoria', 'Geral')}{ciencia_label}"
+
+            with st.expander(label, expanded=(em_edicao == aid)):
+                if em_edicao == aid:
+                    _form_edicao(a, aid)
+                    continue
+
+                st.markdown(_conteudo_markdown(a.get("conteudo", "")))
+                if a.get("anexo_url"):
+                    st.link_button("Abrir anexo", a["anexo_url"])
+                st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
+
+                col_edit, col_status, col_del = st.columns([1, 1.4, 1])
+                with col_edit:
+                    if st.button("Editar", key=f"edit_alinh_{aid}", use_container_width=True):
+                        st.session_state["alinhamento_em_edicao"] = aid
+                        st.rerun()
+                with col_status:
+                    if ativo:
+                        with st.popover("Inativar", use_container_width=True):
+                            st.markdown(f"Inativar **{a.get('titulo', '')}**?")
+                            motivo_inativ = st.text_area("Justificativa (obrigatória)", key=f"motivo_inativ_{aid}", height=80)
+                            if st.button("Confirmar inativação", key=f"conf_inativ_{aid}", type="primary", use_container_width=True):
+                                if not motivo_inativ.strip():
+                                    st.warning("Justificativa obrigatória.")
+                                elif db.toggle_ativo_alinhamento(aid, False, justificativa=motivo_inativ.strip()):
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao inativar.")
+                    else:
+                        if st.button("Reativar", key=f"reativ_{aid}", use_container_width=True):
+                            if db.toggle_ativo_alinhamento(aid, True):
                                 st.rerun()
                             else:
-                                st.error("Erro ao inativar.")
-                else:
-                    st.caption("🔴 Inativo")
-                    if st.button("Reativar", key=f"reativ_{aid}", use_container_width=True):
-                        if db.toggle_ativo_alinhamento(aid, True):
-                            st.rerun()
-                        else:
-                            st.error("Erro ao reativar.")
-            with col_edit:
-                if st.button("Editar", key=f"edit_alinh_{aid}", use_container_width=True):
-                    st.session_state["alinhamento_em_edicao"] = aid
+                                st.error("Erro ao reativar.")
+                with col_del:
+                    with st.popover("Excluir", use_container_width=True):
+                        st.markdown(f"Excluir **{a.get('titulo', '')}**?")
+                        st.caption("O alinhamento vai para a área \"Excluídos\" — nada é apagado de fato.")
+                        motivo_excl = st.text_area("Motivo da exclusão (obrigatório)", key=f"motivo_excl_{aid}", height=80)
+                        if st.button("Confirmar exclusão", key=f"conf_excl_{aid}", type="primary", use_container_width=True):
+                            if not motivo_excl.strip():
+                                st.warning("Motivo obrigatório.")
+                            elif db.excluir_alinhamento_com_motivo(aid, motivo_excl, usuario_id):
+                                st.rerun()
+                            else:
+                                st.error("Erro ao excluir.")
+
+        if total_paginas > 1:
+            col_pag_ant, col_pag_info, col_pag_prox = st.columns([1, 2, 1])
+            with col_pag_ant:
+                if st.button("Anterior", disabled=(pagina_atual == 0), use_container_width=True, key="alinh_pag_ant"):
+                    st.session_state["alinh_pagina"] = pagina_atual - 1
                     st.rerun()
-            with col_del:
-                with st.popover("Excluir", use_container_width=True):
-                    st.markdown(f"Excluir **{a.get('titulo', '')}**?")
-                    st.caption("O alinhamento vai para a área \"Excluídos\" — nada é apagado de fato.")
-                    motivo_excl = st.text_area("Motivo da exclusão (obrigatório)", key=f"motivo_excl_{aid}", height=80)
-                    if st.button("Confirmar exclusão", key=f"conf_excl_{aid}", type="primary", use_container_width=True):
-                        if not motivo_excl.strip():
-                            st.warning("Motivo obrigatório.")
-                        elif db.excluir_alinhamento_com_motivo(aid, motivo_excl, usuario_id):
-                            st.rerun()
-                        else:
-                            st.error("Erro ao excluir.")
-            st.divider()
+            with col_pag_info:
+                st.markdown(f"<div style='text-align:center'>Página {pagina_atual + 1} de {total_paginas}</div>", unsafe_allow_html=True)
+            with col_pag_prox:
+                if st.button("Próxima", disabled=(pagina_atual >= total_paginas - 1), use_container_width=True, key="alinh_pag_prox"):
+                    st.session_state["alinh_pagina"] = pagina_atual + 1
+                    st.rerun()
 
 
 if pode_gerenciar:
