@@ -247,18 +247,24 @@ else:
     from core.settings import ROLES_CIENCIA_OBRIGATORIA
 
     if role in ROLES_CIENCIA_OBRIGATORIA:
+        # A checagem roda em fragment com run_every pra detectar alinhamento novo
+        # sem precisar de interação do usuário. O popup em si é aberto FORA do
+        # fragment: abri-lo de dentro de um fragment que se auto-atualiza sozinho
+        # faz o clique no botão "Estou Ciente" competir com o próximo auto-refresh
+        # e não ser processado (o popup fica preso, parecendo travado).
         @st.fragment(run_every=15)
         def _checar_alinhamentos_pendentes():
             pendentes = db.carregar_alinhamentos_pendentes(st.session_state.get("usuario_id"), role)
             st.session_state["alinhamentos_pendentes"] = pendentes
-            
-            if pendentes:
-                id_e_status = f"{pendentes[0]['id']}_{pendentes[0].get('ativo')}"
-                if st.session_state.get("_dialog_alinhamento_id") != id_e_status:
-                    st.session_state["_dialog_alinhamento_id"] = id_e_status
-                    mostrar_alinhamento_dialog(pendentes[0], st.session_state.get("usuario_id"))
 
         _checar_alinhamentos_pendentes()
+
+        pendentes_atuais = st.session_state.get("alinhamentos_pendentes") or []
+        if pendentes_atuais:
+            id_e_status = f"{pendentes_atuais[0]['id']}_{pendentes_atuais[0].get('ativo')}"
+            if st.session_state.get("_dialog_alinhamento_id") != id_e_status:
+                st.session_state["_dialog_alinhamento_id"] = id_e_status
+                mostrar_alinhamento_dialog(pendentes_atuais[0], st.session_state.get("usuario_id"))
 
     # Construção Dinâmica do Menu baseada no Cargo
     paginas = []

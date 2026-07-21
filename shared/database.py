@@ -207,8 +207,10 @@ class DatabaseManager:
         return True
 
     def marcar_todos_alinhamentos_lidos(self, usuario_id):
-        """Marca todo o histórico de alinhamentos existente como lido para um usuário,
-        para que apenas alinhamentos publicados após este momento gerem popup obrigatório."""
+        """Marca todo o histórico de alinhamentos existente como lido (e toda
+        inativação existente como ciente) para um usuário recém-criado, para
+        que só alinhamentos publicados ou inativados após este momento gerem
+        popup obrigatório — o histórico já é conhecimento geral da equipe."""
         existentes = self.carregar_alinhamentos()
         if not existentes:
             return True
@@ -218,7 +220,16 @@ class DatabaseManager:
         headers_upsert["Prefer"] = "resolution=ignore-duplicates"
         data = [{"alinhamento_id": a["id"], "usuario_id": usuario_id} for a in existentes]
         response = requests.post(url, headers=headers_upsert, json=data)
-        return response.status_code in [200, 201]
+        ok = response.status_code in [200, 201]
+
+        inativos_com_motivo = [a for a in existentes if not a.get("ativo", True) and a.get("justificativa_inativacao")]
+        if inativos_com_motivo:
+            url_inat = f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas"
+            data_inat = [{"alinhamento_id": a["id"], "usuario_id": usuario_id} for a in inativos_com_motivo]
+            response_inat = requests.post(url_inat, headers=headers_upsert, json=data_inat)
+            ok = ok and response_inat.status_code in [200, 201]
+
+        return ok
 
     def autenticar_usuario(self, usuario_sigo, senha):
         url = f"{self.supabase_url}/rest/v1/usuarios?usuario_sigo=eq.{usuario_sigo}&select=*"
