@@ -790,12 +790,14 @@ if "Links Home" in nomes_abas:
         st.subheader("Links institucionais exibidos na Home")
         st.caption("Todos os usuários logados enxergam esses links no Painel Principal, agrupados por categoria.")
 
+        EQUIPES_LINKS = ["Contas", "Auditor", "CISO"]
+
         col_head_1, col_head_2 = st.columns([1, 3])
         with col_head_1:
             st.write("")
             if st.button("Adicionar Novo Link", type="primary", use_container_width=True, key="btn_add_link_padrao"):
                 st.session_state["link_padrao_em_edicao"] = "NOVO"
-                
+
         todos_links = db.listar_links_padrao(incluir_inativos=True)
 
         em_edicao = st.session_state.get("link_padrao_em_edicao", None)
@@ -803,13 +805,16 @@ if "Links Home" in nomes_abas:
             st.divider()
             st.subheader("Editor de Link" if em_edicao != "NOVO" else "Novo Link")
             with st.container(border=True):
-                l_alvo = {"id": None, "titulo": "", "url": "", "categoria": "Geral", "ordem": 100, "ativo": True}
+                l_alvo = {
+                    "id": None, "titulo": "", "url": "", "categoria": "Geral", "ordem": 100,
+                    "ativo": True, "niveis_visiveis": EQUIPES_LINKS,
+                }
                 if em_edicao != "NOVO":
                     for l in todos_links:
                         if l['id'] == em_edicao:
                             l_alvo = l
                             break
-                            
+
                 fc1, fc2, fc3, fc4 = st.columns([3, 4, 2, 1])
                 with fc1:
                     lp_titulo = st.text_input("Título", value=l_alvo.get("titulo", ""), placeholder="Ex: SharePoint Auditoria")
@@ -819,24 +824,32 @@ if "Links Home" in nomes_abas:
                     lp_categoria = st.text_input("Categoria", value=l_alvo.get("categoria", "Geral"))
                 with fc4:
                     lp_ordem = st.number_input("Ordem", min_value=1, value=int(l_alvo.get("ordem", 100)), step=10)
+                lp_niveis = st.multiselect(
+                    "Equipes que veem este link",
+                    EQUIPES_LINKS,
+                    default=[n for n in l_alvo.get("niveis_visiveis") or EQUIPES_LINKS if n in EQUIPES_LINKS],
+                    help="Gestor e Admin sempre veem todos os links, independente desta seleção.",
+                )
                 lp_ativo = st.checkbox("Ativo", value=bool(l_alvo.get("ativo", True)))
-                
+
                 b1, b2, b3 = st.columns([2, 2, 8])
                 if b1.button("Salvar", type="primary", use_container_width=True, key="btn_salvar_lp"):
                     if not lp_titulo or not lp_url:
                         st.warning("Título e URL são obrigatórios.")
                     elif not lp_url.startswith(("http://", "https://")):
                         st.error("URL deve começar com http:// ou https://.")
+                    elif not lp_niveis:
+                        st.warning("Selecione ao menos uma equipe (ou Gestor/Admin não terão o que restringir).")
                     else:
                         if em_edicao == "NOVO":
-                            if db.inserir_link_padrao(lp_titulo, lp_url, lp_categoria, lp_ordem, atuante_role=role):
+                            if db.inserir_link_padrao(lp_titulo, lp_url, lp_categoria, lp_ordem, atuante_role=role, niveis_visiveis=lp_niveis):
                                 st.success("Link adicionado!")
                                 st.session_state["link_padrao_em_edicao"] = None
                                 st.rerun()
                             else:
                                 st.error("Erro ao salvar.")
                         else:
-                            if db.atualizar_link_padrao(l_alvo["id"], lp_titulo, lp_url, lp_categoria, lp_ordem, lp_ativo, atuante_role=role):
+                            if db.atualizar_link_padrao(l_alvo["id"], lp_titulo, lp_url, lp_categoria, lp_ordem, lp_ativo, atuante_role=role, niveis_visiveis=lp_niveis):
                                 st.success("Link atualizado!")
                                 st.session_state["link_padrao_em_edicao"] = None
                                 st.rerun()
@@ -855,7 +868,9 @@ if "Links Home" in nomes_abas:
                 with st.container(border=True):
                     lc1, lc2, lc3, lc4 = st.columns([4, 3, 2, 3])
                     status = "🟢 Ativo" if l.get('ativo', True) else "🔴 Inativo"
+                    equipes = ", ".join(l.get("niveis_visiveis") or []) or "nenhuma"
                     lc1.markdown(f"**{l.get('titulo', 'Sem Título')}**")
+                    lc1.caption(f"Visível a: {equipes} (+ Gestor/Admin)")
                     lc2.markdown(f"[Acessar Link]({l.get('url', '')})")
                     lc3.markdown(f"{l.get('categoria', 'Geral')} ({l.get('ordem', 100)}) | {status}")
                     

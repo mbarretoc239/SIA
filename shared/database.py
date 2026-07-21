@@ -297,27 +297,46 @@ class DatabaseManager:
 
     # --- Links Padrão (institucionais, exibidos na Home) ---
     _ROLES_QUE_GERENCIAM_LINKS = {"Admin", "Gestor"}
+    # Gestor e Admin sempre veem todos os links, independente de
+    # niveis_visiveis — mesma convenção de "acesso total" já usada em
+    # core/settings.py::tem_acesso_modulo para o Admin.
+    _ROLES_QUE_VEEM_TUDO = {"Admin", "Gestor"}
 
-    def listar_links_padrao(self, incluir_inativos: bool = False):
+    def listar_links_padrao(self, incluir_inativos: bool = False, role: str = None):
         base = f"{self.supabase_url}/rest/v1/links_padrao?select=*&order=categoria.asc,ordem.asc"
         if not incluir_inativos:
             base += "&ativo=eq.true"
+        if role and role not in self._ROLES_QUE_VEEM_TUDO:
+            base += f"&niveis_visiveis=cs.{{{role}}}"
         r = requests.get(base, headers=self.headers)
         return r.json() if r.status_code == 200 else []
 
-    def inserir_link_padrao(self, titulo, url, categoria, ordem, atuante_role):
+    def inserir_link_padrao(self, titulo, url, categoria, ordem, atuante_role, niveis_visiveis=None):
         if str(atuante_role) not in self._ROLES_QUE_GERENCIAM_LINKS:
             return False
         endpoint = f"{self.supabase_url}/rest/v1/links_padrao"
-        data = {"titulo": titulo, "url": url, "categoria": categoria or "Geral", "ordem": int(ordem or 100)}
+        data = {
+            "titulo": titulo,
+            "url": url,
+            "categoria": categoria or "Geral",
+            "ordem": int(ordem or 100),
+            "niveis_visiveis": niveis_visiveis or ["Contas", "Auditor", "CISO"],
+        }
         r = requests.post(endpoint, headers=self._admin_headers(), json=data)
         return r.status_code in (200, 201)
 
-    def atualizar_link_padrao(self, link_id, titulo, url, categoria, ordem, ativo, atuante_role):
+    def atualizar_link_padrao(self, link_id, titulo, url, categoria, ordem, ativo, atuante_role, niveis_visiveis=None):
         if str(atuante_role) not in self._ROLES_QUE_GERENCIAM_LINKS:
             return False
         endpoint = f"{self.supabase_url}/rest/v1/links_padrao?id=eq.{link_id}"
-        data = {"titulo": titulo, "url": url, "categoria": categoria or "Geral", "ordem": int(ordem or 100), "ativo": bool(ativo)}
+        data = {
+            "titulo": titulo,
+            "url": url,
+            "categoria": categoria or "Geral",
+            "ordem": int(ordem or 100),
+            "ativo": bool(ativo),
+            "niveis_visiveis": niveis_visiveis or ["Contas", "Auditor", "CISO"],
+        }
         r = requests.patch(endpoint, headers=self._admin_headers(), json=data)
         return r.status_code in (200, 204)
 

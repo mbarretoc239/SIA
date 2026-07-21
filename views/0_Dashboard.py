@@ -45,8 +45,9 @@ else:
 
     st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
 
-# Links úteis (institucionais) - agrupados por categoria
-links_padrao = db.listar_links_padrao()
+# Links úteis (institucionais) - agrupados por categoria, filtrados pela
+# equipe do usuário logado (Gestor e Admin sempre veem todos)
+links_padrao = db.listar_links_padrao(role=role)
 with st.expander("Links úteis", expanded=False):
     if not links_padrao:
         st.caption("Nenhum link cadastrado ainda.")
