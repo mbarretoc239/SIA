@@ -13,7 +13,7 @@ from core.amostragem import (
 )
 from shared.database import DatabaseManager
 
-st.set_page_config(page_title="Amostragem BETA", page_icon="", layout="wide")
+st.set_page_config(page_title="Amostragem", page_icon="", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -109,11 +109,11 @@ def _guias_para_df(guias: list) -> pd.DataFrame:
 
 # --------------------------------------------------------------------- UI ----
 
-st.title("Amostragem de Guias (BETA)")
+st.title("Amostragem de Guias")
 st.caption(
     "Digite o número do processo — as guias com LIBERAÇÃO = N são buscadas "
-    "automaticamente na base importada mensalmente e a amostra é gerada "
-    "igual ao fluxo atual. Prestador e percentuais continuam só no PowerBI."
+    "automaticamente na base importada mensalmente. Prestador e percentuais "
+    "continuam só no PowerBI."
 )
 
 aba_busca, aba_config = st.tabs(["Amostragem", "Configurações"])

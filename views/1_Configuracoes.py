@@ -21,24 +21,29 @@ nome = st.session_state.get("auditor_nome", "Usuário")
 st.title("Configurações")
 st.markdown("Gerencie seu perfil e, conforme seu nível de acesso, as regras e cadastros do sistema.")
 
-# Define quais abas o usuário tem acesso
-nomes_abas = []
-nomes_abas.append("Meu Perfil")
-nomes_abas.append("Meus Links Úteis")
+# Define quais abas o usuário tem acesso. Cada aba tem um id interno
+# estável (nunca muda) separado do rótulo exibido (pode ser reescrito à
+# vontade) — as seções abaixo se referenciam pelo id, nunca pelo texto,
+# então renomear um rótulo nunca mais derruba a seção correspondente.
+abas_definidas = []  # [(id_aba, rotulo_exibido)]
+abas_definidas.append(("meu_perfil", "Meu Perfil"))
+abas_definidas.append(("meus_links", "Meus Links Úteis"))
 
 if role == "Admin":
-    nomes_abas.append("Aprovação da Equipe")
+    abas_definidas.append(("aprovacao_equipe", "Aprovação da Equipe"))
 
 if role in ["Admin", "Gestor"]:
-    nomes_abas.append("Permissões de Acesso")
-    nomes_abas.append("Textos para Prestadores")
-    nomes_abas.append("Links Home")
-    nomes_abas.append("Tabelas Base e Glosas")
+    abas_definidas.append(("permissoes", "Permissões de Acesso"))
+    abas_definidas.append(("textos_prestadores", "Textos para Prestadores"))
+    abas_definidas.append(("links_home", "Links Home"))
+    abas_definidas.append(("tabelas_base", "Tabelas Base e Glosas"))
 
 if role == "Admin":
-    nomes_abas.append("Debug/Testes")
+    abas_definidas.append(("debug_testes", "Debug/Testes"))
 
+nomes_abas = [rotulo for _, rotulo in abas_definidas]
 abas = st.tabs(nomes_abas)
+abas_por_id = dict(zip((id_aba for id_aba, _ in abas_definidas), abas))
 
 # ==========================================
 # ABA 1: MEU PERFIL (TODOS)
@@ -50,9 +55,8 @@ with abas[0]:
 # ==========================================
 # ABA 2: LINKS ÚTEIS (TODOS)
 # ==========================================
-if "Meus Links Úteis" in nomes_abas:
-    aba_idx = nomes_abas.index("Meus Links Úteis")
-    with abas[aba_idx]:
+if "meus_links" in abas_por_id:
+    with abas_por_id["meus_links"]:
         st.subheader("Meus Links")
         st.markdown("Cadastre aqui os links que você mais usa. Eles aparecerão na barra lateral para acesso rápido!")
         
@@ -132,9 +136,8 @@ if "Meus Links Úteis" in nomes_abas:
 # ==========================================
 # ABA 3: APROVAÇÃO DE EQUIPE (ADMIN)
 # ==========================================
-if "Aprovação da Equipe" in nomes_abas:
-    aba_idx = nomes_abas.index("Aprovação da Equipe")
-    with abas[aba_idx]:
+if "aprovacao_equipe" in abas_por_id:
+    with abas_por_id["aprovacao_equipe"]:
         st.subheader("Fila de Moderação de Cadastros")
         
         usuarios = db.listar_usuarios()
@@ -156,9 +159,13 @@ if "Aprovação da Equipe" in nomes_abas:
                         with c1:
                             novo_status = st.selectbox("Status", ["Pendente", "Ativo", "Bloqueado"], key=f"s_{row['id']}")
                         with c2:
-                            nova_equipe = st.selectbox("Equipe", ["Contas", "Auditoria", "CISO", "Gestor"], index=["Contas", "Auditoria", "CISO", "Gestor"].index(row['equipe']), key=f"e_{row['id']}")
+                            EQUIPES_CADASTRO = ["Contas", "Auditoria", "CISO", "Gestor"]
+                            idx_equipe = EQUIPES_CADASTRO.index(row['equipe']) if row['equipe'] in EQUIPES_CADASTRO else 0
+                            nova_equipe = st.selectbox("Equipe", EQUIPES_CADASTRO, index=idx_equipe, key=f"e_{row['id']}")
                         with c3:
-                            novo_role = st.selectbox("Role do Sistema", ["Contas", "Auditor", "CISO", "Gestor", "Admin"], index=["Contas", "Auditor", "CISO", "Gestor", "Admin"].index(row['role_interno']), key=f"r_{row['id']}")
+                            ROLES_CADASTRO = ["Contas", "Auditor", "CISO", "Gestor", "Admin"]
+                            idx_role = ROLES_CADASTRO.index(row['role_interno']) if row['role_interno'] in ROLES_CADASTRO else 0
+                            novo_role = st.selectbox("Role do Sistema", ROLES_CADASTRO, index=idx_role, key=f"r_{row['id']}")
                         
                         col_save, col_del = st.columns(2)
                         with col_save:
@@ -254,9 +261,8 @@ if "Aprovação da Equipe" in nomes_abas:
 # ==========================================
 # ABA: DEBUG/TESTES (ADMIN)
 # ==========================================
-if "Debug/Testes" in nomes_abas:
-    aba_idx = nomes_abas.index("Debug/Testes")
-    with abas[aba_idx]:
+if "debug_testes" in abas_por_id:
+    with abas_por_id["debug_testes"]:
         st.subheader("Ferramentas de Teste")
         st.caption("Disponível apenas para Admin. Use para validar alinhamentos, popups de ciência e notificações ao vivo.")
 
@@ -328,9 +334,8 @@ if "Debug/Testes" in nomes_abas:
 # ==========================================
 # ABA 3: TABELAS BASE E GLOSAS (ADMIN/GESTOR)
 # ==========================================
-if "Tabelas Base e Glosas" in nomes_abas:
-    aba_idx = nomes_abas.index("Tabelas Base e Glosas")
-    with abas[aba_idx]:
+if "tabelas_base" in abas_por_id:
+    with abas_por_id["tabelas_base"]:
         st.subheader("Base de Conhecimento do Sistema")
         
         tab_interna1, tab_interna2, tab_interna3 = st.tabs(["Procedimentos (Supabase)", "Classificação de Glosas (Memória)", "Glosas Customizadas (Nuvem)"])
@@ -577,9 +582,8 @@ if "Tabelas Base e Glosas" in nomes_abas:
 # ==========================================
 # ABA 4: TEXTOS DOS PRESTADORES (GESTOR/ADMIN)
 # ==========================================
-if "Textos para Prestadores" in nomes_abas:
-    aba_idx = nomes_abas.index("Textos para Prestadores")
-    with abas[aba_idx]:
+if "textos_prestadores" in abas_por_id:
+    with abas_por_id["textos_prestadores"]:
         st.subheader("Textos para os Prestadores")
         st.markdown("Cadastre os textos descritivos que aparecerão para as glosas no final do relatório.")
         
@@ -740,9 +744,8 @@ if "Textos para Prestadores" in nomes_abas:
 # ==========================================
 # ABA 5: PERMISSÕES DE ACESSO (ADMIN/GESTOR)
 # ==========================================
-if "Permissões de Acesso" in nomes_abas:
-    aba_idx = nomes_abas.index("Permissões de Acesso")
-    with abas[aba_idx]:
+if "permissoes" in abas_por_id:
+    with abas_por_id["permissoes"]:
         from core.settings import MODULOS_CONTROLADOS, ROLES_PERMISSAO
 
         st.subheader("Acesso aos Módulos por Função")
@@ -784,9 +787,8 @@ if "Permissões de Acesso" in nomes_abas:
 # ==========================================
 # ABA: LINKS PADRÃO (ADMIN/GESTOR)
 # ==========================================
-if "Links Home" in nomes_abas:
-    aba_idx = nomes_abas.index("Links Home")
-    with abas[aba_idx]:
+if "links_home" in abas_por_id:
+    with abas_por_id["links_home"]:
         st.subheader("Links institucionais exibidos na Home")
         st.caption("Todos os usuários logados enxergam esses links no Painel Principal, agrupados por categoria.")
 
