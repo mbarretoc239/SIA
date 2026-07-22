@@ -4,8 +4,11 @@ import pandas as pd
 
 from core.amostragem import (
     ORDEM_CRITICAS,
+    REGRAS_AMOSTRAGEM,
     _norm,
+    carregar_procedimentos_criticos,
     consolidar_por_guia,
+    guias_com_proc_critico,
     marcar_amostra,
     renderizar_tabela_guias,
     selecionar_procedimentos_ignorados,
@@ -195,13 +198,35 @@ with aba_busca:
 
     guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
+    # Procedimentos cadastrados como críticos (tabela_procedimentos.critico) —
+    # só importam pras especialidades fora de REGRAS_AMOSTRAGEM (Periodontia,
+    # Odontopediatria, Radiologia Especial etc.): se uma guia dessas
+    # especialidades tiver um desses procedimentos, ela sobe na lista e entra
+    # garantida na "Sugestão de amostra", já que são casos raros que o
+    # auditor corre risco de não perceber se ficarem escondidos lá embaixo.
+    procedimentos_criticos = carregar_procedimentos_criticos()
+
     especialidades = df_guias["Especialidade"].unique().tolist()
-    especialidades.sort(
-        key=lambda e: (
-            ORDEM_CRITICAS.index(_norm(e)) if _norm(e) in ORDEM_CRITICAS else 999,
-            _norm(e),
-        )
-    )
+
+    # Pra cada especialidade fora de REGRAS_AMOSTRAGEM, marca se tem pelo
+    # menos uma guia com procedimento crítico nesta análise — decide tanto a
+    # posição na lista quanto o conteúdo da "Sugestão de amostra" abaixo.
+    especialidade_tem_critico = {}
+    for esp in especialidades:
+        if _norm(esp) in REGRAS_AMOSTRAGEM:
+            continue
+        df_esp_guias_check = df_guias[df_guias["Especialidade"] == esp]
+        especialidade_tem_critico[esp] = not guias_com_proc_critico(df_esp_guias_check, procedimentos_criticos).empty
+
+    def _peso_ordenacao(e):
+        norm = _norm(e)
+        if norm in ORDEM_CRITICAS:
+            return (0, ORDEM_CRITICAS.index(norm))
+        if especialidade_tem_critico.get(e):
+            return (1, norm)
+        return (2, norm)
+
+    especialidades.sort(key=_peso_ordenacao)
 
     # --- Resumo ---
     resumo = []
@@ -210,12 +235,17 @@ with aba_busca:
         df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
         total_procs = int(df_esp_total["Qtde"].sum())
         total_guias = len(df_esp_guias)
-        df_amostra_resumo = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
+
+        if _norm(esp) in REGRAS_AMOSTRAGEM:
+            n_sugerido = len(marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO))
+        else:
+            n_sugerido = len(guias_com_proc_critico(df_esp_guias, procedimentos_criticos))
+
         resumo.append({
             "Especialidade": esp,
             "Guias únicas": total_guias,
             "Total de procs": total_procs,
-            "Amostra sugerida": len(df_amostra_resumo),
+            "Amostra sugerida": n_sugerido,
         })
 
     st.markdown("### Resumo")
@@ -231,24 +261,35 @@ with aba_busca:
         total_procs = int(df_esp_total["Qtde"].sum())
         total_guias = len(df_esp_guias)
 
-        df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
-        n_objetivo = len(df_amostra)
-
         st.markdown(f"#### {esp}")
         st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
         with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
-            renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo, guias_vistas=guias_vistas)
+            renderizar_tabela_guias(df_esp_guias, esp, objetivo=total_guias, guias_vistas=guias_vistas)
 
-        # Prótese sempre audita 100% das guias (regra "todas") — a "Sugestão
-        # de amostra" ficaria idêntica à "Tabela completa", então some daqui
-        # especificamente pra essa especialidade (as demais com regra "todas",
-        # como Implante, continuam mostrando normalmente por enquanto).
-        if _norm(esp) != "PROTESE":
-            with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
-                renderizar_tabela_guias(
-                    df_amostra.drop(columns=["Motivo"], errors="ignore"),
-                    esp,
-                    objetivo=n_objetivo,
-                    guias_vistas=guias_vistas,
-                )
+        if _norm(esp) in REGRAS_AMOSTRAGEM:
+            df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
+            n_objetivo = len(df_amostra)
+            # Prótese sempre audita 100% das guias (regra "todas") — a
+            # "Sugestão de amostra" ficaria idêntica à "Tabela completa",
+            # então some daqui especificamente pra essa especialidade (as
+            # demais com regra "todas", como Implante, continuam mostrando
+            # normalmente por enquanto).
+            if _norm(esp) != "PROTESE":
+                with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
+                    renderizar_tabela_guias(
+                        df_amostra.drop(columns=["Motivo"], errors="ignore"),
+                        esp,
+                        objetivo=n_objetivo,
+                        guias_vistas=guias_vistas,
+                    )
+        elif especialidade_tem_critico.get(esp):
+            # Especialidade fora das regras de amostragem, mas com
+            # procedimento crítico presente: a "Sugestão de amostra" mostra
+            # só as guias com esse procedimento, não as 100% da especialidade.
+            df_criticas = guias_com_proc_critico(df_esp_guias, procedimentos_criticos)
+            with st.expander(f"Sugestão de amostra — {len(df_criticas)} guia(s) com procedimento crítico", expanded=False):
+                renderizar_tabela_guias(df_criticas, esp, objetivo=len(df_criticas), guias_vistas=guias_vistas)
+        # Sem regra de amostragem e sem procedimento crítico presente: sem
+        # seção de "Sugestão de amostra" (hoje mostraria 100% das guias,
+        # igual à Tabela completa, sem utilidade nenhuma).

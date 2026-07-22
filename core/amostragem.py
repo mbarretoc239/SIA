@@ -6,12 +6,15 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 
+# Especialidades tratadas como críticas (maior valor/risco, normalmente com
+# exigência de imagem). Periodontia NÃO está mais aqui — passou a ser tratada
+# como as demais especialidades "comuns", sujeita só à regra de procedimento
+# crítico abaixo (ver PROCEDIMENTOS_CRITICOS_ESPECIALIDADE_COMUM).
 REGRAS_AMOSTRAGEM = {
     "IMPLANTE": {"tipo": "todas"},
     "PROTESE": {"tipo": "todas"},
     "PROTESE ESPECIAL": {"tipo": "todas"},
     "CIRURGIA": {"tipo": "percentual", "pct": 0.30, "minimo_procs": 10},
-    "PERIODONTIA": {"tipo": "percentual", "pct": 0.30, "minimo_procs": 10},
     "ENDODONTIA": {"tipo": "percentual", "pct": 0.50, "minimo_procs": 10},
 }
 
@@ -21,20 +24,48 @@ ORDEM_CRITICAS = [
     "PROTESE ESPECIAL",
     "CIRURGIA",
     "ENDODONTIA",
-    "PERIODONTIA",
 ]
 
-# Procedimentos "não-críticos" por especialidade — os mais recorrentes/baratos
-# que passam pelo sorteio de amostragem normal. Guias que contêm QUALQUER
-# procedimento fora desta lista são consideradas importantes e entram na
-# amostra automaticamente.
+# Procedimentos de baixa prioridade pra amostra, por especialidade — os mais
+# recorrentes/baratos, que passam pelo sorteio normal. Guias que contêm
+# QUALQUER procedimento fora desta lista são de alta prioridade e entram na
+# amostra automaticamente (sem depender do sorteio).
 #
 # Motivação: certos procedimentos são raros e/ou custosos e não podem cair
 # fora da amostra por acaso do sorteio (ex.: exodontia de incluso na
 # CIRURGIA). Deixá-los "sempre auditar" garante cobertura.
-PROCS_NAO_CRITICOS = {
+#
+# Não confundir com "especialidade crítica" (ORDEM_CRITICAS/REGRAS_AMOSTRAGEM
+# acima) nem com "procedimento crítico" (PROCEDIMENTOS_CRITICOS_ESPECIALIDADE_
+# COMUM abaixo) — são três conceitos independentes: este aqui é só sobre
+# prioridade de procedimento dentro da amostra, DENTRO de uma especialidade
+# já crítica.
+PROCS_PRIORIDADE_NORMAL = {
     "CIRURGIA": {"5010", "5030", "5031"},
+    "ENDODONTIA": {"2015", "2025", "2035"},
 }
+
+# Especialidades que NÃO estão em REGRAS_AMOSTRAGEM (ex.: Periodontia,
+# Odontopediatria, Radiologia Especial...) normalmente não têm seção de
+# "Sugestão de amostra" própria — hoje mostrariam 100% das guias, igual à
+# Tabela completa, o que não ajuda em nada.
+#
+# Exceção: se alguma guia dessa especialidade tiver um procedimento marcado
+# como crítico em `tabela_procedimentos.critico` (cadastro oficial, carregado
+# por carregar_procedimentos_criticos), a especialidade sobe pro topo da
+# lista de "Detalhamento por especialidade" e a "Sugestão de amostra" passa a
+# mostrar só as guias com esse procedimento — são casos raros que o auditor
+# corre risco de não perceber se ficarem escondidos lá embaixo.
+@st.cache_data(ttl=300)
+def carregar_procedimentos_criticos() -> set:
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
+    url = f"{db.supabase_url}/rest/v1/tabela_procedimentos?select=codigo_tuss&critico=eq.true"
+    import requests
+    r = requests.get(url, headers=db.headers)
+    if not r.ok:
+        return set()
+    return {str(row["codigo_tuss"]).strip() for row in r.json()}
 
 
 def _norm(texto: str) -> str:
@@ -353,11 +384,25 @@ def sortear_amostra(df_guias: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     return df_guias.sample(n=n, random_state=seed).sort_index()
 
 
-def _guia_tem_proc_critico(procs_str: str, procs_nao_criticos: set) -> bool:
-    """True se a guia contém pelo menos um procedimento fora da lista
-    de não-críticos (procs que ficam sujeitos ao sorteio)."""
+def guias_com_proc_critico(df_esp_guias: pd.DataFrame, procedimentos_criticos: set) -> pd.DataFrame:
+    """Filtra as guias (de uma especialidade fora de REGRAS_AMOSTRAGEM) que
+    contêm pelo menos um procedimento cadastrado como crítico. Usado pra
+    decidir se a especialidade sobe na lista e pra montar a "Sugestão de
+    amostra" só com essas guias."""
+    if df_esp_guias.empty or not procedimentos_criticos:
+        return df_esp_guias.iloc[0:0]
+    tem_critico = df_esp_guias["Procedimentos"].apply(
+        lambda p: bool({c.strip() for c in p.split(",") if c.strip()} & procedimentos_criticos)
+    )
+    return df_esp_guias[tem_critico]
+
+
+def _guia_tem_proc_prioritario(procs_str: str, procs_prioridade_normal: set) -> bool:
+    """True se a guia contém pelo menos um procedimento fora da lista de
+    prioridade normal (ou seja, um procedimento de alta prioridade que força
+    inclusão garantida na amostra, sem depender do sorteio)."""
     procs = {p.strip() for p in procs_str.split(",") if p.strip()}
-    return bool(procs - procs_nao_criticos)
+    return bool(procs - procs_prioridade_normal)
 
 
 def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
@@ -366,15 +411,15 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
     Fluxo:
       1. Aplica a regra da especialidade sobre o TOTAL de procs (não separa
-         por critério de criticidade nesse passo). Se cai em 'auditar todas'
-         (integral, ou < mínimo de procs), retorna tudo.
+         por prioridade de procedimento nesse passo). Se cai em 'auditar
+         todas' (integral, ou < mínimo de procs), retorna tudo.
       2. Caso contrário, o tamanho da amostra = % das guias da especialidade
          (ex.: 30% pra CIRURGIA). Dentro desse tamanho, prioriza guias com
-         procs críticos:
-           - Se guias críticas ≤ 5: entram todas + completa com sorteio das
-             normais até bater o tamanho da amostra.
-           - Se guias críticas > 5: 50% da amostra vira crítica sorteada +
-             50% vira normal sorteada.
+         procs de alta prioridade:
+           - Se guias prioritárias ≤ 5: entram todas + completa com sorteio
+             das normais até bater o tamanho da amostra.
+           - Se guias prioritárias > 5: 50% da amostra vira prioritária
+             sorteada + 50% vira normal sorteada.
 
     Coluna 'Motivo' é mantida por compatibilidade (dropada antes de renderizar).
     """
@@ -390,16 +435,16 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
     n_total_guias = len(df_esp_guias)
     total_procs_esp = int(df_esp_procs_brutos["Qtde"].sum())
-    procs_nao_criticos = PROCS_NAO_CRITICOS.get(_norm(especialidade))
+    procs_prioridade_normal = PROCS_PRIORIDADE_NORMAL.get(_norm(especialidade))
     regra = REGRAS_AMOSTRAGEM.get(_norm(especialidade), {})
 
-    # Caminho 1: sem lista de críticos OU regra que manda auditar tudo.
+    # Caminho 1: sem lista de prioridade normal OU regra que manda auditar tudo.
     def _todas(motivo=""):
         amostra = df_esp_guias.copy()
         amostra["Motivo"] = motivo
         return amostra
 
-    if procs_nao_criticos is None or not regra:
+    if procs_prioridade_normal is None or not regra:
         n, _ = calcular_amostra(especialidade, total_procs_esp, n_total_guias)
         amostra = sortear_amostra(df_esp_guias, n, seed=seed).copy()
         amostra["Motivo"] = ""
@@ -410,7 +455,7 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
     if regra.get("tipo") == "percentual":
         # Gatilho <N procs = auditar todas — avaliado sobre o TOTAL da
-        # especialidade, sem separar críticas de normais.
+        # especialidade, sem separar prioritárias de normais.
         if total_procs_esp < regra["minimo_procs"]:
             return _todas("")
 
@@ -418,33 +463,33 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
         tamanho_amostra = max(1, round(n_total_guias * pct))
 
         df = df_esp_guias.copy()
-        df["_critica"] = df["Procedimentos"].apply(
-            lambda p: _guia_tem_proc_critico(p, procs_nao_criticos)
+        df["_prioritaria"] = df["Procedimentos"].apply(
+            lambda p: _guia_tem_proc_prioritario(p, procs_prioridade_normal)
         )
-        df_criticas = df[df["_critica"]].drop(columns=["_critica"]).copy()
-        df_normais = df[~df["_critica"]].drop(columns=["_critica"]).copy()
-        n_crit = len(df_criticas)
+        df_prioritarias = df[df["_prioritaria"]].drop(columns=["_prioritaria"]).copy()
+        df_normais = df[~df["_prioritaria"]].drop(columns=["_prioritaria"]).copy()
+        n_prior = len(df_prioritarias)
         n_norm = len(df_normais)
 
-        if n_crit <= 5:
-            # Todas as críticas entram (limitadas ao tamanho da amostra) e o
-            # restante da amostra é preenchido com sorteio das normais.
-            n_crit_amostra = min(n_crit, tamanho_amostra)
-            n_norm_amostra = min(tamanho_amostra - n_crit_amostra, n_norm)
-            df_criticas_final = df_criticas
+        if n_prior <= 5:
+            # Todas as prioritárias entram (limitadas ao tamanho da amostra) e
+            # o restante da amostra é preenchido com sorteio das normais.
+            n_prior_amostra = min(n_prior, tamanho_amostra)
+            n_norm_amostra = min(tamanho_amostra - n_prior_amostra, n_norm)
+            df_prioritarias_final = df_prioritarias
         else:
             # Composição 50/50 dentro da amostra.
-            n_crit_amostra = min(tamanho_amostra // 2, n_crit)
-            n_norm_amostra = min(tamanho_amostra - n_crit_amostra, n_norm)
-            df_criticas_final = sortear_amostra(df_criticas, n_crit_amostra, seed=seed)
+            n_prior_amostra = min(tamanho_amostra // 2, n_prior)
+            n_norm_amostra = min(tamanho_amostra - n_prior_amostra, n_norm)
+            df_prioritarias_final = sortear_amostra(df_prioritarias, n_prior_amostra, seed=seed)
 
         df_normais_final = sortear_amostra(df_normais, n_norm_amostra, seed=seed)
 
-        df_criticas_final = df_criticas_final.copy()
-        df_criticas_final["Motivo"] = ""
+        df_prioritarias_final = df_prioritarias_final.copy()
+        df_prioritarias_final["Motivo"] = ""
         df_normais_final = df_normais_final.copy()
         df_normais_final["Motivo"] = ""
-        return pd.concat([df_criticas_final, df_normais_final], ignore_index=True)
+        return pd.concat([df_prioritarias_final, df_normais_final], ignore_index=True)
 
     return _todas("")
 
