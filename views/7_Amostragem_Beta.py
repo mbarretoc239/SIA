@@ -220,10 +220,13 @@ with aba_busca:
 
     def _peso_ordenacao(e):
         norm = _norm(e)
-        if norm in ORDEM_CRITICAS:
-            return (0, ORDEM_CRITICAS.index(norm))
+        # Procedimento crítico presente = topo absoluto, acima até das
+        # especialidades já críticas — é justamente o caso raro que corre
+        # risco de passar despercebido, então precisa ser o mais visível.
         if especialidade_tem_critico.get(e):
-            return (1, norm)
+            return (0, norm)
+        if norm in ORDEM_CRITICAS:
+            return (1, ORDEM_CRITICAS.index(norm))
         return (2, norm)
 
     especialidades.sort(key=_peso_ordenacao)
