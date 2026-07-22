@@ -186,6 +186,12 @@ with aba_busca:
         df_guias = todas_guias.merge(df_guias, on=["Especialidade", "NU_GUIA"], how="left")
         df_guias["Procedimentos"] = df_guias["Procedimentos"].fillna("")
         df_guias["Qtde_procs"] = df_guias["Qtde_procs"].fillna(0).astype(int)
+        # Prótese: guia some da lista inteira se sobrou sem nenhum
+        # procedimento (só tinha o(s) ignorado(s)) — nas demais
+        # especialidades a guia continua aparecendo mesmo vazia.
+        vazia_protese = (df_guias["Especialidade"].apply(_norm) == "PROTESE") & (df_guias["Qtde_procs"] == 0)
+        df_guias = df_guias[~vazia_protese]
+        df_guias = df_guias.sort_values(["Especialidade", "Procedimentos", "NU_GUIA"]).reset_index(drop=True)
 
     guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
@@ -234,10 +240,15 @@ with aba_busca:
         with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
             renderizar_tabela_guias(df_esp_guias, esp, objetivo=n_objetivo, guias_vistas=guias_vistas)
 
-        with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
-            renderizar_tabela_guias(
-                df_amostra.drop(columns=["Motivo"], errors="ignore"),
-                esp,
-                objetivo=n_objetivo,
-                guias_vistas=guias_vistas,
-            )
+        # Prótese sempre audita 100% das guias (regra "todas") — a "Sugestão
+        # de amostra" ficaria idêntica à "Tabela completa", então some daqui
+        # especificamente pra essa especialidade (as demais com regra "todas",
+        # como Implante, continuam mostrando normalmente por enquanto).
+        if _norm(esp) != "PROTESE":
+            with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
+                renderizar_tabela_guias(
+                    df_amostra.drop(columns=["Motivo"], errors="ignore"),
+                    esp,
+                    objetivo=n_objetivo,
+                    guias_vistas=guias_vistas,
+                )

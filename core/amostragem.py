@@ -20,8 +20,8 @@ ORDEM_CRITICAS = [
     "PROTESE",
     "PROTESE ESPECIAL",
     "CIRURGIA",
-    "PERIODONTIA",
     "ENDODONTIA",
+    "PERIODONTIA",
 ]
 
 # Procedimentos "não-críticos" por especialidade — os mais recorrentes/baratos
@@ -312,7 +312,11 @@ def selecionar_procedimentos_ignorados(df: pd.DataFrame, db, key_prefix: str) ->
 
 
 def consolidar_por_guia(df: pd.DataFrame) -> pd.DataFrame:
-    """Agrupa por (Especialidade, NU_GUIA), juntando procedimentos."""
+    """Agrupa por (Especialidade, NU_GUIA), juntando procedimentos.
+
+    Ordenado por Procedimentos (código) pra facilitar o escaneio da
+    tabela — sem isso as guias apareciam em qualquer ordem, misturando
+    códigos diferentes ao longo da lista."""
     if df.empty:
         return df
     return (
@@ -322,6 +326,8 @@ def consolidar_por_guia(df: pd.DataFrame) -> pd.DataFrame:
             Qtde_procs=("Qtde", "sum"),
         )
         .reset_index()
+        .sort_values(["Especialidade", "Procedimentos", "NU_GUIA"])
+        .reset_index(drop=True)
     )
 
 
