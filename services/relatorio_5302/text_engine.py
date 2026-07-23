@@ -172,9 +172,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         def formatar_lista_guias(lista):
             if len(lista) == 1: return lista[0]
             if len(lista) == 2: return f"{lista[0]} e {lista[1]}"
-            if len(lista) <= 3:
+            if len(lista) <= 4:
                 return f"{', '.join(lista[:-1])} e {lista[-1]}"
-            return f"{', '.join(lista[:3])} e mais {len(lista) - 3}"
+            return f"{', '.join(lista[:3])} e mais {len(lista) - 3} guias"
 
         def formatar_guias_detalhada(lista):
             if not lista or lista[0] == "Desconhecida": return ""
@@ -519,10 +519,10 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                 guias_formatado = f"guia {guias_list[0]}"
             elif n_guias == 2:
                 guias_formatado = f"guias {guias_list[0]} e {guias_list[1]}"
-            elif n_guias == 3:
-                guias_formatado = f"guias {guias_list[0]}, {guias_list[1]} e {guias_list[2]}"
+            elif n_guias <= 4:
+                guias_formatado = f"guias {', '.join(guias_list[:-1])} e {guias_list[-1]}"
             else:
-                guias_formatado = f"guias {guias_list[0]}, {guias_list[1]}, {guias_list[2]} e mais {n_guias - 3}"
+                guias_formatado = f"guias {guias_list[0]}, {guias_list[1]}, {guias_list[2]} e mais {n_guias - 3} guias"
 
             n_guias_label = f"{n_guias} {'guia' if n_guias == 1 else 'guias'}"
 
@@ -771,9 +771,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if not lista or lista[0] == "Desconhecida": return ""
         if len(lista) == 1: return f"guia {lista[0]}"
         if len(lista) == 2: return f"guias {lista[0]} e {lista[1]}"
-        if len(lista) <= 6:
+        if len(lista) <= 4:
             return f"guias {', '.join(lista[:-1])} e {lista[-1]}"
-        return f"guias {', '.join(lista[:6])} e mais {len(lista) - 6}"
+        return f"guias {', '.join(lista[:3])} e mais {len(lista) - 3} guias"
 
     guias_480 = df[df['Glosa'] == '480']['Guia'].unique().tolist()
     clausula_480 = ""
@@ -926,25 +926,37 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 def mixar_textos_inteligente(textos):
     if not textos: return ""
     if len(textos) == 1: return textos[0]
-    
+
     # Regex melhorado para capturar as diversas formas de despedida e saudações
     padrao_saudacao = re.compile(r"^(CARO PRESTADOR,|PREZADO\(A\) PRESTADOR\(A\),?|Prezado\(a\) Prestador\(a\),?)\s*", re.IGNORECASE)
     padrao_despedida = re.compile(r"(EM CASO[S]? DE DÚVIDA[S]?.*?(?:4002[\W_]*2722)\.?)", re.IGNORECASE | re.DOTALL)
-    
+    # Quase todo texto padrão termina com essa mesma frase de aviso — junto
+    # de vários textos ela repete uma vez por parágrafo, o que deixa a
+    # mensagem enorme sem acrescentar informação nova. Corta de dentro de
+    # cada corpo e adiciona só uma vez, no fechamento.
+    padrao_aviso_glosa = re.compile(r"A\s+N[ÃA]O\s+CONFORMIDADE\s+PODER[ÁA]\s+RESULTAR\s+EM\s+GLOSAS\.?", re.IGNORECASE)
+
     saudacao_final = "CARO PRESTADOR,\n"
     despedida_final = "\n\nEM CASO DE DÚVIDAS, ENTRE EM CONTATO COM A CAP, PELO TELEFONE 4002-2722."
-    
+    aviso_glosa_final = "A não conformidade poderá resultar em glosas."
+
     corpos = []
+    teve_aviso_glosa = False
     for t in textos:
         t_clean = t.strip()
         t_clean = padrao_saudacao.sub("", t_clean).strip()
         t_clean = padrao_despedida.sub("", t_clean).strip()
+        if padrao_aviso_glosa.search(t_clean):
+            teve_aviso_glosa = True
+            t_clean = padrao_aviso_glosa.sub("", t_clean)
+            t_clean = re.sub(r"[ \t]+\n", "\n", t_clean)  # espaço solto antes da quebra de linha
+            t_clean = re.sub(r"\n{3,}", "\n\n", t_clean).strip()
         if t_clean:
             corpos.append(t_clean)
-            
+
     if not corpos:
         return ""
-        
+
     texto_combinado = corpos[0]
     conectivos = [
         "Além disso, ",
@@ -975,7 +987,10 @@ def mixar_textos_inteligente(textos):
                 
         # Junta em texto corrido (mantendo parágrafos simples, sem bullets)
         texto_combinado += "\n\n" + conectivo + paragrafo
-            
+
+    if teve_aviso_glosa:
+        texto_combinado += "\n\n" + aviso_glosa_final
+
     return saudacao_final + "\n" + texto_combinado + despedida_final
 
 
