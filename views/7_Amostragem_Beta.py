@@ -160,8 +160,8 @@ with aba_config:
                                 f"Mês {mes_referencia}: {total_inserido} de {total_bruto} linha(s) "
                                 f"(LIBERAÇÃO = N) importadas com sucesso."
                             )
-                except ValueError as erro:
-                    st.error(str(erro))
+                except Exception as erro:
+                    st.error(f"Falha na importação: {erro}")
 
 with aba_busca:
     processo_digitado = st.text_input("Número do processo", placeholder="Ex: 8202650447")

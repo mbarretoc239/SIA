@@ -72,15 +72,24 @@ class DatabaseManager:
         `registros`: lista de dicts com nu_ordem/nu_guia/cd_procedimento/
         ds_grupo/liberacao/mes_referencia já prontos para inserir.
         """
+        def _garantir_ok(response, contexto: str):
+            if not response.ok:
+                raise RuntimeError(
+                    f"Falha no Supabase ({contexto}): HTTP {response.status_code} — "
+                    f"{response.text[:500]}"
+                )
+
         url = f"{self.supabase_url}/rest/v1/base_ia_guias"
         headers_insert = {**self.headers, "Prefer": "return=minimal"}
 
-        requests.delete(f"{url}?mes_referencia=eq.{mes_referencia}", headers=self.headers).raise_for_status()
+        r_delete = requests.delete(f"{url}?mes_referencia=eq.{mes_referencia}", headers=self.headers)
+        _garantir_ok(r_delete, f"apagar dados antigos do mês {mes_referencia}")
 
         total = 0
         for i in range(0, len(registros), lote):
             pedaco = registros[i:i + lote]
-            requests.post(url, headers=headers_insert, json=pedaco).raise_for_status()
+            r_insert = requests.post(url, headers=headers_insert, json=pedaco)
+            _garantir_ok(r_insert, f"inserir lote {i}-{i + len(pedaco)} do mês {mes_referencia}")
             total += len(pedaco)
 
         r_meses = requests.get(f"{url}?select=mes_referencia", headers=self.headers)
@@ -89,7 +98,8 @@ class DatabaseManager:
             antigos = meses[2:]
             if antigos:
                 filtro = ",".join(antigos)
-                requests.delete(f"{url}?mes_referencia=in.({filtro})", headers=self.headers).raise_for_status()
+                r_cleanup = requests.delete(f"{url}?mes_referencia=in.({filtro})", headers=self.headers)
+                _garantir_ok(r_cleanup, f"limpar meses antigos ({', '.join(antigos)})")
 
         return total
 
