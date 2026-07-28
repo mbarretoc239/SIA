@@ -527,9 +527,10 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     def _fracao_html(info):
         if info and info[1] > 0 and (len(info) < 3 or info[2] > 0):
             n_ok, n_total = info[0], info[1]
-            check = " ✓" if n_ok == n_total else ""
-            return f"<td style='text-align:center'>{n_ok}/{n_total}{check}</td>"
-        return "<td></td>"
+            if n_ok == n_total:
+                return f"<td style='text-align:center'><span class='badge badge-ok'>{n_ok}/{n_total} ✓</span></td>"
+            return f"<td style='text-align:center'><span class='badge badge-parcial'>{n_ok}/{n_total}</span></td>"
+        return "<td style='text-align:center'><span class='badge badge-vazio'>—</span></td>"
 
     mostrar_motivo = "Motivo" in df_guias.columns
     linhas_html = []
@@ -600,6 +601,19 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         .motivo-critica {{ color: #b45309; font-weight: 600; font-size: 12.5px; }}
         .motivo-sorteio {{ color: rgba(120,120,120,0.85); font-size: 12.5px; }}
 
+        .badge {{
+            display: inline-block;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            padding: 2px 9px;
+            border-radius: 99px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }}
+        .badge-ok {{ background: rgba(46, 125, 50, 0.18); color: #2e7d32; border-color: rgba(76, 175, 80, 0.45); }}
+        .badge-parcial {{ background: rgba(180, 83, 9, 0.14); color: #b45309; border-color: rgba(180, 83, 9, 0.4); }}
+        .badge-vazio {{ color: rgba(120,120,120,0.55); }}
+
         @media (prefers-color-scheme: dark) {{
             body {{ color: #e6ecf5; }}
             .pbi-table th {{ background: #1c2230; box-shadow: 0 1px 0 rgba(255,255,255,0.15); }}
@@ -611,6 +625,9 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
             }}
             .copy-btn.vista:hover {{ background: rgba(76, 175, 80, 0.4); }}
             .motivo-critica {{ color: #fbbf24; }}
+            .badge-ok {{ background: rgba(76, 175, 80, 0.2); color: #7fd88a; border-color: rgba(102, 187, 106, 0.55); }}
+            .badge-parcial {{ background: rgba(242, 169, 60, 0.16); color: #f2a93c; border-color: rgba(242, 169, 60, 0.45); }}
+            .badge-vazio {{ color: rgba(255,255,255,0.35); }}
             .motivo-sorteio {{ color: rgba(255,255,255,0.55); }}
         }}
     </style>

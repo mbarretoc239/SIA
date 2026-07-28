@@ -306,14 +306,34 @@ with aba_busca:
             n_ok += 1
         imagem_por_guia[reg["nu_guia"]] = (n_ok, n_total)
 
-    # --- Filtro opcional: procedimentos que não precisam ser analisados ---
-    # (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
-    # a guia continua listada mesmo que fique sem nenhum procedimento restante.
-    # A seleção pode ser salva como padrão (por especialidade), aplicado
-    # automaticamente nas próximas análises.
-    codigos_excluidos = selecionar_procedimentos_ignorados(
-        df, st.session_state.db, key_prefix=f"amostragem_beta_{processo_ativo}"
-    )
+    # --- Filtros: procedimentos ignorados + Biometria/Imagem, agrupados num
+    # único painel recolhido por padrão (não competem com o resultado abaixo).
+    with st.expander("Filtros", expanded=False):
+        # Procedimentos que não precisam ser analisados nesta guia (ex.:
+        # coroas provisórias). O procedimento some da contagem e do sorteio;
+        # a guia continua listada mesmo que fique sem nenhum procedimento
+        # restante. A seleção pode ser salva como padrão (por especialidade),
+        # aplicado automaticamente nas próximas análises.
+        codigos_excluidos = selecionar_procedimentos_ignorados(
+            df, st.session_state.db, key_prefix=f"amostragem_beta_{processo_ativo}"
+        )
+
+        st.divider()
+        col_filtro_bio, col_filtro_img = st.columns(2)
+        with col_filtro_bio:
+            st.caption("Biometria")
+            filtro_biometria = st.segmented_control(
+                "Biometria", ["Todos", "Só com", "Só sem"],
+                default="Todos", key=f"filtro_biometria_{processo_ativo}",
+                label_visibility="collapsed",
+            )
+        with col_filtro_img:
+            st.caption("Imagem")
+            filtro_imagem = st.segmented_control(
+                "Imagem", ["Todos", "Só com", "Só sem"],
+                default="Todos", key=f"filtro_imagem_{processo_ativo}",
+                label_visibility="collapsed",
+            )
 
     todas_guias = df[["Especialidade", "NU_GUIA"]].drop_duplicates()
     df = df[~df["CD_PROCEDIMENTO"].isin(codigos_excluidos)] if codigos_excluidos else df
@@ -344,9 +364,9 @@ with aba_busca:
         return n_ok == n_total
 
     def _aplicar_filtro_guia(df_in, mapa, filtro):
-        if filtro == "Todos":
+        if not filtro or filtro == "Todos":
             return df_in
-        quer_com = filtro.startswith("Só com")
+        quer_com = filtro == "Só com"
 
         def _passa(guia):
             resultado = _guia_100pct(mapa.get(str(guia)))
@@ -355,19 +375,6 @@ with aba_busca:
             return resultado == quer_com
 
         return df_in[df_in["NU_GUIA"].apply(_passa)]
-
-    st.markdown("### Filtros")
-    col_filtro_bio, col_filtro_img = st.columns(2)
-    with col_filtro_bio:
-        filtro_biometria = st.selectbox(
-            "Biometria", ["Todos", "Só com (100%)", "Só sem (não 100%)"],
-            key=f"filtro_biometria_{processo_ativo}",
-        )
-    with col_filtro_img:
-        filtro_imagem = st.selectbox(
-            "Imagem", ["Todos", "Só com (100%)", "Só sem (não 100%)"],
-            key=f"filtro_imagem_{processo_ativo}",
-        )
 
     df_guias = _aplicar_filtro_guia(df_guias, biometria_por_guia, filtro_biometria)
     df_guias = _aplicar_filtro_guia(df_guias, imagem_por_guia, filtro_imagem)
@@ -452,42 +459,45 @@ with aba_busca:
         st.markdown(f"#### {esp}")
         st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
-        with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
+        def _tabela_completa():
             renderizar_tabela_guias(
                 df_esp_guias, esp, objetivo=total_guias,
                 guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
                 imagem_por_guia=imagem_por_guia,
             )
 
+        df_amostra_especial = None
+        titulo_amostra = None
+
         if _norm(esp) in REGRAS_AMOSTRAGEM:
             df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
-            n_objetivo = len(df_amostra)
             # Prótese sempre audita 100% das guias (regra "todas") — a
             # "Sugestão de amostra" ficaria idêntica à "Tabela completa",
-            # então some daqui especificamente pra essa especialidade (as
-            # demais com regra "todas", como Implante, continuam mostrando
-            # normalmente por enquanto).
+            # então não ganha aba própria pra essa especialidade (as demais
+            # com regra "todas", como Implante, continuam mostrando normalmente).
             if _norm(esp) != "PROTESE":
-                with st.expander(f"Sugestão de amostra — {n_objetivo} guia(s)", expanded=False):
-                    renderizar_tabela_guias(
-                        df_amostra.drop(columns=["Motivo"], errors="ignore"),
-                        esp,
-                        objetivo=n_objetivo,
-                        guias_vistas=guias_vistas,
-                        biometria_por_guia=biometria_por_guia,
-                        imagem_por_guia=imagem_por_guia,
-                    )
+                df_amostra_especial = df_amostra.drop(columns=["Motivo"], errors="ignore")
+                titulo_amostra = f"Sugestão de amostra ({len(df_amostra_especial)})"
         elif especialidade_tem_critico.get(esp):
             # Especialidade fora das regras de amostragem, mas com
             # procedimento crítico presente: a "Sugestão de amostra" mostra
             # só as guias com esse procedimento, não as 100% da especialidade.
-            df_criticas = guias_com_proc_critico(df_esp_guias, procedimentos_criticos)
-            with st.expander(f"Sugestão de amostra — {len(df_criticas)} guia(s) com procedimento crítico", expanded=False):
+            df_amostra_especial = guias_com_proc_critico(df_esp_guias, procedimentos_criticos)
+            titulo_amostra = f"Sugestão de amostra ({len(df_amostra_especial)} — proc. crítico)"
+        # Sem regra de amostragem e sem procedimento crítico presente: sem
+        # aba de "Sugestão de amostra" (hoje mostraria 100% das guias, igual
+        # à Tabela completa, sem utilidade nenhuma).
+
+        if df_amostra_especial is not None:
+            tab_completa, tab_amostra = st.tabs([f"Tabela completa ({total_guias})", titulo_amostra])
+            with tab_completa:
+                _tabela_completa()
+            with tab_amostra:
                 renderizar_tabela_guias(
-                    df_criticas, esp, objetivo=len(df_criticas),
+                    df_amostra_especial, esp, objetivo=len(df_amostra_especial),
                     guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
                     imagem_por_guia=imagem_por_guia,
                 )
-        # Sem regra de amostragem e sem procedimento crítico presente: sem
-        # seção de "Sugestão de amostra" (hoje mostraria 100% das guias,
-        # igual à Tabela completa, sem utilidade nenhuma).
+        else:
+            with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
+                _tabela_completa()
