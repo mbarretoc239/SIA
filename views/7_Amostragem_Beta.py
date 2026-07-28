@@ -1,3 +1,5 @@
+import re
+
 import openpyxl
 import streamlit as st
 import pandas as pd
@@ -35,6 +37,9 @@ COLUNAS_NECESSARIAS = {
 # Operador que indica biometria facial feita (fluxo automático via app);
 # qualquer outro operador = análise manual, sem biometria.
 OPERADOR_BIOMETRIA = "CONN_APPOD_NEW"
+
+# Colunas mínimas esperadas na planilha mensal de imagem.
+COLUNAS_NECESSARIAS_IMAGEM = {"NU_GUIA", "CD_PROCEDIMENTO", "DENTE_INICIAL", "STATUS_PROCED", "NOME_ARQUIVO"}
 
 SEED_PADRAO = 42
 _is_admin = st.session_state.get("role_interno") == "Admin"
@@ -113,6 +118,59 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
     return registros, mes_referencia, total_bruto
 
 
+def _preparar_registros_imagem(arquivo) -> tuple[list, str, int]:
+    """Lê a planilha mensal de imagem e devolve (registros, mes_referencia, total_bruto).
+
+    Essa planilha não tem coluna de data — o mês de referência é extraído do
+    NOME do arquivo (padrão observado: "MM AAAA <código> - IMAGEM.xlsx", ex:
+    "06 2026 4016R - IMAGEM.xlsx" -> mes_referencia = "2026-06").
+    """
+    match = re.match(r"^\s*(\d{2})\s+(\d{4})", arquivo.name)
+    if not match:
+        raise ValueError(
+            f"Não consegui identificar o mês/ano no nome do arquivo '{arquivo.name}'. "
+            "Esperado algo como 'MM AAAA ... .xlsx'."
+        )
+    mes, ano = match.group(1), match.group(2)
+    mes_referencia = f"{ano}-{mes}"
+
+    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
+    aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
+    ws = wb[aba]
+    linhas = ws.iter_rows(values_only=True)
+
+    header = [_norm(str(c)) for c in next(linhas)]
+    idx = {nome: i for i, nome in enumerate(header)}
+    faltantes = COLUNAS_NECESSARIAS_IMAGEM - set(idx)
+    if faltantes:
+        raise ValueError(
+            "Colunas não encontradas na planilha (aba '" + aba + "'): "
+            + ", ".join(sorted(faltantes))
+        )
+
+    i_guia, i_cd = idx["NU_GUIA"], idx["CD_PROCEDIMENTO"]
+    i_dente, i_status, i_arquivo = idx["DENTE_INICIAL"], idx["STATUS_PROCED"], idx["NOME_ARQUIVO"]
+
+    registros = []
+    total_bruto = 0
+    for linha in linhas:
+        if linha[i_guia] is None:
+            continue
+        total_bruto += 1
+        tem_imagem = str(linha[i_arquivo] or "").strip().upper() != "SEM IMAGEM"
+        registros.append({
+            "nu_guia": str(linha[i_guia]).strip(),
+            "cd_procedimento": str(linha[i_cd]).strip(),
+            "dente_inicial": str(linha[i_dente]).strip() if linha[i_dente] is not None else None,
+            "status_proced": str(linha[i_status]).strip() if linha[i_status] is not None else None,
+            "tem_imagem": tem_imagem,
+            "mes_referencia": mes_referencia,
+        })
+
+    wb.close()
+    return registros, mes_referencia, total_bruto
+
+
 def _guias_para_df(guias: list) -> pd.DataFrame:
     """Converte o retorno do Supabase para o mesmo formato que
     parse_powerbi() produz, pra reaproveitar consolidar_por_guia/marcar_amostra."""
@@ -163,6 +221,28 @@ with aba_config:
                 except Exception as erro:
                     st.error(f"Falha na importação: {erro}")
 
+        with st.expander("Importar planilha mensal de imagem (Admin)", expanded=False):
+            st.caption(
+                "Sobe a planilha de imagem do mês (colunas NU_GUIA, CD_PROCEDIMENTO, "
+                "DENTE_INICIAL, STATUS_PROCED, NOME_ARQUIVO). O mês de referência é lido "
+                "do nome do arquivo (ex: '06 2026 ... .xlsx' → junho/2026)."
+            )
+            arquivo_imagem = st.file_uploader("Planilha de imagem (.xlsx)", type=["xlsx"], key="upload_base_imagem")
+            if arquivo_imagem and st.button("Importar imagem", key="btn_importar_imagem"):
+                try:
+                    with st.spinner("Lendo e importando (pode levar alguns minutos)..."):
+                        registros_img, mes_referencia_img, total_bruto_img = _preparar_registros_imagem(arquivo_imagem)
+                        if not registros_img:
+                            st.warning("Nenhuma linha encontrada nesta planilha.")
+                        else:
+                            total_inserido_img = st.session_state.db.importar_base_imagem(registros_img, mes_referencia_img)
+                            st.success(
+                                f"Mês {mes_referencia_img}: {total_inserido_img} de {total_bruto_img} "
+                                f"linha(s) importadas com sucesso."
+                            )
+                except Exception as erro:
+                    st.error(f"Falha na importação: {erro}")
+
 with aba_busca:
     processo_digitado = st.text_input("Número do processo", placeholder="Ex: 8202650447")
     buscar = st.button("Buscar guias")
@@ -188,8 +268,8 @@ with aba_busca:
         st.stop()
 
     total_guias_processo = guias[0].get("total_guias_processo") if guias else None
-    texto_total_guias = f" — {total_guias_processo} guia(s) no total do processo (S+N)" if total_guias_processo else ""
-    st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N{texto_total_guias}.")
+    texto_total_guias = f" — {total_guias_processo} guia(s) no total do processo" if total_guias_processo else ""
+    st.success(f"Processo {processo_ativo}: {len(df)} item(ns) sem liberação pela IA{texto_total_guias}.")
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais
@@ -211,6 +291,20 @@ with aba_busca:
         .apply(_biometria_guia)
         .to_dict()
     )
+
+    # Imagem por guia: vem de uma base separada (planilha própria, cadência
+    # própria), cruzada por NU_GUIA. Guarda (qtd_com_imagem, qtd_total) —
+    # aqui não existe "dado legado nulo" como na biometria (tem_imagem é
+    # sempre um booleano real desde a importação), então guia ausente do
+    # dict = sem nenhum registro de imagem ainda (célula em branco).
+    imagem_registros = st.session_state.db.buscar_imagem_por_guias(df["NU_GUIA"].unique().tolist())
+    imagem_por_guia = {}
+    for reg in imagem_registros:
+        n_ok, n_total = imagem_por_guia.get(reg["nu_guia"], (0, 0))
+        n_total += 1
+        if reg.get("tem_imagem"):
+            n_ok += 1
+        imagem_por_guia[reg["nu_guia"]] = (n_ok, n_total)
 
     # --- Filtro opcional: procedimentos que não precisam ser analisados ---
     # (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
@@ -235,6 +329,57 @@ with aba_busca:
         vazia_protese = (df_guias["Especialidade"].apply(_norm) == "PROTESE") & (df_guias["Qtde_procs"] == 0)
         df_guias = df_guias[~vazia_protese]
         df_guias = df_guias.sort_values(["Especialidade", "Procedimentos", "NU_GUIA"]).reset_index(drop=True)
+
+    # --- Filtros de Biometria e Imagem ---
+    # "Sem dado" (guia ainda não aparece na base de biometria/imagem) conta
+    # como "não 100%" no filtro "Só sem" — é o lado mais seguro pra auditoria
+    # (não confirmado = trata como pendência).
+    def _guia_100pct(info):
+        if not info:
+            return None
+        n_ok, n_total = info[0], info[1]
+        n_com_dado = info[2] if len(info) > 2 else n_total
+        if n_total == 0 or n_com_dado == 0:
+            return None
+        return n_ok == n_total
+
+    def _aplicar_filtro_guia(df_in, mapa, filtro):
+        if filtro == "Todos":
+            return df_in
+        quer_com = filtro.startswith("Só com")
+
+        def _passa(guia):
+            resultado = _guia_100pct(mapa.get(str(guia)))
+            if resultado is None:
+                return not quer_com
+            return resultado == quer_com
+
+        return df_in[df_in["NU_GUIA"].apply(_passa)]
+
+    st.markdown("### Filtros")
+    col_filtro_bio, col_filtro_img = st.columns(2)
+    with col_filtro_bio:
+        filtro_biometria = st.selectbox(
+            "Biometria", ["Todos", "Só com (100%)", "Só sem (não 100%)"],
+            key=f"filtro_biometria_{processo_ativo}",
+        )
+    with col_filtro_img:
+        filtro_imagem = st.selectbox(
+            "Imagem", ["Todos", "Só com (100%)", "Só sem (não 100%)"],
+            key=f"filtro_imagem_{processo_ativo}",
+        )
+
+    df_guias = _aplicar_filtro_guia(df_guias, biometria_por_guia, filtro_biometria)
+    df_guias = _aplicar_filtro_guia(df_guias, imagem_por_guia, filtro_imagem)
+
+    if df_guias.empty:
+        st.info("Nenhuma guia bate com os filtros selecionados.")
+        st.stop()
+
+    # Mantém df (nível de item) em sincronia com as guias que sobraram após
+    # os filtros — senão os totais de procedimentos no Resumo contariam
+    # guias que os filtros já tiraram da lista.
+    df = df[df["NU_GUIA"].isin(df_guias["NU_GUIA"])]
 
     guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
@@ -311,6 +456,7 @@ with aba_busca:
             renderizar_tabela_guias(
                 df_esp_guias, esp, objetivo=total_guias,
                 guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
+                imagem_por_guia=imagem_por_guia,
             )
 
         if _norm(esp) in REGRAS_AMOSTRAGEM:
@@ -329,6 +475,7 @@ with aba_busca:
                         objetivo=n_objetivo,
                         guias_vistas=guias_vistas,
                         biometria_por_guia=biometria_por_guia,
+                        imagem_por_guia=imagem_por_guia,
                     )
         elif especialidade_tem_critico.get(esp):
             # Especialidade fora das regras de amostragem, mas com
@@ -339,6 +486,7 @@ with aba_busca:
                 renderizar_tabela_guias(
                     df_criticas, esp, objetivo=len(df_criticas),
                     guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
+                    imagem_por_guia=imagem_por_guia,
                 )
         # Sem regra de amostragem e sem procedimento crítico presente: sem
         # seção de "Sugestão de amostra" (hoje mostraria 100% das guias,

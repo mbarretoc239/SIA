@@ -65,13 +65,11 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
-    def importar_base_ia(self, registros: list, mes_referencia: str, lote: int = 2000) -> int:
-        """Substitui os dados do `mes_referencia` informado (reimportação
-        idempotente) e mantém só os 2 meses mais recentes na tabela.
-
-        `registros`: lista de dicts com nu_ordem/nu_guia/cd_procedimento/
-        ds_grupo/liberacao/mes_referencia já prontos para inserir.
-        """
+    def _importar_por_mes(self, tabela: str, registros: list, mes_referencia: str, lote: int = 2000) -> int:
+        """Substitui os dados do `mes_referencia` informado numa tabela com
+        coluna `mes_referencia` (reimportação idempotente) e mantém só os 2
+        meses mais recentes. Usado por importar_base_ia e importar_base_imagem
+        — mesmo padrão de importação mensal nas duas tabelas."""
         def _garantir_ok(response, contexto: str):
             if not response.ok:
                 raise RuntimeError(
@@ -79,17 +77,17 @@ class DatabaseManager:
                     f"{response.text[:500]}"
                 )
 
-        url = f"{self.supabase_url}/rest/v1/base_ia_guias"
+        url = f"{self.supabase_url}/rest/v1/{tabela}"
         headers_insert = {**self.headers, "Prefer": "return=minimal"}
 
         r_delete = requests.delete(f"{url}?mes_referencia=eq.{mes_referencia}", headers=self.headers)
-        _garantir_ok(r_delete, f"apagar dados antigos do mês {mes_referencia}")
+        _garantir_ok(r_delete, f"apagar dados antigos do mês {mes_referencia} em {tabela}")
 
         total = 0
         for i in range(0, len(registros), lote):
             pedaco = registros[i:i + lote]
             r_insert = requests.post(url, headers=headers_insert, json=pedaco)
-            _garantir_ok(r_insert, f"inserir lote {i}-{i + len(pedaco)} do mês {mes_referencia}")
+            _garantir_ok(r_insert, f"inserir lote {i}-{i + len(pedaco)} do mês {mes_referencia} em {tabela}")
             total += len(pedaco)
 
         r_meses = requests.get(f"{url}?select=mes_referencia", headers=self.headers)
@@ -99,9 +97,40 @@ class DatabaseManager:
             if antigos:
                 filtro = ",".join(antigos)
                 r_cleanup = requests.delete(f"{url}?mes_referencia=in.({filtro})", headers=self.headers)
-                _garantir_ok(r_cleanup, f"limpar meses antigos ({', '.join(antigos)})")
+                _garantir_ok(r_cleanup, f"limpar meses antigos ({', '.join(antigos)}) em {tabela}")
 
         return total
+
+    def importar_base_ia(self, registros: list, mes_referencia: str, lote: int = 2000) -> int:
+        """Substitui os dados do `mes_referencia` informado (reimportação
+        idempotente) e mantém só os 2 meses mais recentes na tabela.
+
+        `registros`: lista de dicts com nu_ordem/nu_guia/cd_procedimento/
+        ds_grupo/liberacao/mes_referencia já prontos para inserir.
+        """
+        return self._importar_por_mes("base_ia_guias", registros, mes_referencia, lote)
+
+    def importar_base_imagem(self, registros: list, mes_referencia: str, lote: int = 2000) -> int:
+        """Substitui os dados do `mes_referencia` informado (reimportação
+        idempotente) e mantém só os 2 meses mais recentes na tabela.
+
+        `registros`: lista de dicts com nu_guia/cd_procedimento/dente_inicial/
+        status_proced/tem_imagem/mes_referencia já prontos para inserir.
+        """
+        return self._importar_por_mes("base_imagem_procedimentos", registros, mes_referencia, lote)
+
+    def buscar_imagem_por_guias(self, nu_guias: list) -> list:
+        """Registros de imagem (guia, procedimento, dente, status, tem_imagem)
+        para as guias informadas."""
+        if not nu_guias:
+            return []
+        filtro = ",".join(str(g) for g in nu_guias)
+        url = (
+            f"{self.supabase_url}/rest/v1/base_imagem_procedimentos"
+            f"?nu_guia=in.({filtro})&select=nu_guia,cd_procedimento,dente_inicial,status_proced,tem_imagem"
+        )
+        r = requests.get(url, headers=self.headers)
+        return r.json() if r.ok else []
 
     # --- Procedimentos ignorados na Amostragem (persistente, por especialidade) ---
     def carregar_procs_ignorados(self) -> dict:

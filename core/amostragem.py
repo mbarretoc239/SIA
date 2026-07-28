@@ -495,7 +495,8 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
 
 def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int,
-                             guias_vistas: set = frozenset(), biometria_por_guia: dict = None):
+                             guias_vistas: set = frozenset(), biometria_por_guia: dict = None,
+                             imagem_por_guia: dict = None):
     """Renderiza tabela HTML com NU_GUIA como botão clicável (copia ao clicar).
 
     `objetivo` é o tamanho de amostra requerido pela regra da especialidade
@@ -512,10 +513,23 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     aparece quando X == Y (100% dos itens da guia atendidos via
     CONN_APPOD_NEW). Se nenhum item tiver operador gravado ainda (guia
     importada antes desta coluna existir), a célula fica em branco.
+
+    `imagem_por_guia`: {NU_GUIA: (qtd_com_imagem, qtd_total)}, vindo da base
+    de imagem (planilha própria, cruzada por NU_GUIA). Mesmo formato "X/Y"
+    com ✓ só em 100%; guia ausente do dict (sem nenhum registro de imagem
+    ainda) fica em branco.
     """
     biometria_por_guia = biometria_por_guia or {}
+    imagem_por_guia = imagem_por_guia or {}
     supabase_url = st.secrets["supabase"]["url"].rstrip("/")
     supabase_key = st.secrets["supabase"]["key"]
+
+    def _fracao_html(info):
+        if info and info[1] > 0 and (len(info) < 3 or info[2] > 0):
+            n_ok, n_total = info[0], info[1]
+            check = " ✓" if n_ok == n_total else ""
+            return f"<td style='text-align:center'>{n_ok}/{n_total}{check}</td>"
+        return "<td></td>"
 
     mostrar_motivo = "Motivo" in df_guias.columns
     linhas_html = []
@@ -523,13 +537,8 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         guia = html.escape(str(row["NU_GUIA"]))
         procs = html.escape(str(row["Procedimentos"]))
         classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
-        info_biometria = biometria_por_guia.get(str(row["NU_GUIA"]))
-        if info_biometria and info_biometria[1] > 0 and info_biometria[2] > 0:
-            n_bio, n_total, _n_com_dado = info_biometria
-            check = " ✓" if n_bio == n_total else ""
-            biometria_html = f"<td style='text-align:center'>{n_bio}/{n_total}{check}</td>"
-        else:
-            biometria_html = "<td></td>"
+        biometria_html = _fracao_html(biometria_por_guia.get(str(row["NU_GUIA"])))
+        imagem_html = _fracao_html(imagem_por_guia.get(str(row["NU_GUIA"])))
         motivo_html = ""
         if mostrar_motivo:
             motivo = html.escape(str(row.get("Motivo", "")))
@@ -540,6 +549,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
             f"<td><button class='copy-btn{classe_vista}' data-val='{guia}' title='Clique para copiar'>{guia}</button></td>"
             f"<td>{procs}</td>"
             f"{biometria_html}"
+            f"{imagem_html}"
             f"{motivo_html}"
             f"</tr>"
         )
@@ -608,7 +618,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         <div class='pbi-counter'><strong>0</strong> de {objetivo} analisado(s)</div>
         <table class='pbi-table'>
             <thead>
-                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:center'>BIOMETRIA</th>{th_motivo}</tr>
+                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:center'>BIOMETRIA</th><th style='width: 10%; text-align:center'>IMAGEM</th>{th_motivo}</tr>
             </thead>
             <tbody>{rows}</tbody>
         </table>
