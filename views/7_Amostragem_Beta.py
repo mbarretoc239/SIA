@@ -187,10 +187,9 @@ with aba_busca:
         )
         st.stop()
 
-    st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N.")
     total_guias_processo = guias[0].get("total_guias_processo") if guias else None
-    if total_guias_processo:
-        st.caption(f"Total de guias no processo (incluindo LIBERAÇÃO = S): {total_guias_processo}")
+    texto_total_guias = f" — {total_guias_processo} guia(s) no total do processo (S+N)" if total_guias_processo else ""
+    st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N{texto_total_guias}.")
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais

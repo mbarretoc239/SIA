@@ -522,7 +522,6 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     for _, row in df_guias.iterrows():
         guia = html.escape(str(row["NU_GUIA"]))
         procs = html.escape(str(row["Procedimentos"]))
-        qtde = int(row["Qtde_procs"])
         classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
         info_biometria = biometria_por_guia.get(str(row["NU_GUIA"]))
         if info_biometria and info_biometria[1] > 0 and info_biometria[2] > 0:
@@ -540,7 +539,6 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
             f"<tr>"
             f"<td><button class='copy-btn{classe_vista}' data-val='{guia}' title='Clique para copiar'>{guia}</button></td>"
             f"<td>{procs}</td>"
-            f"<td style='text-align:right'>{qtde}</td>"
             f"{biometria_html}"
             f"{motivo_html}"
             f"</tr>"
@@ -610,7 +608,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         <div class='pbi-counter'><strong>0</strong> de {objetivo} analisado(s)</div>
         <table class='pbi-table'>
             <thead>
-                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:right'>Qtde</th><th style='width: 10%; text-align:center'>BIOMETRIA</th>{th_motivo}</tr>
+                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:center'>BIOMETRIA</th>{th_motivo}</tr>
             </thead>
             <tbody>{rows}</tbody>
         </table>
