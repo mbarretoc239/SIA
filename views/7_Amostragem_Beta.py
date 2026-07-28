@@ -323,14 +323,14 @@ with aba_busca:
         with col_filtro_bio:
             st.caption("Biometria")
             filtro_biometria = st.segmented_control(
-                "Biometria", ["Todos", "Só com", "Só sem"],
+                "Biometria", ["Todos", "Com", "Sem"],
                 default="Todos", key=f"filtro_biometria_{processo_ativo}",
                 label_visibility="collapsed",
             )
         with col_filtro_img:
             st.caption("Imagem")
             filtro_imagem = st.segmented_control(
-                "Imagem", ["Todos", "Só com", "Só sem"],
+                "Imagem", ["Todos", "Com", "Sem"],
                 default="Todos", key=f"filtro_imagem_{processo_ativo}",
                 label_visibility="collapsed",
             )
@@ -352,7 +352,7 @@ with aba_busca:
 
     # --- Filtros de Biometria e Imagem ---
     # "Sem dado" (guia ainda não aparece na base de biometria/imagem) conta
-    # como "não 100%" no filtro "Só sem" — é o lado mais seguro pra auditoria
+    # como "não 100%" no filtro "Sem" — é o lado mais seguro pra auditoria
     # (não confirmado = trata como pendência).
     def _guia_100pct(info):
         if not info:
@@ -366,7 +366,7 @@ with aba_busca:
     def _aplicar_filtro_guia(df_in, mapa, filtro):
         if not filtro or filtro == "Todos":
             return df_in
-        quer_com = filtro == "Só com"
+        quer_com = filtro == "Com"
 
         def _passa(guia):
             resultado = _guia_100pct(mapa.get(str(guia)))
