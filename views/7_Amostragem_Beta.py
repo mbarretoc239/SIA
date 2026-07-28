@@ -485,7 +485,14 @@ with aba_busca:
         # aba de "Sugestão de amostra" (hoje mostraria 100% das guias, igual
         # à Tabela completa, sem utilidade nenhuma).
 
-        with st.expander(f"{esp} — {total_guias} guia(s), {total_procs} proc(s)", expanded=False):
+        # Cabeçalho do expander pintado de amarelo se a especialidade já é
+        # crítica por definição (ORDEM_CRITICAS) OU tem procedimento crítico
+        # presente — sinal visível sem precisar abrir pra ver a aba de amostra.
+        titulo_expander = f"{esp} — {total_guias} guia(s), {total_procs} proc(s)"
+        if _norm(esp) in ORDEM_CRITICAS or especialidade_tem_critico.get(esp, False):
+            titulo_expander = f":orange[{titulo_expander}]"
+
+        with st.expander(titulo_expander, expanded=False):
             if df_amostra_especial is not None:
                 tab_completa, tab_amostra = st.tabs([f"Tabela completa ({total_guias})", titulo_amostra])
                 with tab_completa:
