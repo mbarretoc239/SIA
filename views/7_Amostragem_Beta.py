@@ -63,6 +63,7 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
     i_lib, i_dt = idx["LIBERACAO"], idx["DT_CREATED_AT"]
 
     registros = []
+    guias_por_processo = {}  # nu_ordem -> set(nu_guia), inclui S e N — só pra contar o total
     mes_referencia = None
     total_bruto = 0
     for linha in linhas:
@@ -73,17 +74,22 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
             dt = linha[i_dt]
             mes_referencia = dt.strftime("%Y-%m") if hasattr(dt, "strftime") else str(dt)[:7]
 
+        nu_ordem = str(int(linha[i_ordem]))
+        nu_guia = str(linha[i_guia]).strip()
+        guias_por_processo.setdefault(nu_ordem, set()).add(nu_guia)
+
         liberacao = str(linha[i_lib] or "").strip().upper()
         if liberacao != "N":
             continue
 
         registros.append({
-            "nu_ordem": str(int(linha[i_ordem])),
-            "nu_guia": str(linha[i_guia]).strip(),
+            "nu_ordem": nu_ordem,
+            "nu_guia": nu_guia,
             "cd_procedimento": str(linha[i_cd]).strip(),
             "ds_grupo": str(linha[i_grupo]).strip(),
             "liberacao": "N",
             "mes_referencia": None,
+            "total_guias_processo": None,
         })
 
     wb.close()
@@ -93,6 +99,7 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
 
     for registro in registros:
         registro["mes_referencia"] = mes_referencia
+        registro["total_guias_processo"] = len(guias_por_processo[registro["nu_ordem"]])
 
     return registros, mes_referencia, total_bruto
 
@@ -171,6 +178,9 @@ with aba_busca:
         st.stop()
 
     st.success(f"Processo {processo_ativo}: {len(df)} item(ns) com LIBERAÇÃO = N.")
+    total_guias_processo = guias[0].get("total_guias_processo") if guias else None
+    if total_guias_processo:
+        st.caption(f"Total de guias no processo (incluindo LIBERAÇÃO = S): {total_guias_processo}")
 
     # --- Filtro opcional: procedimentos que não precisam ser analisados ---
     # (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
