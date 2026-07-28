@@ -456,9 +456,6 @@ with aba_busca:
         total_procs = int(df_esp_total["Qtde"].sum())
         total_guias = len(df_esp_guias)
 
-        st.markdown(f"#### {esp}")
-        st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
-
         def _tabela_completa():
             renderizar_tabela_guias(
                 df_esp_guias, esp, objetivo=total_guias,
@@ -488,16 +485,16 @@ with aba_busca:
         # aba de "Sugestão de amostra" (hoje mostraria 100% das guias, igual
         # à Tabela completa, sem utilidade nenhuma).
 
-        if df_amostra_especial is not None:
-            tab_completa, tab_amostra = st.tabs([f"Tabela completa ({total_guias})", titulo_amostra])
-            with tab_completa:
-                _tabela_completa()
-            with tab_amostra:
-                renderizar_tabela_guias(
-                    df_amostra_especial, esp, objetivo=len(df_amostra_especial),
-                    guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
-                    imagem_por_guia=imagem_por_guia,
-                )
-        else:
-            with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
+        with st.expander(f"{esp} — {total_guias} guia(s), {total_procs} proc(s)", expanded=False):
+            if df_amostra_especial is not None:
+                tab_completa, tab_amostra = st.tabs([f"Tabela completa ({total_guias})", titulo_amostra])
+                with tab_completa:
+                    _tabela_completa()
+                with tab_amostra:
+                    renderizar_tabela_guias(
+                        df_amostra_especial, esp, objetivo=len(df_amostra_especial),
+                        guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
+                        imagem_por_guia=imagem_por_guia,
+                    )
+            else:
                 _tabela_completa()
