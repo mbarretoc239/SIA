@@ -495,7 +495,7 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
 
 def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int,
-                             guias_vistas: set = frozenset()):
+                             guias_vistas: set = frozenset(), biometria_por_guia: dict = None):
     """Renderiza tabela HTML com NU_GUIA como botão clicável (copia ao clicar).
 
     `objetivo` é o tamanho de amostra requerido pela regra da especialidade
@@ -506,7 +506,12 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     a marcação é gravada direto do navegador na tabela
     amostragem_guias_vistas (chave publicável do Supabase, sem vínculo a
     usuário por enquanto).
+
+    `biometria_por_guia`: {NU_GUIA: bool} — guia teve algum item atendido via
+    CONN_APPOD_NEW (biometria facial). Mostra ✓ na coluna BIOMETRIA quando
+    True, vazio quando False/ausente.
     """
+    biometria_por_guia = biometria_por_guia or {}
     supabase_url = st.secrets["supabase"]["url"].rstrip("/")
     supabase_key = st.secrets["supabase"]["key"]
 
@@ -517,6 +522,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         procs = html.escape(str(row["Procedimentos"]))
         qtde = int(row["Qtde_procs"])
         classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
+        biometria_html = "<td style='text-align:center'>✓</td>" if biometria_por_guia.get(str(row["NU_GUIA"])) else "<td></td>"
         motivo_html = ""
         if mostrar_motivo:
             motivo = html.escape(str(row.get("Motivo", "")))
@@ -527,6 +533,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
             f"<td><button class='copy-btn{classe_vista}' data-val='{guia}' title='Clique para copiar'>{guia}</button></td>"
             f"<td>{procs}</td>"
             f"<td style='text-align:right'>{qtde}</td>"
+            f"{biometria_html}"
             f"{motivo_html}"
             f"</tr>"
         )
@@ -595,7 +602,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         <div class='pbi-counter'><strong>0</strong> de {objetivo} analisado(s)</div>
         <table class='pbi-table'>
             <thead>
-                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:right'>Qtde</th>{th_motivo}</tr>
+                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:right'>Qtde</th><th style='width: 10%; text-align:center'>BIOMETRIA</th>{th_motivo}</tr>
             </thead>
             <tbody>{rows}</tbody>
         </table>

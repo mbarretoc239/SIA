@@ -60,7 +60,7 @@ class DatabaseManager:
         """Guias com LIBERACAO=N da base IA para um número de processo (NU_ORDEM)."""
         url = (
             f"{self.supabase_url}/rest/v1/base_ia_guias"
-            f"?nu_ordem=eq.{nu_ordem}&select=nu_guia,cd_procedimento,ds_grupo,total_guias_processo"
+            f"?nu_ordem=eq.{nu_ordem}&select=nu_guia,cd_procedimento,ds_grupo,total_guias_processo,cd_operador_atend"
         )
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []

@@ -27,7 +27,14 @@ if "db" not in st.session_state:
 
 # Colunas mínimas esperadas na planilha mensal da base IA (mesma que alimenta
 # o PowerBI). Nomes normalizados via _norm (maiúsculo, sem acento).
-COLUNAS_NECESSARIAS = {"NU_ORDEM", "NU_GUIA", "CD_PROCEDIMENTO", "DS_GRUPO", "LIBERACAO", "DT_CREATED_AT"}
+COLUNAS_NECESSARIAS = {
+    "NU_ORDEM", "NU_GUIA", "CD_PROCEDIMENTO", "DS_GRUPO", "LIBERACAO",
+    "DT_CREATED_AT", "CD_OPERADOR_ATEND",
+}
+
+# Operador que indica biometria facial feita (fluxo automático via app);
+# qualquer outro operador = análise manual, sem biometria.
+OPERADOR_BIOMETRIA = "CONN_APPOD_NEW"
 
 SEED_PADRAO = 42
 _is_admin = st.session_state.get("role_interno") == "Admin"
@@ -61,6 +68,7 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
     i_ordem, i_guia = idx["NU_ORDEM"], idx["NU_GUIA"]
     i_cd, i_grupo = idx["CD_PROCEDIMENTO"], idx["DS_GRUPO"]
     i_lib, i_dt = idx["LIBERACAO"], idx["DT_CREATED_AT"]
+    i_operador = idx["CD_OPERADOR_ATEND"]
 
     registros = []
     guias_por_processo = {}  # nu_ordem -> set(nu_guia), inclui S e N — só pra contar o total
@@ -90,6 +98,7 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
             "liberacao": "N",
             "mes_referencia": None,
             "total_guias_processo": None,
+            "cd_operador_atend": str(linha[i_operador] or "").strip(),
         })
 
     wb.close()
@@ -113,6 +122,7 @@ def _guias_para_df(guias: list) -> pd.DataFrame:
         "Especialidade": [g["ds_grupo"] for g in guias],
         "CD_PROCEDIMENTO": [g["cd_procedimento"] for g in guias],
         "NU_GUIA": [g["nu_guia"] for g in guias],
+        "CD_OPERADOR_ATEND": [g.get("cd_operador_atend", "") for g in guias],
         "Qtde": 1,
     })
 
@@ -181,6 +191,15 @@ with aba_busca:
     total_guias_processo = guias[0].get("total_guias_processo") if guias else None
     if total_guias_processo:
         st.caption(f"Total de guias no processo (incluindo LIBERAÇÃO = S): {total_guias_processo}")
+
+    # Biometria por guia: computado do df ANTES do filtro de procedimentos
+    # ignorados (é atributo de quem atendeu, não depende de quais
+    # procedimentos entram ou não na análise).
+    biometria_por_guia = (
+        df.groupby("NU_GUIA")["CD_OPERADOR_ATEND"]
+        .apply(lambda s: any(str(v).strip() == OPERADOR_BIOMETRIA for v in s))
+        .to_dict()
+    )
 
     # --- Filtro opcional: procedimentos que não precisam ser analisados ---
     # (ex.: coroas provisórias). O procedimento some da contagem e do sorteio;
@@ -278,7 +297,10 @@ with aba_busca:
         st.caption(f"{total_guias} guia(s), {total_procs} proc(s)")
 
         with st.expander(f"Tabela completa — {total_guias} guia(s)", expanded=False):
-            renderizar_tabela_guias(df_esp_guias, esp, objetivo=total_guias, guias_vistas=guias_vistas)
+            renderizar_tabela_guias(
+                df_esp_guias, esp, objetivo=total_guias,
+                guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
+            )
 
         if _norm(esp) in REGRAS_AMOSTRAGEM:
             df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
@@ -295,6 +317,7 @@ with aba_busca:
                         esp,
                         objetivo=n_objetivo,
                         guias_vistas=guias_vistas,
+                        biometria_por_guia=biometria_por_guia,
                     )
         elif especialidade_tem_critico.get(esp):
             # Especialidade fora das regras de amostragem, mas com
@@ -302,7 +325,10 @@ with aba_busca:
             # só as guias com esse procedimento, não as 100% da especialidade.
             df_criticas = guias_com_proc_critico(df_esp_guias, procedimentos_criticos)
             with st.expander(f"Sugestão de amostra — {len(df_criticas)} guia(s) com procedimento crítico", expanded=False):
-                renderizar_tabela_guias(df_criticas, esp, objetivo=len(df_criticas), guias_vistas=guias_vistas)
+                renderizar_tabela_guias(
+                    df_criticas, esp, objetivo=len(df_criticas),
+                    guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
+                )
         # Sem regra de amostragem e sem procedimento crítico presente: sem
         # seção de "Sugestão de amostra" (hoje mostraria 100% das guias,
         # igual à Tabela completa, sem utilidade nenhuma).
