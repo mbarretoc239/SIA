@@ -507,9 +507,11 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     amostragem_guias_vistas (chave publicável do Supabase, sem vínculo a
     usuário por enquanto).
 
-    `biometria_por_guia`: {NU_GUIA: (qtd_com_biometria, qtd_total_itens)}.
-    Mostra "X/Y" na coluna BIOMETRIA; o ✓ só aparece quando X == Y (100% dos
-    itens da guia atendidos via CONN_APPOD_NEW).
+    `biometria_por_guia`: {NU_GUIA: (qtd_com_biometria, qtd_total_itens,
+    qtd_com_operador_gravado)}. Mostra "X/Y" na coluna BIOMETRIA; o ✓ só
+    aparece quando X == Y (100% dos itens da guia atendidos via
+    CONN_APPOD_NEW). Se nenhum item tiver operador gravado ainda (guia
+    importada antes desta coluna existir), a célula fica em branco.
     """
     biometria_por_guia = biometria_por_guia or {}
     supabase_url = st.secrets["supabase"]["url"].rstrip("/")
@@ -523,8 +525,8 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         qtde = int(row["Qtde_procs"])
         classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
         info_biometria = biometria_por_guia.get(str(row["NU_GUIA"]))
-        if info_biometria and info_biometria[1] > 0:
-            n_bio, n_total = info_biometria
+        if info_biometria and info_biometria[1] > 0 and info_biometria[2] > 0:
+            n_bio, n_total, _n_com_dado = info_biometria
             check = " ✓" if n_bio == n_total else ""
             biometria_html = f"<td style='text-align:center'>{n_bio}/{n_total}{check}</td>"
         else:

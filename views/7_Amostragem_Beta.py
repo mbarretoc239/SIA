@@ -195,10 +195,21 @@ with aba_busca:
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais
     # procedimentos entram ou não na análise). Guarda (qtd_com_biometria,
-    # qtd_total_itens) — o check só aparece quando os dois batem (100%).
+    # qtd_total_itens, qtd_com_operador_gravado) — o check só aparece quando
+    # os dois primeiros batem (100%); se nenhum item tiver operador gravado
+    # (guias importadas antes desta coluna existir), a célula fica em branco
+    # em vez de mostrar "0/N" (que passaria a entender errada de "sem
+    # biometria" quando na real é "dado ainda não disponível").
+    def _biometria_guia(serie):
+        valores = [str(v).strip() for v in serie]
+        n_total = len(valores)
+        n_bio = sum(v == OPERADOR_BIOMETRIA for v in valores)
+        n_com_dado = sum(1 for v in valores if v)
+        return (n_bio, n_total, n_com_dado)
+
     biometria_por_guia = (
         df.groupby("NU_GUIA")["CD_OPERADOR_ATEND"]
-        .apply(lambda s: (sum(str(v).strip() == OPERADOR_BIOMETRIA for v in s), len(s)))
+        .apply(_biometria_guia)
         .to_dict()
     )
 
