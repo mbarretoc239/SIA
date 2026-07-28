@@ -194,10 +194,11 @@ with aba_busca:
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais
-    # procedimentos entram ou não na análise).
+    # procedimentos entram ou não na análise). Guarda (qtd_com_biometria,
+    # qtd_total_itens) — o check só aparece quando os dois batem (100%).
     biometria_por_guia = (
         df.groupby("NU_GUIA")["CD_OPERADOR_ATEND"]
-        .apply(lambda s: any(str(v).strip() == OPERADOR_BIOMETRIA for v in s))
+        .apply(lambda s: (sum(str(v).strip() == OPERADOR_BIOMETRIA for v in s), len(s)))
         .to_dict()
     )
 

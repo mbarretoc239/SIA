@@ -507,9 +507,9 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     amostragem_guias_vistas (chave publicável do Supabase, sem vínculo a
     usuário por enquanto).
 
-    `biometria_por_guia`: {NU_GUIA: bool} — guia teve algum item atendido via
-    CONN_APPOD_NEW (biometria facial). Mostra ✓ na coluna BIOMETRIA quando
-    True, vazio quando False/ausente.
+    `biometria_por_guia`: {NU_GUIA: (qtd_com_biometria, qtd_total_itens)}.
+    Mostra "X/Y" na coluna BIOMETRIA; o ✓ só aparece quando X == Y (100% dos
+    itens da guia atendidos via CONN_APPOD_NEW).
     """
     biometria_por_guia = biometria_por_guia or {}
     supabase_url = st.secrets["supabase"]["url"].rstrip("/")
@@ -522,7 +522,13 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         procs = html.escape(str(row["Procedimentos"]))
         qtde = int(row["Qtde_procs"])
         classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
-        biometria_html = "<td style='text-align:center'>✓</td>" if biometria_por_guia.get(str(row["NU_GUIA"])) else "<td></td>"
+        info_biometria = biometria_por_guia.get(str(row["NU_GUIA"]))
+        if info_biometria and info_biometria[1] > 0:
+            n_bio, n_total = info_biometria
+            check = " ✓" if n_bio == n_total else ""
+            biometria_html = f"<td style='text-align:center'>{n_bio}/{n_total}{check}</td>"
+        else:
+            biometria_html = "<td></td>"
         motivo_html = ""
         if mostrar_motivo:
             motivo = html.escape(str(row.get("Motivo", "")))
