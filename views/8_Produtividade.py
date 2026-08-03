@@ -67,15 +67,13 @@ resumo = resumo_geral(df)
 por_status = resumo["por_status"]
 
 st.markdown("### Visão Geral")
-c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Total de processos", resumo["total_processos"])
 c2.metric("Total de procedimentos", resumo["total_procedimentos"])
 c3.metric("Fechados", por_status.get("FECHADO", 0))
 c4.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
 c5.metric("Glosados", por_status.get("GLOSADO", 0))
-
-if por_status.get("CALCULADO"):
-    st.caption(f"Calculados: {por_status.get('CALCULADO', 0)}")
+c6.metric("Calculados", por_status.get("CALCULADO", 0))
 
 df_status = pd.DataFrame([
     {"Status": STATUS_LABELS.get(status, status), "Processos": qtd, "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"])}
