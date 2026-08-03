@@ -35,7 +35,7 @@ st.caption(
 )
 
 with st.expander("Atualizar dados de hoje", expanded=False):
-    arquivo = st.file_uploader("Relatório REL5201 (.xlsx)", type=["xlsx"], key="upload_rel5201")
+    arquivo = st.file_uploader("Relatório REL5201 (.xlsx ou .csv)", type=["xlsx", "csv"], key="upload_rel5201")
     if arquivo and st.button("Processar e substituir snapshot atual", type="primary"):
         try:
             with st.spinner("Lendo e importando o relatório..."):

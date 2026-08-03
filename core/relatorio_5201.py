@@ -1,3 +1,4 @@
+import csv
 import unicodedata
 from datetime import date, datetime
 
@@ -37,10 +38,36 @@ def _presente(valor) -> bool:
     return str(valor).strip() != ""
 
 
+def _ler_bruto(arquivo) -> pd.DataFrame:
+    """Lê o arquivo cru (.xlsx ou .csv), sem normalizar colunas ainda."""
+    nome = (getattr(arquivo, "name", "") or "").lower()
+    if not nome.endswith(".csv"):
+        return pd.read_excel(arquivo, engine="openpyxl")
+
+    arquivo.seek(0)
+    bruto = arquivo.read()
+    arquivo.seek(0)
+    for codificacao in ("utf-8-sig", "latin-1"):
+        try:
+            amostra = bruto[:4096].decode(codificacao)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise ValueError("Não foi possível identificar a codificação do CSV.")
+
+    try:
+        separador = csv.Sniffer().sniff(amostra, delimiters=";,\t").delimiter
+    except csv.Error:
+        separador = ";"
+
+    return pd.read_csv(arquivo, sep=separador, encoding=codificacao)
+
+
 def ler_relatorio_5201(arquivo) -> pd.DataFrame:
-    """Lê o REL5201 (.xlsx) via pandas e devolve um DataFrame só com as
-    colunas usadas pelo painel de status/produtividade, já normalizadas."""
-    df = pd.read_excel(arquivo, engine="openpyxl")
+    """Lê o REL5201 (.xlsx ou .csv) via pandas e devolve um DataFrame só com
+    as colunas usadas pelo painel de status/produtividade, já normalizadas."""
+    df = _ler_bruto(arquivo)
     df.columns = [_norm(c) for c in df.columns]
 
     faltantes = COLUNAS_NECESSARIAS - set(df.columns)
@@ -53,6 +80,8 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
     df["ORDEM"] = df["ORDEM"].astype("int64").astype(str)
     df["STATUS"] = df["STATUS"].fillna("").apply(_norm)
     df["QT_PROCEDIMENTO"] = pd.to_numeric(df["QT_PROCEDIMENTO"], errors="coerce").fillna(0).astype(int)
+    for col in ("DATA_CONSISTENCIA", "DATA_FECHAMENTO"):
+        df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
 
     return df[CAMPOS_REGISTRO]
 
