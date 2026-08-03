@@ -1,7 +1,10 @@
+import altair as alt
 import pandas as pd
 import streamlit as st
 
 from core.relatorio_5201 import (
+    STATUS_CORES,
+    STATUS_LABELS,
     carregar_dados_atuais,
     ler_relatorio_5201,
     montar_registros,
@@ -74,6 +77,18 @@ c5.metric("Glosados", por_status.get("GLOSADO", 0))
 if por_status.get("CALCULADO"):
     st.caption(f"Calculados: {por_status.get('CALCULADO', 0)}")
 
+df_status = pd.DataFrame([
+    {"Status": STATUS_LABELS.get(status, status), "Processos": qtd, "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"])}
+    for status, qtd in por_status.items()
+])
+grafico_status = alt.Chart(df_status).mark_bar(cornerRadiusEnd=4).encode(
+    x=alt.X("Processos:Q"),
+    y=alt.Y("Status:N", sort="-x", title=None),
+    color=alt.Color("_cor:N", scale=None, legend=None),
+    tooltip=["Status", "Processos"],
+)
+st.altair_chart(grafico_status, use_container_width=True)
+
 st.divider()
 
 st.markdown("### Produtividade por Auditor")
@@ -83,3 +98,11 @@ if tabela_auditores.empty:
     st.info("Nenhum processo com auditor (consistência/fechamento) registrado neste snapshot.")
 else:
     st.dataframe(tabela_auditores, use_container_width=True, hide_index=True)
+
+    grafico_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4).encode(
+        x=alt.X("Total:Q", title="Processos concluídos (Fechado + Calculado)"),
+        y=alt.Y("Auditor:N", sort="-x", title=None),
+        color=alt.value("#4F8CFF"),
+        tooltip=["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"],
+    )
+    st.altair_chart(grafico_auditores, use_container_width=True)

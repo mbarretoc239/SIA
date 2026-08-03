@@ -23,6 +23,17 @@ STATUS_LABELS = {
     "CALCULADO": "Calculado",
 }
 
+# Mesmos tokens de cor já usados no resto do app (core/settings.py::TEMA) —
+# reaproveita o significado que sucesso/erro/laranja já têm nas outras telas
+# em vez de inventar uma paleta nova só pro gráfico.
+STATUS_CORES = {
+    "FECHADO": "#22C55E",
+    "CONSISTIDO": "#F59E0B",
+    "GLOSADO": "#EF5350",
+    "CALCULADO": "#6F84A5",
+    "_outro": "#6F84A5",
+}
+
 
 def _norm(texto) -> str:
     sem_acento = unicodedata.normalize("NFKD", str(texto)).encode("ASCII", "ignore").decode("ASCII")
