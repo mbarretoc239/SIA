@@ -145,33 +145,44 @@ def resumo_geral(df: pd.DataFrame) -> dict:
     }
 
 
+COLUNAS_PRODUTIVIDADE = [
+    "Auditor", "Consistidos", "Fechados", "Total",
+    "Procedimentos consistidos", "Procedimentos fechados",
+]
+
+
 def produtividade_por_auditor(df: pd.DataFrame) -> pd.DataFrame:
     """Uma linha por auditor com quantos processos ele consistiu e quantos
-    fechou, mais a soma de procedimentos em cada ação."""
+    fechou, com a soma de procedimentos de cada ação em colunas separadas.
+
+    Mantidas separadas de propósito: o mesmo processo costuma ser consistido
+    e fechado pelo mesmo auditor, então somar as duas contagens numa única
+    coluna "Procedimentos" contaria o mesmo processo duas vezes.
+    """
     linhas = {}
 
-    def _acumular(coluna_login, rotulo):
+    def _acumular(coluna_login, rotulo_qtd, rotulo_procs):
         if coluna_login not in df.columns:
             return
         sub = df[df[coluna_login].apply(_presente)]
         for login, grupo in sub.groupby(coluna_login):
             linha = linhas.setdefault(
-                login, {"Auditor": login, "Consistidos": 0, "Fechados": 0, "Procedimentos": 0}
+                login,
+                {"Auditor": login, "Consistidos": 0, "Fechados": 0,
+                 "Procedimentos consistidos": 0, "Procedimentos fechados": 0},
             )
-            linha[rotulo] = len(grupo)
-            linha["Procedimentos"] += int(grupo["QT_PROCEDIMENTO"].sum())
+            linha[rotulo_qtd] = len(grupo)
+            linha[rotulo_procs] = int(grupo["QT_PROCEDIMENTO"].sum())
 
-    _acumular("LOGIN_CONSISTENCIA", "Consistidos")
-    _acumular("LOGIN_FECHAMENTO", "Fechados")
+    _acumular("LOGIN_CONSISTENCIA", "Consistidos", "Procedimentos consistidos")
+    _acumular("LOGIN_FECHAMENTO", "Fechados", "Procedimentos fechados")
 
     if not linhas:
-        return pd.DataFrame(columns=["Auditor", "Consistidos", "Fechados", "Total", "Procedimentos"])
+        return pd.DataFrame(columns=COLUNAS_PRODUTIVIDADE)
 
     resultado = pd.DataFrame(linhas.values())
     resultado["Total"] = resultado["Consistidos"] + resultado["Fechados"]
-    return resultado[["Auditor", "Consistidos", "Fechados", "Total", "Procedimentos"]].sort_values(
-        "Total", ascending=False
-    ).reset_index(drop=True)
+    return resultado[COLUNAS_PRODUTIVIDADE].sort_values("Total", ascending=False).reset_index(drop=True)
 
 
 def status_processo(df: pd.DataFrame, nu_ordem: str) -> dict:
