@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import hashlib
+import json
 import bcrypt
 from datetime import datetime, timezone
 from cryptography.fernet import Fernet
@@ -810,3 +811,61 @@ class DatabaseManager:
         url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
         response = requests.delete(url, headers=self.headers)
         return response.status_code in [200, 204]
+
+    # --- Operações de Banco (Relatório 5201 - Status e Produtividade) ---
+    # Cada linha do relatório vira UM registro com o conteúdo inteiro
+    # (ORDEM/STATUS/auditor/datas) cifrado num único blob JSON (Fernet) —
+    # ninguém com acesso direto ao Supabase (dashboard, chave anon vazada)
+    # consegue ler o conteúdo; só o app, que tem a chave em st.secrets.
+    def importar_relatorio_5201(self, registros: list, importado_por, lote: int = 1000) -> int:
+        """Substitui por completo o snapshot anterior. O relatório é baixado
+        inteiro todo dia e reflete o estado atual de todos os processos —
+        não faz sentido acumular snapshots antigos."""
+        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos"
+        headers_admin = self._admin_headers()
+
+        r_delete = requests.delete(f"{url}?id=gt.0", headers=headers_admin)
+        if not r_delete.ok:
+            raise RuntimeError(
+                f"Falha ao limpar snapshot anterior: HTTP {r_delete.status_code} — {r_delete.text[:500]}"
+            )
+
+        headers_insert = {**headers_admin, "Prefer": "return=minimal"}
+        total = 0
+        for i in range(0, len(registros), lote):
+            pedaco = registros[i:i + lote]
+            payload = [
+                {
+                    "payload_cifrado": self.criptografar(json.dumps(reg, ensure_ascii=False)),
+                    "importado_por": importado_por,
+                }
+                for reg in pedaco
+            ]
+            r_insert = requests.post(url, headers=headers_insert, json=payload)
+            if not r_insert.ok:
+                raise RuntimeError(
+                    f"Falha ao importar lote {i}-{i + len(pedaco)}: HTTP {r_insert.status_code} — {r_insert.text[:500]}"
+                )
+            total += len(pedaco)
+        return total
+
+    def carregar_relatorio_5201(self) -> list:
+        """Busca e decifra o snapshot atual do REL5201. Cada item retornado
+        é o dict original (ORDEM, STATUS, LOGIN_FECHAMENTO etc.) gravado no
+        último upload."""
+        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos?select=payload_cifrado,importado_em,importado_por"
+        r = requests.get(url, headers=self.headers)
+        if not r.ok:
+            return []
+
+        registros = []
+        for item in r.json():
+            texto = self.descriptografar(item["payload_cifrado"])
+            try:
+                registro = json.loads(texto)
+            except (ValueError, TypeError):
+                continue
+            registro["_importado_em"] = item.get("importado_em")
+            registro["_importado_por"] = item.get("importado_por")
+            registros.append(registro)
+        return registros

@@ -284,6 +284,12 @@ else:
     if tem_acesso_modulo(permissoes, role, "producao"):
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
 
+    # Produtividade (Relatório 5201): só Gestor e Admin (fins de teste) —
+    # não é módulo configurável em permissoes_modulos, mesma convenção de
+    # gestão de Links Padrão.
+    if role in ("Gestor", "Admin"):
+        paginas.append(st.Page("views/8_Produtividade.py", title="Produtividade"))
+
     # Alinhamentos: visível para todos, conteúdo se ajusta por nível dentro da tela
     paginas.append(st.Page("views/5_Alinhamentos.py", title="Alinhamentos"))
 
