@@ -77,7 +77,7 @@ if por_status.get("CALCULADO"):
 st.divider()
 
 st.markdown("### Produtividade por Auditor")
-st.caption("Quantidade de processos consistidos e fechados por auditor, com a soma de procedimentos em cada ação.")
+st.caption("Só conta processos em estado final (Fechado ou Calculado) — Consistido ainda está em aberto e não entra na contagem.")
 tabela_auditores = produtividade_por_auditor(df)
 if tabela_auditores.empty:
     st.info("Nenhum processo com auditor (consistência/fechamento) registrado neste snapshot.")

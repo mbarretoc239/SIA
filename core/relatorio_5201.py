@@ -145,43 +145,47 @@ def resumo_geral(df: pd.DataFrame) -> dict:
     }
 
 
-COLUNAS_PRODUTIVIDADE = [
-    "Auditor", "Consistidos", "Fechados", "Total",
-    "Procedimentos consistidos", "Procedimentos fechados",
-]
+COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"]
+
+# Só processos num estado final contam como produtividade — CONSISTIDO ainda
+# está em aberto e GLOSADO não é uma ação do auditor.
+STATUS_PRODUTIVOS = {"FECHADO", "CALCULADO"}
 
 
 def produtividade_por_auditor(df: pd.DataFrame) -> pd.DataFrame:
-    """Uma linha por auditor com quantos processos ele consistiu e quantos
-    fechou, com a soma de procedimentos de cada ação em colunas separadas.
+    """Uma linha por auditor com quantos processos FECHADO/CALCULADO ele é
+    responsável, e a soma de procedimentos desses processos.
 
-    Mantidas separadas de propósito: o mesmo processo costuma ser consistido
-    e fechado pelo mesmo auditor, então somar as duas contagens numa única
-    coluna "Procedimentos" contaria o mesmo processo duas vezes.
+    O auditor responsável é LOGIN_FECHAMENTO quando presente (processos
+    FECHADO sempre têm) — senão LOGIN_CONSISTENCIA, que é o campo preenchido
+    nos processos CALCULADO. Cada processo entra uma única vez (não há
+    dupla contagem entre as duas colunas de status).
     """
-    linhas = {}
-
-    def _acumular(coluna_login, rotulo_qtd, rotulo_procs):
-        if coluna_login not in df.columns:
-            return
-        sub = df[df[coluna_login].apply(_presente)]
-        for login, grupo in sub.groupby(coluna_login):
-            linha = linhas.setdefault(
-                login,
-                {"Auditor": login, "Consistidos": 0, "Fechados": 0,
-                 "Procedimentos consistidos": 0, "Procedimentos fechados": 0},
-            )
-            linha[rotulo_qtd] = len(grupo)
-            linha[rotulo_procs] = int(grupo["QT_PROCEDIMENTO"].sum())
-
-    _acumular("LOGIN_CONSISTENCIA", "Consistidos", "Procedimentos consistidos")
-    _acumular("LOGIN_FECHAMENTO", "Fechados", "Procedimentos fechados")
-
-    if not linhas:
+    if df.empty or "STATUS" not in df.columns:
         return pd.DataFrame(columns=COLUNAS_PRODUTIVIDADE)
 
-    resultado = pd.DataFrame(linhas.values())
-    resultado["Total"] = resultado["Consistidos"] + resultado["Fechados"]
+    produtivos = df[df["STATUS"].isin(STATUS_PRODUTIVOS)].copy()
+    if produtivos.empty:
+        return pd.DataFrame(columns=COLUNAS_PRODUTIVIDADE)
+
+    tem_fechamento = produtivos["LOGIN_FECHAMENTO"].apply(_presente)
+    produtivos["_auditor"] = produtivos["LOGIN_FECHAMENTO"].where(tem_fechamento, produtivos["LOGIN_CONSISTENCIA"])
+    produtivos = produtivos[produtivos["_auditor"].apply(_presente)]
+
+    if produtivos.empty:
+        return pd.DataFrame(columns=COLUNAS_PRODUTIVIDADE)
+
+    linhas = []
+    for auditor, grupo in produtivos.groupby("_auditor"):
+        linhas.append({
+            "Auditor": auditor,
+            "Fechados": int((grupo["STATUS"] == "FECHADO").sum()),
+            "Calculados": int((grupo["STATUS"] == "CALCULADO").sum()),
+            "Total": len(grupo),
+            "Procedimentos": int(grupo["QT_PROCEDIMENTO"].sum()),
+        })
+
+    resultado = pd.DataFrame(linhas)
     return resultado[COLUNAS_PRODUTIVIDADE].sort_values("Total", ascending=False).reset_index(drop=True)
 
 
