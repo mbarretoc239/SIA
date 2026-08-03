@@ -1,4 +1,3 @@
-import csv
 import unicodedata
 from datetime import date, datetime
 
@@ -39,7 +38,17 @@ def _presente(valor) -> bool:
 
 
 def _ler_bruto(arquivo) -> pd.DataFrame:
-    """Lê o arquivo cru (.xlsx ou .csv), sem normalizar colunas ainda."""
+    """Lê o arquivo cru (.xlsx ou .csv), sem normalizar colunas ainda.
+
+    Números no CSV seguem o padrão BR (ex.: "3.806" = três mil oitocentos e
+    seis, não 3,806) — daí thousands="." e decimal=",". Sem isso,
+    QT_PROCEDIMENTO com milhar vira um número bem menor (ex.: "3.806" lido
+    como float 3.806, truncado pra 3 ao converter pra inteiro).
+
+    O separador de campo é detectado pela primeira linha (cabeçalho): contar
+    ";"/","/tab só nos nomes de coluna evita confundir separador de campo com
+    separador decimal (que também usa vírgula nas linhas de dados).
+    """
     nome = (getattr(arquivo, "name", "") or "").lower()
     if not nome.endswith(".csv"):
         return pd.read_excel(arquivo, engine="openpyxl")
@@ -56,12 +65,11 @@ def _ler_bruto(arquivo) -> pd.DataFrame:
     else:
         raise ValueError("Não foi possível identificar a codificação do CSV.")
 
-    try:
-        separador = csv.Sniffer().sniff(amostra, delimiters=";,\t").delimiter
-    except csv.Error:
-        separador = ";"
+    primeira_linha = amostra.splitlines()[0] if amostra else ""
+    candidatos = {c: primeira_linha.count(c) for c in (";", ",", "\t")}
+    separador = max(candidatos, key=candidatos.get) if any(candidatos.values()) else ";"
 
-    return pd.read_csv(arquivo, sep=separador, encoding=codificacao)
+    return pd.read_csv(arquivo, sep=separador, encoding=codificacao, thousands=".", decimal=",")
 
 
 def ler_relatorio_5201(arquivo) -> pd.DataFrame:
