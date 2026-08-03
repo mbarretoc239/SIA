@@ -31,7 +31,7 @@ if "db" not in st.session_state:
 # o PowerBI). Nomes normalizados via _norm (maiúsculo, sem acento).
 COLUNAS_NECESSARIAS = {
     "NU_ORDEM", "NU_GUIA", "CD_PROCEDIMENTO", "DS_GRUPO", "LIBERACAO",
-    "DT_CREATED_AT", "CD_OPERADOR_ATEND",
+    "DT_PRODUCAO", "CD_OPERADOR_ATEND",
 }
 
 # Operador que indica biometria facial feita (fluxo automático via app);
@@ -53,8 +53,8 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
     consome memória demais (gerou MemoryError em máquina com pouca RAM livre).
 
     Só mantém linhas com LIBERACAO == 'N' (é só isso que a amostragem usa).
-    `mes_referencia` é derivado de DT_CREATED_AT (constante por arquivo,
-    ex: planilha 'IA 07 2026' tem DT_CREATED_AT = 2026-07-01).
+    `mes_referencia` é derivado de DT_PRODUCAO (constante por arquivo,
+    ex: planilha 'IA 07 2026' tem DT_PRODUCAO = 2026-07-01).
     """
     wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
     aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
@@ -72,7 +72,7 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
 
     i_ordem, i_guia = idx["NU_ORDEM"], idx["NU_GUIA"]
     i_cd, i_grupo = idx["CD_PROCEDIMENTO"], idx["DS_GRUPO"]
-    i_lib, i_dt = idx["LIBERACAO"], idx["DT_CREATED_AT"]
+    i_lib, i_dt = idx["LIBERACAO"], idx["DT_PRODUCAO"]
     i_operador = idx["CD_OPERADOR_ATEND"]
 
     registros = []
@@ -109,7 +109,7 @@ def _preparar_registros(arquivo) -> tuple[list, str, int]:
     wb.close()
 
     if mes_referencia is None:
-        raise ValueError("Não foi possível ler DT_CREATED_AT para determinar o mês de referência.")
+        raise ValueError("Não foi possível ler DT_PRODUCAO para determinar o mês de referência.")
 
     for registro in registros:
         registro["mes_referencia"] = mes_referencia
