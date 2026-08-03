@@ -854,12 +854,28 @@ class DatabaseManager:
         é o dict original (ORDEM, STATUS, LOGIN_FECHAMENTO etc.) gravado no
         último upload."""
         url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos?select=payload_cifrado,importado_em,importado_por"
-        r = requests.get(url, headers=self.headers)
-        if not r.ok:
-            return []
+
+        # PostgREST devolve no máximo 1000 linhas por padrão (db-max-rows) —
+        # sem paginar por Range, um relatório com mais de 1000 processos vinha
+        # cortado (o snapshot completo era gravado certo, só a leitura que
+        # ficava incompleta). Pagina até a última página vir menor que o
+        # tamanho pedido.
+        tamanho_pagina = 1000
+        offset = 0
+        linhas = []
+        while True:
+            headers_paginado = {**self.headers, "Range-Unit": "items", "Range": f"{offset}-{offset + tamanho_pagina - 1}"}
+            r = requests.get(url, headers=headers_paginado)
+            if not r.ok:
+                break
+            pagina = r.json()
+            linhas.extend(pagina)
+            if len(pagina) < tamanho_pagina:
+                break
+            offset += tamanho_pagina
 
         registros = []
-        for item in r.json():
+        for item in linhas:
             texto = self.descriptografar(item["payload_cifrado"])
             try:
                 registro = json.loads(texto)
