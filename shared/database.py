@@ -78,9 +78,14 @@ class DatabaseManager:
                 )
 
         url = f"{self.supabase_url}/rest/v1/{tabela}"
-        headers_insert = {**self.headers, "Prefer": "return=minimal"}
+        # A role anon tem statement_timeout de 3s — insuficiente pra apagar/inserir
+        # centenas de milhares de linhas dessas tabelas mensais. Usa service_role
+        # (sem override de timeout, cai no padrão do banco de 2min) só aqui, nas
+        # operações de escrita em massa; leituras continuam com self.headers.
+        headers_admin = self._admin_headers()
+        headers_insert = {**headers_admin, "Prefer": "return=minimal"}
 
-        r_delete = requests.delete(f"{url}?mes_referencia=eq.{mes_referencia}", headers=self.headers)
+        r_delete = requests.delete(f"{url}?mes_referencia=eq.{mes_referencia}", headers=headers_admin)
         _garantir_ok(r_delete, f"apagar dados antigos do mês {mes_referencia} em {tabela}")
 
         total = 0
@@ -96,7 +101,7 @@ class DatabaseManager:
             antigos = meses[2:]
             if antigos:
                 filtro = ",".join(antigos)
-                r_cleanup = requests.delete(f"{url}?mes_referencia=in.({filtro})", headers=self.headers)
+                r_cleanup = requests.delete(f"{url}?mes_referencia=in.({filtro})", headers=headers_admin)
                 _garantir_ok(r_cleanup, f"limpar meses antigos ({', '.join(antigos)}) em {tabela}")
 
         return total
