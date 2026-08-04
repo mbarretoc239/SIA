@@ -9,7 +9,6 @@ from core.relatorio_5201 import (
     STATUS_LABELS,
     carregar_dados_atuais,
     dias_disponiveis,
-    filtrar_por_auditor,
     ler_relatorio_5201,
     meses_disponiveis,
     montar_registros,
@@ -17,6 +16,25 @@ from core.relatorio_5201 import (
     resumo_geral,
 )
 from shared.database import DatabaseManager
+
+
+def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
+    """Métricas + gráfico de status de TODOS os processos do mês (não filtra
+    por auditor) — igual pro Gestor e pro usuário comum; só a tabela por
+    pessoa abaixo disso é que fica exclusiva do Gestor."""
+    resumo = resumo_geral(df)
+    por_status = resumo["por_status"]
+
+    st.markdown(f"### {titulo}")
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Total de processos", resumo["total_processos"])
+    c2.metric("Total de procedimentos", resumo["total_procedimentos"])
+    c3.metric("Fechados", por_status.get("FECHADO", 0))
+    c4.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
+    c5.metric("Glosados", por_status.get("GLOSADO", 0))
+    c6.metric("Calculados", por_status.get("CALCULADO", 0))
+    if resumo["total_processos"]:
+        st.altair_chart(_grafico_status(por_status), use_container_width=True)
 
 
 def _grafico_status(por_status: dict):
@@ -108,18 +126,7 @@ if escolha_dia != "Todos os dias":
     dia_filtro = dias[opcoes_dia.index(escolha_dia) - 1]
 
 if _ve_geral:
-    resumo = resumo_geral(df)
-    por_status = resumo["por_status"]
-
-    st.markdown("### Visão Geral")
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Total de processos", resumo["total_processos"])
-    c2.metric("Total de procedimentos", resumo["total_procedimentos"])
-    c3.metric("Fechados", por_status.get("FECHADO", 0))
-    c4.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
-    c5.metric("Glosados", por_status.get("GLOSADO", 0))
-    c6.metric("Calculados", por_status.get("CALCULADO", 0))
-    st.altair_chart(_grafico_status(por_status), use_container_width=True)
+    _secao_visao_geral(df)
 
     st.divider()
 
@@ -144,24 +151,9 @@ else:
         st.warning("Não identifiquei seu usuário SIGO nesta sessão — faça login novamente.")
         st.stop()
 
-    # Mesma visão geral que o Gestor tem (aberto/fechado/glosado/calculado),
-    # só que restrita aos processos em que este usuário aparece como
-    # responsável — sem o detalhamento por pessoa que o Gestor vê.
-    meus_processos = filtrar_por_auditor(df, _usuario_sigo)
-    resumo = resumo_geral(meus_processos)
-    por_status = resumo["por_status"]
-
-    st.markdown("### Visão Geral do Mês")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Meus processos", resumo["total_processos"])
-    c2.metric("Fechados", por_status.get("FECHADO", 0))
-    c3.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
-    c4.metric("Glosados", por_status.get("GLOSADO", 0))
-    c5.metric("Calculados", por_status.get("CALCULADO", 0))
-    if resumo["total_processos"]:
-        st.altair_chart(_grafico_status(por_status), use_container_width=True)
-    else:
-        st.caption(f"Nenhum processo encontrado com o login **{_usuario_sigo}** em {escolha_mes if meses else 'este mês'}.")
+    # Mesma visão geral do Gestor (status de TODOS os processos do mês) —
+    # só a tabela por pessoa (auditor a auditor) que fica exclusiva dele.
+    _secao_visao_geral(df, titulo="Visão Geral do Mês")
 
     st.divider()
 

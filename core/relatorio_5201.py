@@ -153,19 +153,6 @@ def meses_disponiveis(df: pd.DataFrame) -> list:
     return sorted(df["_mes_referencia"].dropna().unique().tolist(), reverse=True)
 
 
-def filtrar_por_auditor(df: pd.DataFrame, auditor: str) -> pd.DataFrame:
-    """Processos (qualquer status, não só os produtivos) em que o auditor
-    informado aparece em LOGIN_FECHAMENTO ou LOGIN_CONSISTENCIA — usado pra
-    dar a um usuário comum a mesma visão geral do mês que o Gestor tem,
-    porém restrita só aos processos que passaram por ele."""
-    if df.empty or not auditor:
-        return df.iloc[0:0]
-    alvo = auditor.strip().upper()
-    em_fechamento = df["LOGIN_FECHAMENTO"].astype(str).str.strip().str.upper() == alvo
-    em_consistencia = df["LOGIN_CONSISTENCIA"].astype(str).str.strip().str.upper() == alvo
-    return df[em_fechamento | em_consistencia]
-
-
 def resumo_geral(df: pd.DataFrame) -> dict:
     total_processos = len(df)
     total_procedimentos = int(df["QT_PROCEDIMENTO"].sum()) if "QT_PROCEDIMENTO" in df.columns and total_processos else 0
