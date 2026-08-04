@@ -2,15 +2,20 @@ import requests
 import streamlit as st
 
 # gemini-1.5-flash foi descontinuado; "-latest" é o alias que o Google mantém
-# apontando pro flash atual, evitando quebrar de novo em troca de versão.
-_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+# apontando pro modelo atual, evitando quebrar de novo em troca de versão.
+# flash-lite tem cota de RPM bem maior que o flash normal no tier gratuito,
+# e é suficiente pra essa reescrita de texto formal.
+_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent"
 
 _SYSTEM_PROMPT = (
-    "Você é um revisor técnico. Reescreva o texto abaixo para torná-lo coeso, natural e direto. "
-    "Remova conectivos repetitivos e evite repetições de jargões iniciais. Ajuste o texto para o "
-    "formato de frase (remova o Caps Lock excessivo). Formate os motivos específicos em bullet "
-    "points se houver mais de um. NÃO altere os motivos técnicos das recusas, NÃO adicione "
-    "informações e mantenha o tom profissional estrito."
+    "Você é um revisor técnico. Reescreva o texto abaixo para torná-lo coeso, natural, direto e "
+    "o mais CURTO possível — corte redundância e frases de preenchimento, mantendo só a "
+    "informação essencial de cada motivo. Remova conectivos repetitivos e evite repetições de "
+    "jargões iniciais. Ajuste o texto para o formato de frase (remova o Caps Lock excessivo). "
+    "Se houver mais de um motivo, liste em tópicos curtos usando hífen (-), sem markdown "
+    "(nada de **negrito**, #, ou outra marcação) e sem título/rótulo antes de cada tópico. "
+    "NÃO altere os motivos técnicos das recusas, NÃO adicione informações e mantenha o tom "
+    "profissional estrito."
 )
 
 
