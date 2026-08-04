@@ -9,6 +9,7 @@ from core.relatorio_5201 import (
     STATUS_LABELS,
     carregar_dados_atuais,
     dias_disponiveis,
+    filtrar_por_auditor,
     ler_relatorio_5201,
     meses_disponiveis,
     montar_registros,
@@ -16,6 +17,19 @@ from core.relatorio_5201 import (
     resumo_geral,
 )
 from shared.database import DatabaseManager
+
+
+def _grafico_status(por_status: dict):
+    df_status = pd.DataFrame([
+        {"Status": STATUS_LABELS.get(status, status), "Processos": qtd, "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"])}
+        for status, qtd in por_status.items()
+    ])
+    return alt.Chart(df_status).mark_bar(cornerRadiusEnd=4).encode(
+        x=alt.X("Processos:Q"),
+        y=alt.Y("Status:N", sort="-x", title=None),
+        color=alt.Color("_cor:N", scale=None, legend=None),
+        tooltip=["Status", "Processos"],
+    )
 
 st.set_page_config(page_title="Produtividade", page_icon="", layout="wide")
 
@@ -105,18 +119,7 @@ if _ve_geral:
     c4.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
     c5.metric("Glosados", por_status.get("GLOSADO", 0))
     c6.metric("Calculados", por_status.get("CALCULADO", 0))
-
-    df_status = pd.DataFrame([
-        {"Status": STATUS_LABELS.get(status, status), "Processos": qtd, "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"])}
-        for status, qtd in por_status.items()
-    ])
-    grafico_status = alt.Chart(df_status).mark_bar(cornerRadiusEnd=4).encode(
-        x=alt.X("Processos:Q"),
-        y=alt.Y("Status:N", sort="-x", title=None),
-        color=alt.Color("_cor:N", scale=None, legend=None),
-        tooltip=["Status", "Processos"],
-    )
-    st.altair_chart(grafico_status, use_container_width=True)
+    st.altair_chart(_grafico_status(por_status), use_container_width=True)
 
     st.divider()
 
@@ -137,17 +140,36 @@ if _ve_geral:
         st.altair_chart(grafico_auditores, use_container_width=True)
 
 else:
-    st.markdown("### Minha Produtividade")
     if not _usuario_sigo:
         st.warning("Não identifiquei seu usuário SIGO nesta sessão — faça login novamente.")
         st.stop()
 
+    # Mesma visão geral que o Gestor tem (aberto/fechado/glosado/calculado),
+    # só que restrita aos processos em que este usuário aparece como
+    # responsável — sem o detalhamento por pessoa que o Gestor vê.
+    meus_processos = filtrar_por_auditor(df, _usuario_sigo)
+    resumo = resumo_geral(meus_processos)
+    por_status = resumo["por_status"]
+
+    st.markdown("### Visão Geral do Mês")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Meus processos", resumo["total_processos"])
+    c2.metric("Fechados", por_status.get("FECHADO", 0))
+    c3.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
+    c4.metric("Glosados", por_status.get("GLOSADO", 0))
+    c5.metric("Calculados", por_status.get("CALCULADO", 0))
+    if resumo["total_processos"]:
+        st.altair_chart(_grafico_status(por_status), use_container_width=True)
+    else:
+        st.caption(f"Nenhum processo encontrado com o login **{_usuario_sigo}** em {escolha_mes if meses else 'este mês'}.")
+
+    st.divider()
+
+    st.markdown("### Minha Produtividade")
+    st.caption("Só conta processos em estado final (Fechado ou Calculado) — Consistido ainda está em aberto e não entra na contagem.")
     minha_tabela = produtividade_por_auditor(df, dia=dia_filtro, auditor=_usuario_sigo)
     if minha_tabela.empty:
-        st.info(
-            f"Nenhum processo fechado/calculado no login **{_usuario_sigo}** "
-            + (f"em {escolha_dia}." if dia_filtro else "no snapshot atual.")
-        )
+        st.info("Nenhum processo fechado/calculado" + (f" em {escolha_dia}." if dia_filtro else " neste mês."))
     else:
         linha = minha_tabela.iloc[0]
         c1, c2, c3, c4 = st.columns(4)
@@ -156,22 +178,36 @@ else:
         c3.metric("Total", int(linha["Total"]))
         c4.metric("Procedimentos", int(linha["Procedimentos"]))
 
-    if dia_filtro is None and dias:
-        st.divider()
-        st.markdown("#### Por dia")
+    if dias:
         linhas_por_dia = []
         for d in dias:
             t = produtividade_por_auditor(df, dia=d, auditor=_usuario_sigo)
             if not t.empty:
                 linha = t.iloc[0]
                 linhas_por_dia.append({
-                    "Dia": d.strftime("%d/%m/%Y"),
+                    "Dia": d,
+                    "Dia_fmt": d.strftime("%d/%m/%Y"),
                     "Fechados": int(linha["Fechados"]),
                     "Calculados": int(linha["Calculados"]),
                     "Total": int(linha["Total"]),
                     "Procedimentos": int(linha["Procedimentos"]),
                 })
+
         if linhas_por_dia:
-            st.dataframe(pd.DataFrame(linhas_por_dia), use_container_width=True, hide_index=True)
+            df_por_dia = pd.DataFrame(linhas_por_dia).sort_values("Dia")
+
+            st.markdown("#### Produtividade ao longo do mês")
+            grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
+                x=alt.X("Dia_fmt:N", sort=None, title=None),
+                y=alt.Y("Total:Q", title="Processos concluídos (Fechado + Calculado)"),
+                tooltip=["Dia_fmt", "Fechados", "Calculados", "Total", "Procedimentos"],
+            )
+            st.altair_chart(grafico_dia, use_container_width=True)
+
+            with st.expander("Ver tabela por dia"):
+                st.dataframe(
+                    df_por_dia.drop(columns=["Dia"]).rename(columns={"Dia_fmt": "Dia"}),
+                    use_container_width=True, hide_index=True,
+                )
         else:
             st.caption("Nenhum dia com produtividade registrada ainda.")
