@@ -89,8 +89,13 @@ def limpar_banco_supabase(meses=6):
         raise ValueError("Sem permissão de exclusão. Adicione uma política de DELETE para a role anon.")
     response.raise_for_status()
 
-st.title("Gerador Offline - Relatório 5302")
-st.markdown("Faça o upload do relatório CSV ou PDF previamente salvo no seu computador")
+st.title("Resumo de ocorrência da 5302")
+st.caption(
+    "Anexe o relatório CSV ou PDF após ter calculado o processo. Será gerada uma "
+    "tabela com todas as glosas do processo. A coluna de justificativa pode ser "
+    "editada para que você descreva o motivo, por exemplo, \"Glosa 450, pois "
+    "prestador solicitou restauração para um dente ausente\"."
+)
 
 pdf_file = st.file_uploader("Selecione o arquivo", type=["pdf", "csv"])
 

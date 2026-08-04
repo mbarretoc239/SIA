@@ -23,7 +23,7 @@ if not tem_acesso_modulo(_permissoes, _role, "producao"):
     st.error("Você não tem permissão para acessar este módulo.")
     st.stop()
 
-st.title("Análise de Produção")
+st.title("Análise de produção do prestador")
 st.markdown("Envie um ou mais demonstrativos pdf para contar e ranquear os procedimentos mais realizados pelo prestador.")
 
 # Funções de Backend adaptadas para in-memory (BytesIO)

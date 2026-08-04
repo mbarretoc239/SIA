@@ -2,6 +2,7 @@ import streamlit as st
 import re
 import time
 from shared.database import DatabaseManager
+from shared.email_utils import enviar_reporte_bug
 
 # Configuração da Página principal (deve ser a primeira coisa)
 st.set_page_config(
@@ -70,6 +71,32 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
             st.rerun()
 
 
+@st.dialog("Reportar Bug")
+def dialog_reportar_bug():
+    titulo = st.text_input("Título")
+    texto = st.text_area("O que aconteceu?", height=150)
+    prints = st.file_uploader(
+        "Prints (opcional)", type=["png", "jpg", "jpeg"], accept_multiple_files=True
+    )
+
+    if st.button("Enviar", type="primary", use_container_width=True):
+        if not titulo or not texto:
+            st.warning("Preencha o título e a descrição.")
+        else:
+            autor = st.session_state.get("auditor_nome", "Desconhecido")
+            with st.spinner("Enviando..."):
+                ok = enviar_reporte_bug(titulo, texto, autor, prints)
+            if ok:
+                st.success("Reporte enviado. Obrigado!")
+                time.sleep(1.5)
+                st.rerun()
+            else:
+                st.error(
+                    "Não foi possível enviar agora: "
+                    + st.session_state.get("_erro_envio_bug", "erro desconhecido")
+                )
+
+
 def validar_senha(senha):
     if len(senha) < 6: return False, "A senha deve ter pelo menos 6 caracteres."
     if not re.search(r"[A-Z]", senha): return False, "A senha deve conter pelo menos uma letra maiúscula."
@@ -78,8 +105,8 @@ def validar_senha(senha):
     return True, ""
 
 def tela_login():
-    st.markdown("<h1 style='text-align: center; color: #2C3E50;'>SIA Auditoria Modular</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #7F8C8D;'>Plataforma centralizada de gestão em auditoria odontológica.</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #2C3E50;'>Sistema Integrado de Auditoria - SIA</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #7F8C8D;'>Plataforma com ferramentas diárias para auditoria e gestão</p>", unsafe_allow_html=True)
     
     col_vazia1, col_login, col_vazia2 = st.columns([1, 2, 1])
     
@@ -90,7 +117,7 @@ def tela_login():
         
         with tab_entrar:
             with st.container(border=True):
-                st.subheader("Login Seguradora")
+                st.subheader("Login")
                 usuario = st.text_input("Usuário SIGO", key="login_usr")
                 senha = st.text_input("Senha", type="password", key="login_pwd")
                 
@@ -369,3 +396,6 @@ else:
         st.session_state["_skip_autologin"] = 3
         st.session_state["_remove_auth_cookie"] = True
         st.rerun()
+
+    if st.sidebar.button("Reportar Bug", use_container_width=True):
+        dialog_reportar_bug()

@@ -189,9 +189,9 @@ def _guias_para_df(guias: list) -> pd.DataFrame:
 
 st.title("Amostragem de Guias")
 st.caption(
-    "Digite o número do processo — as guias com LIBERAÇÃO = N são buscadas "
-    "automaticamente na base importada mensalmente. Prestador e percentuais "
-    "continuam só no PowerBI."
+    "Após verificar processo no PowerBI, digite o número do processo abaixo. "
+    "O sistema trará somente procedimentos que não foram liberados pela IA. "
+    "Clique no número da guia, ele vai copiar automaticamente para poder colar no SIGO."
 )
 
 aba_busca, aba_config = st.tabs(["Amostragem", "Configurações"])
@@ -448,7 +448,6 @@ with aba_busca:
 
     # --- Detalhamento ---
     st.markdown("### Detalhamento por especialidade")
-    st.caption("Clique no número da guia para copiar.")
 
     for esp in especialidades:
         df_esp_total = df[df["Especialidade"] == esp]
