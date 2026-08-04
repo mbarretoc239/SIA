@@ -16,6 +16,7 @@ from core.amostragem import (
     selecionar_procedimentos_ignorados,
     gerenciar_procedimentos_ignorados,
 )
+from core.relatorio_5201 import carregar_dados_atuais, status_processo
 from shared.database import DatabaseManager
 
 st.set_page_config(page_title="Amostragem", page_icon="", layout="wide")
@@ -270,6 +271,22 @@ with aba_busca:
     total_guias_processo = guias[0].get("total_guias_processo") if guias else None
     texto_total_guias = f" — {total_guias_processo} guia(s) no total do processo" if total_guias_processo else ""
     st.success(f"Processo {processo_ativo}: {len(df)} item(ns) sem liberação pela IA{texto_total_guias}.")
+
+    # Status/auditor do processo no snapshot mais recente do REL5201 —
+    # visível para todos os roles, pra ninguém se esbarrar auditando o
+    # mesmo processo ao mesmo tempo.
+    info_status = status_processo(carregar_dados_atuais(), processo_ativo)
+    if info_status is None:
+        st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
+    elif info_status["situacao"] == "fechado":
+        st.success(f"✅ Processo já **FECHADO** por **{info_status['auditor']}** em {info_status['data_fmt']}.")
+    elif info_status["situacao"] == "em_analise":
+        st.warning(
+            f"🟡 Processo em análise (**{info_status['status_label']}**) por **{info_status['auditor']}** "
+            f"desde {info_status['data_fmt']} — confira antes de duplicar o trabalho."
+        )
+    else:
+        st.info(f"Processo listado como **{info_status['status_label']}**, ainda sem auditor associado no relatório do dia.")
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais
