@@ -138,6 +138,20 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
+    # --- Relatório 5302 (analises_auditoria) ---
+    def limpar_analises_antigas(self, meses: int = 6) -> None:
+        """Apaga registros de analises_auditoria mais antigos que `meses`.
+        Usa service_role — a role anon tem statement_timeout de 3s (ver
+        _importar_por_mes), curto demais pra um delete potencialmente
+        grande."""
+        from datetime import datetime, timedelta
+        data_limite = (datetime.now() - timedelta(days=meses * 30)).isoformat()
+        url = f"{self.supabase_url}/rest/v1/analises_auditoria?criado_em=lt.{data_limite}"
+        response = requests.delete(url, headers=self._admin_headers())
+        if response.status_code == 403:
+            raise ValueError("Sem permissão de exclusão. Verifique as políticas de RLS/role no Supabase.")
+        response.raise_for_status()
+
     # --- Procedimentos ignorados na Amostragem (persistente, por especialidade) ---
     def carregar_procs_ignorados(self) -> dict:
         """Retorna {especialidade: set(codigos)} com tudo que já foi salvo

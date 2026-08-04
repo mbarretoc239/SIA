@@ -21,74 +21,6 @@ if not tem_acesso_modulo(_permissoes, _role, "relatorio_5302"):
     st.error("Você não tem permissão para acessar este módulo.")
     st.stop()
 
-
-
-def salvar_no_supabase(arquivo_origem, texto_gerado, df_final, meta):
-    import requests
-    if df_final is None or df_final.empty:
-        raise ValueError("Não há glosas para salvar. O processo será ignorado.")
-        
-    url = st.secrets["supabase"]["url"].rstrip("/")
-    key = st.secrets["supabase"]["key"]
-    
-    headers = {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-    }
-    
-    # 1. Verifica duplicatas pelo número do processo (se houver número)
-    processo_id = meta.get("processo", "Desconhecido")
-    if processo_id != "Desconhecido":
-        check_res = requests.get(
-            f"{url}/rest/v1/analises_auditoria?select=id&processo=eq.{processo_id}&limit=1",
-            headers=headers
-        )
-        if check_res.ok and len(check_res.json()) > 0:
-            raise ValueError(f"O processo {processo_id} já consta no banco de dados!")
-    
-    # 2. Salva se passou na checagem
-    data = {
-        "arquivo_origem": arquivo_origem,
-        "processo": processo_id,
-        "prestador": meta.get("prestador", "Desconhecido"),
-        "data_producao": meta.get("producao", "Desconhecida"),
-        "texto_gerado": texto_gerado,
-        "glosas_json": df_final.fillna("").to_dict(orient="records")
-    }
-    
-    response = requests.post(f"{url}/rest/v1/analises_auditoria", headers=headers, json=data)
-    if response.status_code == 403:
-        raise ValueError("Permissão negada (Erro 403). Verifique as políticas de RLS no Supabase.")
-    response.raise_for_status()
-
-def limpar_banco_supabase(meses=6):
-    import requests
-    from datetime import datetime, timedelta
-    
-    url = st.secrets["supabase"]["url"].rstrip("/")
-    key = st.secrets["supabase"]["key"]
-    
-    headers = {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json"
-    }
-    
-    # Calcula data limite
-    data_limite = (datetime.now() - timedelta(days=meses*30)).isoformat()
-    
-    # RLS: a role anon deve ter permissão de DELETE, caso contrário falha.
-    # Adicionaremos essa nota para o usuário.
-    response = requests.delete(
-        f"{url}/rest/v1/analises_auditoria?criado_em=lt.{data_limite}",
-        headers=headers
-    )
-    if response.status_code == 403:
-        raise ValueError("Sem permissão de exclusão. Adicione uma política de DELETE para a role anon.")
-    response.raise_for_status()
-
 st.title("Resumo de ocorrência da 5302")
 st.caption(
     "Anexe o relatório CSV ou PDF após ter calculado o processo. Será gerada uma "
@@ -269,7 +201,7 @@ if pdf_file is not None:
                     key=key_texto_final,
                 )
 
-                col_btn_copy, col_btn_save, _ = st.columns([2, 3, 5])
+                col_btn_copy, _ = st.columns([2, 8])
                 with col_btn_copy:
                     # Botão de Copiar via Componente HTML — lê o valor ATUAL do
                     # textarea via window.parent.document (em vez de embutir o
@@ -308,16 +240,6 @@ if pdf_file is not None:
                     <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Texto</button>
                     """, height=65)
 
-                with col_btn_save:
-                    if "Nenhuma glosa" not in texto_gerado:
-                        if st.button("Salvar Análise na nuvem", use_container_width=True):
-                            with st.spinner("Salvando na nuvem..."):
-                                try:
-                                    salvar_no_supabase(st.session_state.get("pdf_name", "Desconhecido"), texto_editado, df_final, meta)
-                                    st.toast("Análise salva com sucesso no banco de dados!")
-                                except Exception as e:
-                                    st.error(f"Erro ao salvar no banco. A tabela 'analises_auditoria' foi criada no Supabase? Detalhe: {e}")
-                
                 st.markdown("### Texto de orientação ao Prestador")
                 if "Nenhuma glosa" not in texto_gerado:
                     glosas_presentes = set(df_final['Glosa'].unique())
