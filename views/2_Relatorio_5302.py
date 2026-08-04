@@ -132,7 +132,7 @@ if pdf_file is not None:
         with col1:
             opcao_agrupamento = st.radio(
                 "Nível de Detalhe:",
-                ["Resumido", "Detalhado"],
+                ["Padrão", "Detalhado", "Resumido"],
                 index=1
             )
             

@@ -36,7 +36,7 @@ def _row(guia, cod_proc, proc, glosa, tipo, just="", sub=""):
     }
 
 
-def _gerar(rows, tipo="Resumido"):
+def _gerar(rows, tipo="Padrão"):
     df = pd.DataFrame(rows)
     return text_engine.gerar_texto(df, tipo, META_BASE)
 
@@ -197,6 +197,69 @@ def test_df_vazio_retorna_mensagem_padrao():
     df["Incluir no Relatório"] = False
     txt = text_engine.gerar_texto(df, "Resumido", META_BASE)
     assert "Nenhuma glosa" in txt
+
+
+# ============================================================
+# 7) Modo "Resumido" (novo, ultra-compacto: sem procedimento/justificativa)
+# ============================================================
+
+def _gerar_resumido(rows):
+    df = pd.DataFrame(rows)
+    return text_engine.gerar_texto(df, "Resumido", META_BASE)
+
+
+def test_resumido_nao_cita_procedimento_nem_categoria():
+    rows = [_row("G1", "4170", "restauração em resina", "446", "Automática")]
+    txt = _gerar_resumido(rows)
+    assert "1 glosa 446 (guia G1)" in txt
+    assert "restauração" not in txt.lower()
+
+
+def test_resumido_critica_sempre_primeiro():
+    rows = [
+        _row("G1", "120", "consulta", "13", "Automática"),
+        _row("G2", "4170", "resina", "459", "Crítica"),
+    ]
+    txt = _gerar_resumido(rows)
+    assert txt.find("459") < txt.find("13")
+
+
+def test_resumido_agrega_por_codigo_contando_guias_distintas():
+    rows = [_row(f"G{i}", "210", "radiografia", "410", "Administrativa") for i in range(1, 6)]
+    txt = _gerar_resumido(rows)
+    assert "5 glosas 410" in txt
+
+
+def test_resumido_trunca_guias_em_duas_no_parenteses():
+    rows = [_row(f"G{i}", "210", "radiografia", "410", "Administrativa") for i in range(1, 6)]
+    txt = _gerar_resumido(rows)
+    assert "G1, G2 e mais 3 guias" in txt
+    # não deve citar a 3a guia (G3) fora do "e mais N guias"
+    assert "G3" not in txt
+
+
+def test_resumido_singular_guia_no_e_mais():
+    rows = [_row(f"G{i}", "210", "radiografia", "410", "Administrativa") for i in range(1, 4)]
+    txt = _gerar_resumido(rows)
+    assert "e mais 1 guia)" in txt
+    assert "e mais 1 guias" not in txt
+
+
+def test_resumido_funde_420_e_430():
+    rows = [
+        _row("G1", "2015", "endodontia", "420", "Técnica"),
+        _row("G1", "2015", "endodontia", "430", "Técnica"),
+    ]
+    txt = _gerar_resumido(rows)
+    assert "420 e 430" in txt
+    assert "glosas 420 e 430 (guia G1)" in txt or "glosa 420 e 430 (guia G1)" in txt
+
+
+def test_resumido_480_sem_frase_especial():
+    rows = [_row("G1", "N/A", "", "480", "Automática")]
+    txt = _gerar_resumido(rows)
+    assert "Houve glosa 480" not in txt
+    assert "1 glosa 480 (guia G1)" in txt
 
 
 def test_completa_e_resumida_ambas_funcionam():

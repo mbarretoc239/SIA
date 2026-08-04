@@ -583,6 +583,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if texto_final.endswith('.'): texto_final = texto_final[:-1]
         return texto_final + resumo_financeiro + "."
 
+    if tipo_geracao == "Resumido":
+        return _gerar_texto_resumido_curto(df, meta, prefixo)
+
     # --- NOVO MOTOR MISTO COM FATORAÇÃO DE GUIAS ---
     def categorizar_procedimento(cod, desc):
         desc_lower = str(desc).lower()
@@ -920,7 +923,75 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
     # Garantir que terminamos com ponto final corretamente
     if texto_final.endswith('.'):
         texto_final = texto_final[:-1]
-        
+
+    return prefixo + texto_final + resumo_financeiro + "."
+
+
+def _formatar_guias_resumido_curto(lista: list) -> str:
+    """Lista de guias pro modo Resumido: no máximo 2 guias citadas
+    explicitamente entre parênteses — a partir da 3ª, vira "e mais N guias"
+    (mais apertado que os outros níveis de detalhe, de propósito)."""
+    if not lista or lista[0] == "Desconhecida":
+        return ""
+    if len(lista) == 1:
+        return f"guia {lista[0]}"
+    if len(lista) == 2:
+        return f"guias {lista[0]} e {lista[1]}"
+    resto = len(lista) - 2
+    return f"guias {lista[0]}, {lista[1]} e mais {resto} {'guia' if resto == 1 else 'guias'}"
+
+
+def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
+    """Modo Resumido: só o código da glosa + guias afetadas, sem citar
+    procedimento/categoria nem justificativa — o mais compacto dos três
+    níveis de detalhe ("Prestador apresentou N glosas X (guias ...); ...").
+    Críticas sempre na frente, igual ao modo Padrão."""
+    por_guia = collections.defaultdict(list)
+    for _, row in df.iterrows():
+        por_guia[str(row['Guia'])].append({"glosa": str(row['Glosa']), "tipo": str(row.get('Tipo', '') or '')})
+
+    guias_por_codigo = collections.defaultdict(set)
+    tipos_por_codigo = collections.defaultdict(set)
+    for guia, itens_guia in por_guia.items():
+        codigos_guia = {i["glosa"] for i in itens_guia}
+        # Mesma fusão 420+430 (falta de RX inicial e final) usada nos outros níveis.
+        if "420" in codigos_guia and "430" in codigos_guia:
+            itens_guia = [i for i in itens_guia if i["glosa"] not in ("420", "430")]
+            itens_guia.append({"glosa": "430_420", "tipo": ""})
+        for item in itens_guia:
+            guias_por_codigo[item["glosa"]].add(guia)
+            if item["tipo"]:
+                tipos_por_codigo[item["glosa"]].add(item["tipo"])
+
+    if not guias_por_codigo:
+        return prefixo + "Nenhuma glosa selecionada."
+
+    clausulas_criticas, clausulas_outras = [], []
+    for codigo, guias in guias_por_codigo.items():
+        guias_ordenadas = sorted(guias)
+        n = len(guias_ordenadas)
+        rotulo_codigo = "420 e 430" if codigo == "430_420" else codigo
+        frase = f"{n} {'glosa' if n == 1 else 'glosas'} {rotulo_codigo} ({_formatar_guias_resumido_curto(guias_ordenadas)})"
+        destino = clausulas_criticas if "Crítica" in tipos_por_codigo[codigo] else clausulas_outras
+        destino.append(frase)
+
+    clausulas = clausulas_criticas + clausulas_outras
+    if len(clausulas) == 1:
+        texto_final = "Prestador apresentou " + clausulas[0]
+    else:
+        texto_final = "Prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1]
+
+    resumo_financeiro = ""
+    if meta and meta.get("valor_cobrado", 0) > 0:
+        cobrado = meta.get("valor_cobrado", 0)
+        calculado = meta.get("valor_calculado", 0)
+        glosa = meta.get("valor_glosa", 0)
+        diferenca = cobrado - calculado
+        glosa_real = diferenca if diferenca > 0 else glosa
+        if glosa_real > 0:
+            pct = (glosa_real / cobrado) * 100
+            resumo_financeiro = f", totalizando um percentual de glosa de {pct:.1f}% do valor cobrado no processo"
+
     return prefixo + texto_final + resumo_financeiro + "."
 
 def mixar_textos_inteligente(textos):
