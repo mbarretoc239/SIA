@@ -5,6 +5,7 @@ from core.settings import tem_acesso_modulo
 from shared.database import DatabaseManager
 from services.relatorio_5302.parser_strategy import processar_csv, processar_pdf
 from services.relatorio_5302.text_engine import gerar_texto, mixar_textos_inteligente
+from shared.ai_utils import melhorar_texto_com_ia
 
 st.set_page_config(page_title="Relatório 5302", page_icon="", layout="wide")
 
@@ -289,21 +290,71 @@ if pdf_file is not None:
                     ]
                     
                     if textos_sugeridos:
-                        texto_mixado = mixar_textos_inteligente(textos_sugeridos)
-                        st.text_area("Mensagem Combinada (Copie e cole):", texto_mixado, height=150)
-                        
-                        texto_seguro_mixado = texto_mixado.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-                        components.html(f"""
-                        <script>
-                        function copyTextMix() {{
-                            navigator.clipboard.writeText(`{texto_seguro_mixado}`).then(function() {{
-                                document.getElementById('btn_copiar_mix').innerText = ' Copiado!';
-                                setTimeout(() => document.getElementById('btn_copiar_mix').innerText = ' Copiar Mensagem', 2000);
-                            }});
-                        }}
-                        </script>
-                        <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500;"> Copiar Mensagem</button>
-                        """, height=65)
+                        # Key versionada pelo arquivo + filtro (únicos dois fatores
+                        # que mudam textos_sugeridos): edições manuais e melhorias
+                        # via IA ficam preservadas entre reruns da mesma combinação.
+                        key_texto_mix = f"texto_mix_v_{pdf_file.name}_{opcao_filtro}"
+                        key_mix_pendente = f"{key_texto_mix}_pendente"
+                        key_mix_anterior = f"{key_texto_mix}_anterior"
+
+                        # Streamlit não permite escrever em st.session_state[key] no
+                        # mesmo run em que o widget com essa key já foi instanciado.
+                        # Por isso o botão de IA grava num key "_pendente" e dispara
+                        # st.rerun(); só no início do PRÓXIMO run (aqui, antes do
+                        # text_area existir) o valor pendente é promovido pra key real.
+                        if key_mix_pendente in st.session_state:
+                            st.session_state[key_texto_mix] = st.session_state.pop(key_mix_pendente)
+                        elif key_texto_mix not in st.session_state:
+                            st.session_state[key_texto_mix] = mixar_textos_inteligente(textos_sugeridos)
+
+                        LABEL_TEXTO_MIX = "Mensagem Combinada (Copie e cole):"
+                        st.text_area(LABEL_TEXTO_MIX, height=150, key=key_texto_mix)
+
+                        col_copy_mix, col_ia_mix, col_undo_mix = st.columns([2, 2, 2])
+                        with col_copy_mix:
+                            label_js_mix = LABEL_TEXTO_MIX.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                            components.html(f"""
+                            <script>
+                            function copyTextMix() {{
+                                let texto = '';
+                                try {{
+                                    const doc = window.parent.document;
+                                    const textareas = doc.querySelectorAll('textarea');
+                                    for (const ta of textareas) {{
+                                        if ((ta.getAttribute('aria-label') || '') === `{label_js_mix}`) {{
+                                            texto = ta.value;
+                                            break;
+                                        }}
+                                    }}
+                                }} catch (e) {{ texto = ''; }}
+                                if (!texto) {{
+                                    document.getElementById('btn_copiar_mix').innerText = ' Erro ao copiar';
+                                    return;
+                                }}
+                                navigator.clipboard.writeText(texto).then(function() {{
+                                    document.getElementById('btn_copiar_mix').innerText = ' Copiado!';
+                                    setTimeout(function() {{
+                                        document.getElementById('btn_copiar_mix').innerText = ' Copiar Mensagem';
+                                    }}, 2000);
+                                }});
+                            }}
+                            </script>
+                            <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Mensagem</button>
+                            """, height=65)
+                        with col_ia_mix:
+                            if st.button("✨ Melhorar com IA (beta)", key=f"btn_ia_{key_texto_mix}", use_container_width=True):
+                                with st.spinner("Melhorando texto..."):
+                                    texto_melhorado, erro_ia = melhorar_texto_com_ia(st.session_state[key_texto_mix])
+                                if erro_ia:
+                                    st.error(f"Não foi possível melhorar o texto agora: {erro_ia}")
+                                else:
+                                    st.session_state[key_mix_anterior] = st.session_state[key_texto_mix]
+                                    st.session_state[key_mix_pendente] = texto_melhorado
+                                    st.rerun()
+                        with col_undo_mix:
+                            if st.button("↩ Desfazer", key=f"btn_undo_{key_texto_mix}", use_container_width=True, disabled=key_mix_anterior not in st.session_state):
+                                st.session_state[key_mix_pendente] = st.session_state.pop(key_mix_anterior)
+                                st.rerun()
                     else:
                         st.info("Nenhum texto adicional mapeado para as glosas detectadas.")
             else:
