@@ -24,7 +24,7 @@ CATEGORIAS = ["Geral", "Técnico", "Administrativo", "CAP"]
 NIVEIS = ["Contas", "Auditor", "CISO", "Gestor"]
 
 st.title("Alinhamentos")
-st.markdown("Histórico de alinhamentos internos.")
+st.caption("Histórico de alinhamentos internos.")
 
 pode_gerenciar = role in ["Gestor", "Admin"]
 

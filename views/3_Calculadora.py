@@ -19,7 +19,7 @@ if not tem_acesso_modulo(_permissoes, _role, "calculadora_glosa"):
     st.stop()
 
 st.title("Calculadora de Glosa")
-st.markdown("Calcule rapidamente o percentual glosado através dos valores cobrados e pagos.")
+st.caption("Calcule rapidamente o percentual glosado através dos valores cobrados e pagos.")
 
 # Funções auxiliares de formatação
 def parse_moeda(valor_str):

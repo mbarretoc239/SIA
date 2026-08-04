@@ -19,7 +19,7 @@ role = st.session_state.get("role_interno", "Contas")
 nome = st.session_state.get("auditor_nome", "Usuário")
 
 st.title("Configurações")
-st.markdown("Gerencie seu perfil e, conforme seu nível de acesso, as regras e cadastros do sistema.")
+st.caption("Gerencie seu perfil e, conforme seu nível de acesso, as regras e cadastros do sistema.")
 
 # Define quais abas o usuário tem acesso. Cada aba tem um id interno
 # estável (nunca muda) separado do rótulo exibido (pode ser reescrito à
