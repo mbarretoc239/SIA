@@ -145,6 +145,14 @@ def carregar_dados_atuais() -> pd.DataFrame:
     return registros_para_df(registros)
 
 
+def meses_disponiveis(df: pd.DataFrame) -> list:
+    """Meses de referência (mais recente primeiro) presentes no que está
+    hoje retido no banco (só os 2 mais recentes — ver _importar_por_mes)."""
+    if df.empty or "_mes_referencia" not in df.columns:
+        return []
+    return sorted(df["_mes_referencia"].dropna().unique().tolist(), reverse=True)
+
+
 def resumo_geral(df: pd.DataFrame) -> dict:
     total_processos = len(df)
     total_procedimentos = int(df["QT_PROCEDIMENTO"].sum()) if "QT_PROCEDIMENTO" in df.columns and total_processos else 0
@@ -163,7 +171,35 @@ COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total", "Procedim
 STATUS_PRODUTIVOS = {"FECHADO", "CALCULADO"}
 
 
-def produtividade_por_auditor(df: pd.DataFrame) -> pd.DataFrame:
+def _produtivos_com_auditor_e_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Filtra pra só FECHADO/CALCULADO com auditor identificável, e adiciona
+    as colunas auxiliares `_auditor` (LOGIN_FECHAMENTO ou LOGIN_CONSISTENCIA)
+    e `_data` (a data correspondente a esse mesmo login) — base compartilhada
+    por produtividade_por_auditor e dias_disponiveis."""
+    if df.empty or "STATUS" not in df.columns:
+        return pd.DataFrame(columns=list(df.columns) + ["_auditor", "_data"])
+
+    produtivos = df[df["STATUS"].isin(STATUS_PRODUTIVOS)].copy()
+    if produtivos.empty:
+        return produtivos.assign(_auditor=None, _data=None)
+
+    tem_fechamento = produtivos["LOGIN_FECHAMENTO"].apply(_presente)
+    produtivos["_auditor"] = produtivos["LOGIN_FECHAMENTO"].where(tem_fechamento, produtivos["LOGIN_CONSISTENCIA"])
+    produtivos["_data"] = produtivos["DATA_FECHAMENTO"].where(tem_fechamento, produtivos["DATA_CONSISTENCIA"])
+    return produtivos[produtivos["_auditor"].apply(_presente)]
+
+
+def dias_disponiveis(df: pd.DataFrame) -> list:
+    """Datas (mais recente primeiro) em que houve algum FECHADO/CALCULADO
+    no snapshot atual — usadas pra popular o seletor de dia da Produtividade."""
+    produtivos = _produtivos_com_auditor_e_data(df)
+    if produtivos.empty:
+        return []
+    datas = produtivos["_data"].dropna().dt.date.unique().tolist()
+    return sorted(datas, reverse=True)
+
+
+def produtividade_por_auditor(df: pd.DataFrame, dia=None, auditor: str = None) -> pd.DataFrame:
     """Uma linha por auditor com quantos processos FECHADO/CALCULADO ele é
     responsável, e a soma de procedimentos desses processos.
 
@@ -171,25 +207,29 @@ def produtividade_por_auditor(df: pd.DataFrame) -> pd.DataFrame:
     FECHADO sempre têm) — senão LOGIN_CONSISTENCIA, que é o campo preenchido
     nos processos CALCULADO. Cada processo entra uma única vez (não há
     dupla contagem entre as duas colunas de status).
-    """
-    if df.empty or "STATUS" not in df.columns:
-        return pd.DataFrame(columns=COLUNAS_PRODUTIVIDADE)
 
-    produtivos = df[df["STATUS"].isin(STATUS_PRODUTIVOS)].copy()
+    `dia`: se informado (date), restringe aos processos resolvidos naquele
+    dia (pela mesma data usada como `_auditor` — DATA_FECHAMENTO ou
+    DATA_CONSISTENCIA). `auditor`: se informado, restringe a esse login
+    (comparação case-insensitive) — usado pra "minha produtividade".
+    """
+    produtivos = _produtivos_com_auditor_e_data(df)
     if produtivos.empty:
         return pd.DataFrame(columns=COLUNAS_PRODUTIVIDADE)
 
-    tem_fechamento = produtivos["LOGIN_FECHAMENTO"].apply(_presente)
-    produtivos["_auditor"] = produtivos["LOGIN_FECHAMENTO"].where(tem_fechamento, produtivos["LOGIN_CONSISTENCIA"])
-    produtivos = produtivos[produtivos["_auditor"].apply(_presente)]
+    if dia is not None:
+        produtivos = produtivos[produtivos["_data"].dt.date == dia]
+    if auditor is not None:
+        alvo = auditor.strip().upper()
+        produtivos = produtivos[produtivos["_auditor"].astype(str).str.strip().str.upper() == alvo]
 
     if produtivos.empty:
         return pd.DataFrame(columns=COLUNAS_PRODUTIVIDADE)
 
     linhas = []
-    for auditor, grupo in produtivos.groupby("_auditor"):
+    for nome_auditor, grupo in produtivos.groupby("_auditor"):
         linhas.append({
-            "Auditor": auditor,
+            "Auditor": nome_auditor,
             "Fechados": int((grupo["STATUS"] == "FECHADO").sum()),
             "Calculados": int((grupo["STATUS"] == "CALCULADO").sum()),
             "Total": len(grupo),

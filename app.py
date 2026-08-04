@@ -133,9 +133,10 @@ def tela_login():
                             st.session_state["role_interno"] = "Admin"
                             st.session_state["usuario_id"] = "000-000-000"
                             st.session_state["equipe"] = "Gestor"
-                            
+                            st.session_state["usuario_sigo"] = _adm.get("usuario", "")
+
                             from core.auth import criar_token_sessao
-                            token = criar_token_sessao("000-000-000", "Administrador", "Admin", "Gestor")
+                            token = criar_token_sessao("000-000-000", "Administrador", "Admin", "Gestor", _adm.get("usuario", ""))
                             st.session_state["_set_auth_cookie"] = token
                             
                             st.rerun()
@@ -155,11 +156,15 @@ def tela_login():
                                         st.session_state["role_interno"] = user_data["role_interno"]
                                         st.session_state["equipe"] = user_data["equipe"]
                                         st.session_state["usuario_id"] = user_data["id"]
+                                        st.session_state["usuario_sigo"] = user_data["usuario_sigo"]
                                         # Flag de senha temporária (bloqueia acesso ao app até trocar)
                                         st.session_state["senha_temporaria"] = bool(user_data.get("senha_temporaria", False))
 
                                         from core.auth import criar_token_sessao
-                                        token = criar_token_sessao(user_data["id"], primeiro_nome, user_data["role_interno"], user_data["equipe"])
+                                        token = criar_token_sessao(
+                                            user_data["id"], primeiro_nome, user_data["role_interno"],
+                                            user_data["equipe"], user_data["usuario_sigo"],
+                                        )
                                         st.session_state["_set_auth_cookie"] = token
 
                                         st.rerun()
@@ -218,6 +223,7 @@ if not st.session_state.get("logado", False):
                 st.session_state["auditor_nome"] = dados.get("nome")
                 st.session_state["role_interno"] = dados.get("role")
                 st.session_state["equipe"] = dados.get("equipe")
+                st.session_state["usuario_sigo"] = dados.get("usuario_sigo", "")
                 st.rerun()
 
 def tela_trocar_senha_obrigatoria():
@@ -311,11 +317,11 @@ else:
     if tem_acesso_modulo(permissoes, role, "producao"):
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
 
-    # Produtividade (Relatório 5201): só Gestor e Admin (fins de teste) —
-    # não é módulo configurável em permissoes_modulos, mesma convenção de
+    # Produtividade (Relatório 5201): visível pra todos — Gestor/Admin veem a
+    # visão geral (todos os auditores), os demais só a própria produtividade.
+    # Não é módulo configurável em permissoes_modulos, mesma convenção de
     # gestão de Links Padrão.
-    if role in ("Gestor", "Admin"):
-        paginas.append(st.Page("views/8_Produtividade.py", title="Produtividade"))
+    paginas.append(st.Page("views/8_Produtividade.py", title="Produtividade"))
 
     # Alinhamentos: visível para todos, conteúdo se ajusta por nível dentro da tela
     paginas.append(st.Page("views/5_Alinhamentos.py", title="Alinhamentos"))

@@ -14,14 +14,15 @@ def get_fernet() -> Fernet:
         fallback_key = base64.urlsafe_b64encode(b"0" * 32)
         return Fernet(fallback_key)
 
-def criar_token_sessao(usuario_id: str, nome: str, role: str, equipe: str) -> str:
+def criar_token_sessao(usuario_id: str, nome: str, role: str, equipe: str, usuario_sigo: str = "") -> str:
     """Cria um token JWT-like criptografado com os dados do usuário."""
     f = get_fernet()
     dados = {
         "id": usuario_id,
         "nome": nome,
         "role": role,
-        "equipe": equipe
+        "equipe": equipe,
+        "usuario_sigo": usuario_sigo,
     }
     dados_bytes = json.dumps(dados).encode('utf-8')
     token = f.encrypt(dados_bytes)

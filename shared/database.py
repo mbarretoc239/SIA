@@ -817,43 +817,27 @@ class DatabaseManager:
     # (ORDEM/STATUS/auditor/datas) cifrado num único blob JSON (Fernet) —
     # ninguém com acesso direto ao Supabase (dashboard, chave anon vazada)
     # consegue ler o conteúdo; só o app, que tem a chave em st.secrets.
-    def importar_relatorio_5201(self, registros: list, importado_por, lote: int = 1000) -> int:
-        """Substitui por completo o snapshot anterior. O relatório é baixado
-        inteiro todo dia e reflete o estado atual de todos os processos —
-        não faz sentido acumular snapshots antigos."""
-        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos"
-        headers_admin = self._admin_headers()
-
-        r_delete = requests.delete(f"{url}?id=gt.0", headers=headers_admin)
-        if not r_delete.ok:
-            raise RuntimeError(
-                f"Falha ao limpar snapshot anterior: HTTP {r_delete.status_code} — {r_delete.text[:500]}"
-            )
-
-        headers_insert = {**headers_admin, "Prefer": "return=minimal"}
-        total = 0
-        for i in range(0, len(registros), lote):
-            pedaco = registros[i:i + lote]
-            payload = [
-                {
-                    "payload_cifrado": self.criptografar(json.dumps(reg, ensure_ascii=False)),
-                    "importado_por": importado_por,
-                }
-                for reg in pedaco
-            ]
-            r_insert = requests.post(url, headers=headers_insert, json=payload)
-            if not r_insert.ok:
-                raise RuntimeError(
-                    f"Falha ao importar lote {i}-{i + len(pedaco)}: HTTP {r_insert.status_code} — {r_insert.text[:500]}"
-                )
-            total += len(pedaco)
-        return total
+    def importar_relatorio_5201(self, registros: list, importado_por, mes_referencia: str, lote: int = 1000) -> int:
+        """Substitui os dados do `mes_referencia` informado (reimportação
+        idempotente) e mantém só os 2 meses mais recentes na tabela — mesmo
+        padrão de importar_base_ia/importar_base_imagem (_importar_por_mes).
+        Assim, subir o REL5201 de um mês não sobrescreve outro mês já
+        importado, e o 3º mês mais antigo é descartado automaticamente."""
+        linhas = [
+            {
+                "payload_cifrado": self.criptografar(json.dumps(reg, ensure_ascii=False)),
+                "importado_por": importado_por,
+                "mes_referencia": mes_referencia,
+            }
+            for reg in registros
+        ]
+        return self._importar_por_mes("relatorio_5201_processos", linhas, mes_referencia, lote)
 
     def carregar_relatorio_5201(self) -> list:
         """Busca e decifra o snapshot atual do REL5201. Cada item retornado
         é o dict original (ORDEM, STATUS, LOGIN_FECHAMENTO etc.) gravado no
         último upload."""
-        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos?select=payload_cifrado,importado_em,importado_por"
+        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos?select=payload_cifrado,importado_em,importado_por,mes_referencia"
 
         # PostgREST devolve no máximo 1000 linhas por padrão (db-max-rows) —
         # sem paginar por Range, um relatório com mais de 1000 processos vinha
@@ -883,5 +867,6 @@ class DatabaseManager:
                 continue
             registro["_importado_em"] = item.get("importado_em")
             registro["_importado_por"] = item.get("importado_por")
+            registro["_mes_referencia"] = item.get("mes_referencia")
             registros.append(registro)
         return registros
