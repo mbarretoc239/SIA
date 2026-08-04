@@ -2,7 +2,7 @@ import streamlit as st
 import re
 import time
 from shared.database import DatabaseManager
-from shared.email_utils import enviar_reporte_bug
+from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro
 
 # Configuração da Página principal (deve ser a primeira coisa)
 st.set_page_config(
@@ -199,6 +199,9 @@ def tela_login():
                             with st.spinner("Registrando..."):
                                 # No futuro, o ideal é checar se usuario_sigo já existe antes do insert
                                 if db.criar_usuario(novo_usr, novo_nome, nova_senha, nova_equipe):
+                                    # Falha no e-mail não deve barrar o cadastro em si — só avisa
+                                    # quem aprova por fora, o usuário nem sabe que isso existe.
+                                    notificar_novo_cadastro(novo_nome, novo_usr, nova_equipe)
                                     st.success("Aguarde aprovação do seu cadastro. Em breve será feito contato.")
                                 else:
                                     st.error("Erro ao cadastrar. O usuário SIGO já existe?")
