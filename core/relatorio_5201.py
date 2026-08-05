@@ -157,10 +157,16 @@ def resumo_geral(df: pd.DataFrame) -> dict:
     total_processos = len(df)
     total_procedimentos = int(df["QT_PROCEDIMENTO"].sum()) if "QT_PROCEDIMENTO" in df.columns and total_processos else 0
     por_status = df["STATUS"].value_counts().to_dict() if "STATUS" in df.columns else {}
+    procedimentos_por_status = (
+        df.groupby("STATUS")["QT_PROCEDIMENTO"].sum().astype(int).to_dict()
+        if "STATUS" in df.columns and "QT_PROCEDIMENTO" in df.columns and total_processos
+        else {}
+    )
     return {
         "total_processos": total_processos,
         "total_procedimentos": total_procedimentos,
         "por_status": por_status,
+        "procedimentos_por_status": procedimentos_por_status,
     }
 
 

@@ -24,6 +24,7 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     pessoa abaixo disso é que fica exclusiva do Gestor."""
     resumo = resumo_geral(df)
     por_status = resumo["por_status"]
+    procedimentos_por_status = resumo["procedimentos_por_status"]
 
     st.markdown(f"### {titulo}")
     c1, c2, c3, c4, c5, c6 = st.columns(6)
@@ -33,6 +34,11 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     c4.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
     c5.metric("Glosados", por_status.get("GLOSADO", 0))
     c6.metric("Calculados", por_status.get("CALCULADO", 0))
+
+    p1, p2 = st.columns(2)
+    p1.metric("Procedimentos fechados", procedimentos_por_status.get("FECHADO", 0))
+    p2.metric("Procedimentos calculados", procedimentos_por_status.get("CALCULADO", 0))
+
     if resumo["total_processos"]:
         st.altair_chart(_grafico_status(por_status), use_container_width=True)
 
@@ -139,7 +145,7 @@ if _ve_geral:
         st.dataframe(tabela_auditores, use_container_width=True, hide_index=True)
 
         grafico_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4).encode(
-            x=alt.X("Total:Q", title="Processos concluídos (Fechado + Calculado)"),
+            x=alt.X("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
             y=alt.Y("Auditor:N", sort="-x", title=None),
             color=alt.value("#4F8CFF"),
             tooltip=["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"],
