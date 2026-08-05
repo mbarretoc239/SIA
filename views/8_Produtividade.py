@@ -48,13 +48,9 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
         # st.metric), não precisa estar visível o tempo todo.
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Total", _fmt_num(total_procedimentos))
-        m2.metric(
-            "Analisado",
-            _fmt_num(grupos_procedimentos["analisado"]),
-            delta=_pct(grupos_procedimentos["analisado"], total_procedimentos),
-            delta_color="off",
-            help="Fechado + Calculado",
-        )
+        with m2:
+            st.metric("Analisado", _fmt_num(grupos_procedimentos["analisado"]), help="Fechado + Calculado")
+            st.caption(_pct(grupos_procedimentos["analisado"], total_procedimentos))
         m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
         m4.metric("Consistido/Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
         m5.metric(
