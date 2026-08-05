@@ -1,6 +1,3 @@
-import os
-import sys
-
 # ==========================================
 # CONSTANTES DE DADOS EMBUTIDOS
 # ==========================================
@@ -81,11 +78,3 @@ def tem_acesso_modulo(permissoes, role, modulo):
         if p.get("modulo") == modulo and p.get("role") == role:
             return bool(p.get("habilitado"))
     return False
-
-# Funções auxiliares de configuração
-def caminho_recurso(caminho_relativo):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(os.path.dirname(sys.argv[0]) or ".")
-    return os.path.join(base_path, caminho_relativo)

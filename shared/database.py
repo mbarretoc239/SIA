@@ -39,11 +39,6 @@ class DatabaseManager:
             "Prefer": "return=representation",
         }
 
-    def _get(self, endpoint: str) -> list:
-        url = f"{self.supabase_url}/rest/v1/{endpoint}"
-        r = requests.get(url, headers=self.headers)
-        return r.json() if r.ok else []
-
     def buscar_guias_vistas(self, nu_guias: list) -> set:
         """Guias (NU_GUIA) já marcadas como auditadas/vistas, dentre as informadas.
 
@@ -137,20 +132,6 @@ class DatabaseManager:
         )
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
-
-    # --- Relatório 5302 (analises_auditoria) ---
-    def limpar_analises_antigas(self, meses: int = 6) -> None:
-        """Apaga registros de analises_auditoria mais antigos que `meses`.
-        Usa service_role — a role anon tem statement_timeout de 3s (ver
-        _importar_por_mes), curto demais pra um delete potencialmente
-        grande."""
-        from datetime import datetime, timedelta
-        data_limite = (datetime.now() - timedelta(days=meses * 30)).isoformat()
-        url = f"{self.supabase_url}/rest/v1/analises_auditoria?criado_em=lt.{data_limite}"
-        response = requests.delete(url, headers=self._admin_headers())
-        if response.status_code == 403:
-            raise ValueError("Sem permissão de exclusão. Verifique as políticas de RLS/role no Supabase.")
-        response.raise_for_status()
 
     # --- Procedimentos ignorados na Amostragem (persistente, por especialidade) ---
     def carregar_procs_ignorados(self) -> dict:
@@ -429,13 +410,6 @@ class DatabaseManager:
         return response.status_code in [200, 204]
 
     # --- Operações de Banco (Tabela Procedimentos) ---
-    def carregar_procedimentos(self):
-        url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?select=*"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
-
     def inserir_procedimento(self, codigo_tuss, descricao, valor_unitario):
         url = f"{self.supabase_url}/rest/v1/tabela_procedimentos"
         data = {
@@ -509,12 +483,7 @@ class DatabaseManager:
         }
         response = requests.post(url, headers=headers_upsert, json=data)
         return response.status_code in [200, 201]
-        
-    def deletar_glosa_customizada(self, glosa_id):
-        url = f"{self.supabase_url}/rest/v1/glosas_customizadas?id=eq.{glosa_id}"
-        response = requests.delete(url, headers=self.headers)
-        return response.status_code in [200, 204]
-        
+
     # --- Operações de Banco (Usuários / Logins Autorizados) ---
     def carregar_logins_validos(self):
         url = f"{self.supabase_url}/rest/v1/usuarios?select=usuario_sigo"
@@ -522,34 +491,6 @@ class DatabaseManager:
         if response.status_code == 200:
             return [str(u.get('usuario_sigo', '')).strip().upper() for u in response.json() if u.get('usuario_sigo')]
         return []
-
-    # --- Operações de Banco (Regras Gramaticais) ---
-    def carregar_regras_gramaticais(self):
-        url = f"{self.supabase_url}/rest/v1/regras_gramaticais?select=*"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
-
-    # --- Operações de Banco (Histórico de Glosas - Modulo 5302) ---
-    def inserir_glosa_historico(self, auditor_id, codigo_glosa, paciente_nome, numero_guia, justificativa_texto, valor_glosado):
-        url = f"{self.supabase_url}/rest/v1/historico_glosas"
-        
-        # Criptografa dados sensíveis ANTES de mandar para a internet
-        paciente_nome_enc = self.criptografar(paciente_nome)
-        numero_guia_enc = self.criptografar(numero_guia)
-
-        data = {
-            "auditor_id": auditor_id,
-            "codigo_glosa": codigo_glosa,
-            "paciente_nome_criptografado": paciente_nome_enc,
-            "numero_guia_criptografado": numero_guia_enc,
-            "justificativa_texto": justificativa_texto,
-            "valor_glosado": valor_glosado
-        }
-        
-        response = requests.post(url, headers=self.headers, json=data)
-        return response.status_code in [200, 201]
 
     # --- Operações de Banco (Links Úteis Relacionais) ---
     def inserir_link_util(self, usuario_id, titulo, url):
@@ -664,14 +605,6 @@ class DatabaseManager:
             f"{self.supabase_url}/rest/v1/alinhamentos"
             f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false&select=*&order=created_at.desc"
         )
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
-
-    # --- Operações de Banco (Changelog / Novidades) ---
-    def carregar_changelog(self, limite=5):
-        url = f"{self.supabase_url}/rest/v1/changelog?select=*&order=created_at.desc&limit={limite}"
         response = requests.get(url, headers=self.headers)
         if response.status_code == 200:
             return response.json()

@@ -173,8 +173,9 @@ def _preparar_registros_imagem(arquivo) -> tuple[list, str, int]:
 
 
 def _guias_para_df(guias: list) -> pd.DataFrame:
-    """Converte o retorno do Supabase para o mesmo formato que
-    parse_powerbi() produz, pra reaproveitar consolidar_por_guia/marcar_amostra."""
+    """Converte o retorno do Supabase pro formato esperado por
+    consolidar_por_guia/marcar_amostra (Especialidade, CD_PROCEDIMENTO,
+    NU_GUIA, LIBERACAO, Qtde)."""
     if not guias:
         return pd.DataFrame()
     return pd.DataFrame({
