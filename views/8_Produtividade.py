@@ -32,37 +32,52 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     with col_processos:
         with st.container(border=True):
             st.caption("Processos")
-            c1, c2 = st.columns(2)
-            c1.metric("Total", resumo["total_processos"])
-            c2.metric("Fechados", por_status.get("FECHADO", 0))
-            c3, c4, c5 = st.columns(3)
-            c3.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
-            c4.metric("Glosados", por_status.get("GLOSADO", 0))
-            c5.metric("Calculados", por_status.get("CALCULADO", 0))
+            st.metric("Total", _fmt_num(resumo["total_processos"]))
+            st.metric("Fechados", _fmt_num(por_status.get("FECHADO", 0)))
+            st.metric("Consistidos (em aberto)", _fmt_num(por_status.get("CONSISTIDO", 0)))
+            st.metric("Glosados", _fmt_num(por_status.get("GLOSADO", 0)))
+            st.metric("Calculados", _fmt_num(por_status.get("CALCULADO", 0)))
 
     with col_procedimentos:
         with st.container(border=True):
             st.caption("Procedimentos")
-            p1, p2, p3 = st.columns(3)
-            p1.metric("Total", resumo["total_procedimentos"])
-            p2.metric("Fechados", procedimentos_por_status.get("FECHADO", 0))
-            p3.metric("Calculados", procedimentos_por_status.get("CALCULADO", 0))
+            st.metric("Total", _fmt_num(resumo["total_procedimentos"]))
+            st.metric("Fechados", _fmt_num(procedimentos_por_status.get("FECHADO", 0)))
+            st.metric("Calculados", _fmt_num(procedimentos_por_status.get("CALCULADO", 0)))
 
     if resumo["total_processos"]:
         st.altair_chart(_grafico_status(procedimentos_por_status), use_container_width=True)
 
 
+def _fmt_num(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
 def _grafico_status(procedimentos_por_status: dict):
     df_status = pd.DataFrame([
-        {"Status": STATUS_LABELS.get(status, status), "Procedimentos": qtd, "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"])}
+        {
+            "Status": STATUS_LABELS.get(status, status),
+            "Procedimentos": qtd,
+            "_rotulo": _fmt_num(qtd),
+            "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"]),
+        }
         for status, qtd in procedimentos_por_status.items()
     ])
-    return alt.Chart(df_status).mark_bar(cornerRadiusEnd=4).encode(
+    barras = alt.Chart(df_status).mark_bar(cornerRadiusEnd=4, size=40).encode(
         x=alt.X("Status:N", sort="-y", title=None),
         y=alt.Y("Procedimentos:Q"),
         color=alt.Color("_cor:N", scale=None, legend=None),
         tooltip=["Status", "Procedimentos"],
     )
+    # Rótulo acima de cada barra: mesmo as pequenas (perto de zero, ao lado
+    # de uma barra 500x maior) ficam com o número legível sem precisar de
+    # hover nem de escala log.
+    rotulos = alt.Chart(df_status).mark_text(dy=-8, color="white", fontSize=12).encode(
+        x=alt.X("Status:N", sort="-y"),
+        y=alt.Y("Procedimentos:Q"),
+        text="_rotulo:N",
+    )
+    return barras + rotulos
 
 st.set_page_config(page_title="Produtividade", page_icon="", layout="wide")
 
@@ -153,13 +168,19 @@ if _ve_geral:
     else:
         st.dataframe(tabela_auditores, use_container_width=True, hide_index=True)
 
-        grafico_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4).encode(
+        tabela_auditores = tabela_auditores.assign(_rotulo=tabela_auditores["Procedimentos"].apply(_fmt_num))
+        barras_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4, size=40).encode(
             x=alt.X("Auditor:N", sort="-y", title=None, axis=alt.Axis(labelAngle=-45)),
             y=alt.Y("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
             color=alt.value("#4F8CFF"),
             tooltip=["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"],
         )
-        st.altair_chart(grafico_auditores, use_container_width=True)
+        rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=12).encode(
+            x=alt.X("Auditor:N", sort="-y"),
+            y=alt.Y("Procedimentos:Q"),
+            text="_rotulo:N",
+        )
+        st.altair_chart(barras_auditores + rotulos_auditores, use_container_width=True)
 
 else:
     if not _usuario_sigo:
@@ -180,10 +201,10 @@ else:
     else:
         linha = minha_tabela.iloc[0]
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Fechados", int(linha["Fechados"]))
-        c2.metric("Calculados", int(linha["Calculados"]))
-        c3.metric("Total", int(linha["Total"]))
-        c4.metric("Procedimentos", int(linha["Procedimentos"]))
+        c1.metric("Fechados", _fmt_num(int(linha["Fechados"])))
+        c2.metric("Calculados", _fmt_num(int(linha["Calculados"])))
+        c3.metric("Total", _fmt_num(int(linha["Total"])))
+        c4.metric("Procedimentos", _fmt_num(int(linha["Procedimentos"])))
 
     if dias:
         linhas_por_dia = []
