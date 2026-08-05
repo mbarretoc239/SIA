@@ -34,8 +34,8 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
 
     def _pct(parte: int, total: int) -> str:
         if not total:
-            return "0,00%"
-        return f"{parte / total * 100:.2f}".replace(".", ",") + "%"
+            return "0%"
+        return f"{parte / total * 100:.1f}".replace(".", ",") + "%"
 
     # Resumo rápido nos números que a equipe acompanha: total, analisado
     # (estado final), cancelado/glosado (não vai gerar pagamento) e
@@ -43,17 +43,25 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     # por status individual continua no gráfico logo abaixo.
     with st.container(border=True):
         st.caption("Procedimentos")
+        # Rótulos curtos pra caber em 5 colunas numa linha só sem truncar —
+        # a explicação completa de cada um fica no tooltip (ícone "?" do
+        # st.metric), não precisa estar visível o tempo todo.
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Total", _fmt_num(total_procedimentos))
         m2.metric(
-            "Analisado (Fechado + Calculado)",
+            "Analisado",
             f"{_fmt_num(grupos_procedimentos['analisado'])} ({_pct(grupos_procedimentos['analisado'], total_procedimentos)})",
+            help="Fechado + Calculado",
         )
-        m3.metric("Cancelado ou Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
-        m4.metric("Consistido ou Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
+        m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
+        m4.metric("Consistido/Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
         m5.metric(
-            "Consistido/Digitado — App (todos) + Misto/Não App (com data de entrada)",
+            "App + Misto/Não App",
             _fmt_num(procedimentos_consistido_digitado_por_canal(df)),
+            help=(
+                "Dos Consistido/Digitado: todo canal App (independente de "
+                "data) + Misto/Não App que já têm data de entrada preenchida."
+            ),
         )
 
     if resumo["total_processos"]:
