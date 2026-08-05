@@ -209,12 +209,15 @@ def agrupar_por_status(contagens: dict) -> dict:
     }
 
 
-EXECUCAO_COM_DATA_OBRIGATORIA = {"MISTO", "N APP"}
+# O valor real da coluna EXECUCAO pra "Não App" vem com underscore
+# ("N_APP"), não espaço -- confirmado direto nos dados decifrados depois
+# que essa métrica deu 0 mesmo com dado importado (ver conversa 2026-08-05).
+EXECUCAO_COM_DATA_OBRIGATORIA = {"MISTO", "N_APP"}
 
 
 def procedimentos_consistido_digitado_por_canal(df: pd.DataFrame) -> int:
     """Procedimentos com STATUS Consistido/Digitado, contando: todo EXECUCAO
-    "APP" (não depende de data de entrada) + "MISTO"/"N APP" que já têm
+    "APP" (não depende de data de entrada) + "MISTO"/"N_APP" que já têm
     DATA_RECEBIMENTO_PROCESSO_FISICO preenchida (chegada física já
     registrada — sem isso, o processo físico ainda nem deu entrada)."""
     colunas = {"STATUS", "EXECUCAO", "QT_PROCEDIMENTO", "DATA_RECEBIMENTO_PROCESSO_FISICO"}
