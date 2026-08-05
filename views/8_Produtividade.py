@@ -27,32 +27,37 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     procedimentos_por_status = resumo["procedimentos_por_status"]
 
     st.markdown(f"### {titulo}")
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Total de processos", resumo["total_processos"])
-    c2.metric("Total de procedimentos", resumo["total_procedimentos"])
-    c3.metric("Fechados", por_status.get("FECHADO", 0))
-    c4.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
-    c5.metric("Glosados", por_status.get("GLOSADO", 0))
-    c6.metric("Calculados", por_status.get("CALCULADO", 0))
 
-    p1, p2 = st.columns(2)
-    p1.metric("Procedimentos fechados", procedimentos_por_status.get("FECHADO", 0))
-    p2.metric("Procedimentos calculados", procedimentos_por_status.get("CALCULADO", 0))
+    with st.container(border=True):
+        st.caption("Processos")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Total", resumo["total_processos"])
+        c2.metric("Fechados", por_status.get("FECHADO", 0))
+        c3.metric("Consistidos (em aberto)", por_status.get("CONSISTIDO", 0))
+        c4.metric("Glosados", por_status.get("GLOSADO", 0))
+        c5.metric("Calculados", por_status.get("CALCULADO", 0))
+
+    with st.container(border=True):
+        st.caption("Procedimentos")
+        p1, p2, p3 = st.columns(3)
+        p1.metric("Total", resumo["total_procedimentos"])
+        p2.metric("Fechados", procedimentos_por_status.get("FECHADO", 0))
+        p3.metric("Calculados", procedimentos_por_status.get("CALCULADO", 0))
 
     if resumo["total_processos"]:
-        st.altair_chart(_grafico_status(por_status), use_container_width=True)
+        st.altair_chart(_grafico_status(procedimentos_por_status), use_container_width=True)
 
 
-def _grafico_status(por_status: dict):
+def _grafico_status(procedimentos_por_status: dict):
     df_status = pd.DataFrame([
-        {"Status": STATUS_LABELS.get(status, status), "Processos": qtd, "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"])}
-        for status, qtd in por_status.items()
+        {"Status": STATUS_LABELS.get(status, status), "Procedimentos": qtd, "_cor": STATUS_CORES.get(status, STATUS_CORES["_outro"])}
+        for status, qtd in procedimentos_por_status.items()
     ])
     return alt.Chart(df_status).mark_bar(cornerRadiusEnd=4).encode(
-        x=alt.X("Processos:Q"),
+        x=alt.X("Procedimentos:Q"),
         y=alt.Y("Status:N", sort="-x", title=None),
         color=alt.Color("_cor:N", scale=None, legend=None),
-        tooltip=["Status", "Processos"],
+        tooltip=["Status", "Procedimentos"],
     )
 
 st.set_page_config(page_title="Produtividade", page_icon="", layout="wide")
