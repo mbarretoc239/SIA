@@ -43,14 +43,15 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     # por status individual continua no gráfico logo abaixo.
     with st.container(border=True):
         st.caption("Procedimentos")
-        st.metric("Total", _fmt_num(total_procedimentos))
-        st.metric(
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Total", _fmt_num(total_procedimentos))
+        m2.metric(
             "Analisado (Fechado + Calculado)",
             f"{_fmt_num(grupos_procedimentos['analisado'])} ({_pct(grupos_procedimentos['analisado'], total_procedimentos)})",
         )
-        st.metric("Cancelado ou Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
-        st.metric("Consistido ou Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
-        st.metric(
+        m3.metric("Cancelado ou Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
+        m4.metric("Consistido ou Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
+        m5.metric(
             "Consistido/Digitado — App (todos) + Misto/Não App (com data de entrada)",
             _fmt_num(procedimentos_consistido_digitado_por_canal(df)),
         )
