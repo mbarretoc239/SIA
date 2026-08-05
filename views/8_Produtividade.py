@@ -50,7 +50,13 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
         m1.metric("Total", _fmt_num(total_procedimentos))
         with m2:
             st.metric("Analisado", _fmt_num(grupos_procedimentos["analisado"]), help="Fechado + Calculado")
-            st.caption(_pct(grupos_procedimentos["analisado"], total_procedimentos))
+            pct_analisado = _pct(grupos_procedimentos["analisado"], total_procedimentos)
+            st.markdown(
+                f"<span style='background: rgba(148,163,184,0.18); color: #94a3b8; "
+                f"padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; "
+                f"display: inline-block;'>{pct_analisado}</span>",
+                unsafe_allow_html=True,
+            )
         m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
         m4.metric("Consistido/Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
         m5.metric(
