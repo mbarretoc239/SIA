@@ -73,106 +73,6 @@ def _norm(texto: str) -> str:
     return sem_acento.strip().upper()
 
 
-# Sinônimos aceitos pra cada campo lógico. Novos formatos do PowerBI podem
-# adicionar/renomear colunas — cadastrar aqui em vez de mexer no parser.
-SINONIMOS_COLUNAS = {
-    "especialidade": {"ESPECIALIDADE", "DS_GRUPO", "GRUPO"},
-    "cd_procedimento": {"CD_PROCEDIMENTO", "CD PROCEDIMENTO", "PROCEDIMENTO", "COD_PROCEDIMENTO"},
-    "nu_guia": {"NU_GUIA", "NU GUIA", "GUIA", "NUMERO_GUIA"},
-    "liberacao": {"LIBERACAO", "LIBERACÃO", "LIBERAÇÃO"},
-    "qtde": {"QTDE_ITENS", "QTDE ITENS", "QTDE", "QUANTIDADE", "QUANTIDADE_ITENS"},
-}
-CAMPOS_OBRIGATORIOS = ("especialidade", "cd_procedimento", "nu_guia", "qtde")
-
-
-def _detectar_colunas(partes: list) -> dict:
-    """Dado um cabeçalho (lista de células), retorna {campo_logico: indice}.
-
-    Só reconhece a linha como header se conseguir mapear todos os campos
-    obrigatórios — evita falso-positivo em linhas de dados que por acaso
-    tenham "5010" ou similar.
-    """
-    mapa = {}
-    for i, celula in enumerate(partes):
-        norm = _norm(celula)
-        for campo, sinonimos in SINONIMOS_COLUNAS.items():
-            if norm in sinonimos:
-                mapa.setdefault(campo, i)
-                break
-    if all(k in mapa for k in CAMPOS_OBRIGATORIOS):
-        return mapa
-    return {}
-
-
-def parse_powerbi(texto: str) -> pd.DataFrame:
-    """Parse texto colado do PowerBI (TSV).
-
-    Detecta as colunas pelo cabeçalho (aceita sinônimos: Especialidade /
-    DS_GRUPO, etc.). Se não houver cabeçalho, cai num fallback por número
-    de colunas: 5 = formato legado, 6 = formato novo (com CRITICIDADE na
-    frente). Linhas com NU_GUIA vazio são descartadas.
-    """
-    linhas = [l for l in texto.splitlines() if l.strip()]
-    if not linhas:
-        return pd.DataFrame()
-
-    # 1. Procura cabeçalho nas primeiras 5 linhas.
-    mapa_cols = {}
-    dados_inicio = 0
-    for i, linha in enumerate(linhas[:5]):
-        candidato = _detectar_colunas(linha.split("\t"))
-        if candidato:
-            mapa_cols = candidato
-            dados_inicio = i + 1
-            break
-
-    # 2. Fallback: sem cabeçalho, infere pelo número de colunas da 1ª linha.
-    if not mapa_cols:
-        n_cols = len(linhas[0].split("\t"))
-        if n_cols == 5:
-            # Legado: Especialidade, CD, Guia, Liberacao, Qtde
-            mapa_cols = {"especialidade": 0, "cd_procedimento": 1, "nu_guia": 2, "liberacao": 3, "qtde": 4}
-        elif n_cols == 6:
-            # Novo: Criticidade, DS_GRUPO, CD, Guia, Liberacao, Qtde
-            mapa_cols = {"especialidade": 1, "cd_procedimento": 2, "nu_guia": 3, "liberacao": 4, "qtde": 5}
-        else:
-            return pd.DataFrame()
-
-    idx_esp = mapa_cols["especialidade"]
-    idx_cd = mapa_cols["cd_procedimento"]
-    idx_guia = mapa_cols["nu_guia"]
-    idx_qtde = mapa_cols["qtde"]
-    idx_lib = mapa_cols.get("liberacao")
-    max_idx = max(mapa_cols.values())
-
-    registros = []
-    for linha in linhas[dados_inicio:]:
-        partes = linha.split("\t")
-        if len(partes) <= max_idx:
-            continue
-        especialidade = partes[idx_esp].strip()
-        cd_proc = partes[idx_cd].strip()
-        nu_guia = partes[idx_guia].strip()
-        liberacao = partes[idx_lib].strip() if idx_lib is not None else ""
-        qtde_bruta = partes[idx_qtde].strip()
-
-        if not especialidade or not cd_proc or not nu_guia:
-            continue
-        try:
-            qtde = int(qtde_bruta)
-        except ValueError:
-            continue
-
-        registros.append({
-            "Especialidade": especialidade,
-            "CD_PROCEDIMENTO": cd_proc,
-            "NU_GUIA": nu_guia,
-            "LIBERACAO": liberacao,
-            "Qtde": qtde,
-        })
-    return pd.DataFrame(registros)
-
-
 # Especialidades (DS_GRUPO) conhecidas na base — usado só para popular o
 # seletor do painel de gerenciamento; não limita o que pode ser sorteado.
 ESPECIALIDADES_CONHECIDAS = [
@@ -476,7 +376,12 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
             # o restante da amostra é preenchido com sorteio das normais.
             n_prior_amostra = min(n_prior, tamanho_amostra)
             n_norm_amostra = min(tamanho_amostra - n_prior_amostra, n_norm)
-            df_prioritarias_final = df_prioritarias
+            # Se n_prior > tamanho_amostra, nem todas as prioritárias cabem —
+            # sorteia quais entram em vez de estourar o tamanho declarado.
+            df_prioritarias_final = (
+                df_prioritarias if n_prior_amostra == n_prior
+                else sortear_amostra(df_prioritarias, n_prior_amostra, seed=seed)
+            )
         else:
             # Composição 50/50 dentro da amostra.
             n_prior_amostra = min(tamanho_amostra // 2, n_prior)

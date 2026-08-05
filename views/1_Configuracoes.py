@@ -350,11 +350,20 @@ if "tabelas_base" in abas_por_id:
                     if role == "Admin":
                         if st.button("Subir TUSS para o Supabase", type="primary"):
                             with st.spinner("Enviando para o banco..."):
+                                # row é uma Series (vem de .iterrows()), não tem .columns —
+                                # a checagem de coluna extra precisa olhar o DataFrame, não a linha.
+                                tem_valor_unitario = 'valor_unitario' in df_proc.columns
+                                tem_terceira_coluna = len(df_proc.columns) > 2
                                 sucesso, erros = 0, 0
                                 for _, row in df_proc.iterrows():
                                     cod = str(row.get('codigo_tuss', row.iloc[0]))
                                     desc = str(row.get('descricao', row.iloc[1]))
-                                    val = float(row.get('valor_unitario', row.iloc[2] if len(row.columns)>2 else 0.0))
+                                    if tem_valor_unitario:
+                                        val = float(row['valor_unitario'])
+                                    elif tem_terceira_coluna:
+                                        val = float(row.iloc[2])
+                                    else:
+                                        val = 0.0
                                     if db.inserir_procedimento(cod, desc, val): sucesso += 1
                                     else: erros += 1
                                 if erros == 0: st.success(f" {sucesso} procedimentos salvos!")

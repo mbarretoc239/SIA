@@ -1,18 +1,16 @@
 import streamlit as st
 from cryptography.fernet import Fernet
 import json
-import base64
 
 def get_fernet() -> Fernet:
-    """Retorna uma instância Fernet usando a chave segura do secrets."""
-    try:
-        # Pega a chave que já usamos pra LGPD
-        key_str = st.secrets["seguranca"]["fernet_key"]
-        return Fernet(key_str)
-    except Exception:
-        # Fallback de desenvolvimento caso não esteja configurado
-        fallback_key = base64.urlsafe_b64encode(b"0" * 32)
-        return Fernet(fallback_key)
+    """Retorna uma instância Fernet usando a chave segura do secrets.
+
+    Sem fallback de propósito: se a chave não estiver configurada, é melhor
+    o app quebrar visivelmente (erro claro) do que assinar tokens de sessão
+    com uma chave pública e previsível — isso permitiria forjar login,
+    inclusive como Admin, sem nunca ter autenticado de verdade."""
+    key_str = st.secrets["seguranca"]["fernet_key"]
+    return Fernet(key_str)
 
 def criar_token_sessao(usuario_id: str, nome: str, role: str, equipe: str, usuario_sigo: str = "") -> str:
     """Cria um token JWT-like criptografado com os dados do usuário."""

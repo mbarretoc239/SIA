@@ -160,15 +160,15 @@ if pdf_file is not None:
             if st.session_state.get("mostrar_texto", False):
                 # O tipo de geracao passado dita a regra interna
                 tipo = opcao_agrupamento
-                
-                # Vamos injetar "Só Glosas Críticas" como flag temporaria na hora de chamar
-                if "Somente" in opcao_filtro:
-                    tipo = "Só Glosas Críticas"
-                    
+
+                # O filtro "Somente Glosas Críticas" já é aplicado abaixo, no
+                # próprio df_final -- não sobrescrever `tipo` aqui, senão o
+                # nível de detalhe escolhido (Padrão/Detalhado/Resumido) é
+                # perdido e o texto sempre sai no formato Padrão.
                 df_final = df_editado[df_editado['Incluir no Relatório'] == True].copy()
                 if "Somente" in opcao_filtro:
                     df_final = df_final[df_final['Tipo'] == 'Crítica']
-                
+
                 texto_gerado = gerar_texto(df_final, tipo, meta)
                 
                 # Limpa prefixos caso a funcao os tenha gerado
