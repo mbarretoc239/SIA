@@ -309,29 +309,25 @@ def produtividade_por_auditor(df: pd.DataFrame, dia=None, auditor: str = None) -
     return resultado[COLUNAS_PRODUTIVIDADE].sort_values("Total", ascending=False).reset_index(drop=True)
 
 
-def status_processo(df: pd.DataFrame, nu_ordem: str) -> dict:
-    """Status/auditor do processo informado no snapshot atual, para evitar
-    que dois auditores auditem o mesmo processo ao mesmo tempo. Visível para
-    todos os roles na tela de Amostragem. Retorna None se o processo não
-    estiver no relatório importado mais recente."""
-    if df is None or df.empty or "ORDEM" not in df.columns:
-        return None
-    encontrado = df[df["ORDEM"] == str(nu_ordem).strip()]
-    if encontrado.empty:
-        return None
-    row = encontrado.iloc[0]
-    status = row.get("STATUS") or ""
-    login_fechamento = row.get("LOGIN_FECHAMENTO")
-    login_consistencia = row.get("LOGIN_CONSISTENCIA")
+def formatar_status_processo(registro: dict) -> dict:
+    """Monta o dict de status/auditor a partir de um registro do REL5201
+    (STATUS, LOGIN_FECHAMENTO/CONSISTENCIA, DATA_FECHAMENTO/CONSISTENCIA).
+    Usado tanto por status_processo (DataFrame completo já carregado) quanto
+    por DatabaseManager.buscar_status_processo (busca direta de 1 processo,
+    sem carregar/decifrar o snapshot inteiro)."""
+    status = registro.get("STATUS") or ""
+    login_fechamento = registro.get("LOGIN_FECHAMENTO")
+    login_consistencia = registro.get("LOGIN_CONSISTENCIA")
 
     if status == "FECHADO" and _presente(login_fechamento):
-        auditor, data, situacao = login_fechamento, row.get("DATA_FECHAMENTO"), "fechado"
+        auditor, data, situacao = login_fechamento, registro.get("DATA_FECHAMENTO"), "fechado"
     elif _presente(login_consistencia):
-        auditor, data, situacao = login_consistencia, row.get("DATA_CONSISTENCIA"), "em_analise"
+        auditor, data, situacao = login_consistencia, registro.get("DATA_CONSISTENCIA"), "em_analise"
     else:
         auditor, data, situacao = None, None, "livre"
 
-    data_fmt = data.strftime("%d/%m/%Y %H:%M") if pd.notna(data) else ""
+    data_ts = pd.to_datetime(data, errors="coerce")
+    data_fmt = data_ts.strftime("%d/%m/%Y %H:%M") if pd.notna(data_ts) else ""
 
     return {
         "status": status,
@@ -340,3 +336,19 @@ def status_processo(df: pd.DataFrame, nu_ordem: str) -> dict:
         "data_fmt": data_fmt,
         "situacao": situacao,
     }
+
+
+def status_processo(df: pd.DataFrame, nu_ordem: str) -> dict:
+    """Status/auditor do processo informado no snapshot atual, para evitar
+    que dois auditores auditem o mesmo processo ao mesmo tempo. Visível para
+    todos os roles na tela de Amostragem. Retorna None se o processo não
+    estiver no relatório importado mais recente.
+
+    Prefira DatabaseManager.buscar_status_processo quando só precisar de UM
+    processo — evita carregar/decifrar o snapshot inteiro."""
+    if df is None or df.empty or "ORDEM" not in df.columns:
+        return None
+    encontrado = df[df["ORDEM"] == str(nu_ordem).strip()]
+    if encontrado.empty:
+        return None
+    return formatar_status_processo(encontrado.iloc[0].to_dict())

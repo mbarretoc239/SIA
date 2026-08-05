@@ -16,7 +16,7 @@ from core.amostragem import (
     selecionar_procedimentos_ignorados,
     gerenciar_procedimentos_ignorados,
 )
-from core.relatorio_5201 import carregar_dados_atuais, status_processo
+from core.relatorio_5201 import carregar_dados_atuais, formatar_status_processo, status_processo
 from shared.database import DatabaseManager
 
 st.set_page_config(page_title="Amostragem", page_icon="", layout="wide")
@@ -275,8 +275,16 @@ with aba_busca:
 
     # Status/auditor do processo no snapshot mais recente do REL5201 —
     # visível para todos os roles, pra ninguém se esbarrar auditando o
-    # mesmo processo ao mesmo tempo.
-    info_status = status_processo(carregar_dados_atuais(), processo_ativo)
+    # mesmo processo ao mesmo tempo. Tenta a busca direta (rápida, decifra
+    # só esse processo) primeiro; cai pro carregamento completo (lento) só
+    # se o processo ainda não tiver a coluna `ordem` preenchida -- meses
+    # importados antes dessa otimização precisam ser reimportados pra
+    # ganhar o caminho rápido.
+    registro_direto = st.session_state.db.buscar_status_processo(processo_ativo)
+    if registro_direto is not None:
+        info_status = formatar_status_processo(registro_direto)
+    else:
+        info_status = status_processo(carregar_dados_atuais(), processo_ativo)
     if info_status is None:
         st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
     elif info_status["situacao"] == "fechado":

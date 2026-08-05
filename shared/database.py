@@ -775,10 +775,40 @@ class DatabaseManager:
                 "payload_cifrado": self.criptografar(json.dumps(reg, ensure_ascii=False)),
                 "importado_por": importado_por,
                 "mes_referencia": mes_referencia,
+                # Plano (não cifrado) só pra permitir busca direta por processo
+                # sem precisar decifrar a tabela inteira (ver
+                # buscar_status_processo) — número de processo não é dado
+                # sensível de paciente, mesma categoria de NU_GUIA.
+                "ordem": reg.get("ORDEM"),
             }
             for reg in registros
         ]
         return self._importar_por_mes("relatorio_5201_processos", linhas, mes_referencia, lote)
+
+    def buscar_status_processo(self, nu_ordem: str) -> dict | None:
+        """Busca e decifra só o registro do processo informado, nos 2 meses
+        mantidos na tabela — evita ler e decifrar todo o snapshot (milhares
+        de linhas) só pra checar o status de UM processo."""
+        ordem = str(nu_ordem).strip()
+        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos"
+        params = {
+            "ordem": f"eq.{ordem}",
+            "select": "payload_cifrado,mes_referencia",
+            "order": "mes_referencia.desc",
+            "limit": "1",
+        }
+        response = requests.get(url, headers=self.headers, params=params)
+        if not response.ok:
+            return None
+        linhas = response.json()
+        if not linhas:
+            return None
+        try:
+            registro = json.loads(self.descriptografar(linhas[0]["payload_cifrado"]))
+        except (ValueError, TypeError):
+            return None
+        registro["_mes_referencia"] = linhas[0].get("mes_referencia")
+        return registro
 
     def carregar_relatorio_5201(self) -> list:
         """Busca e decifra o snapshot atual do REL5201. Cada item retornado
