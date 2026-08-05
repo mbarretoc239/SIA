@@ -25,14 +25,11 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     por auditor) — igual pro Gestor e pro usuário comum; só a tabela por
     pessoa abaixo disso é que fica exclusiva do Gestor."""
     resumo = resumo_geral(df)
-    por_status = resumo["por_status"]
     procedimentos_por_status = resumo["procedimentos_por_status"]
 
     st.markdown(f"### {titulo}")
 
-    grupos_processos = agrupar_por_status(por_status)
     grupos_procedimentos = agrupar_por_status(procedimentos_por_status)
-    total_processos = resumo["total_processos"]
     total_procedimentos = resumo["total_procedimentos"]
 
     def _pct(parte: int, total: int) -> str:
@@ -40,36 +37,23 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
             return "0,00%"
         return f"{parte / total * 100:.2f}".replace(".", ",") + "%"
 
-    # Resumo rápido nos 4 números que a equipe acompanha: total, analisado
+    # Resumo rápido nos números que a equipe acompanha: total, analisado
     # (estado final), cancelado/glosado (não vai gerar pagamento) e
     # consistido/digitado (ainda em algum ponto do fluxo). O detalhe fino
     # por status individual continua no gráfico logo abaixo.
-    col_processos, col_procedimentos = st.columns(2)
-    with col_processos:
-        with st.container(border=True):
-            st.caption("Processos")
-            st.metric("Total", _fmt_num(total_processos))
-            st.metric(
-                "Analisado (Fechado + Calculado)",
-                f"{_fmt_num(grupos_processos['analisado'])} ({_pct(grupos_processos['analisado'], total_processos)})",
-            )
-            st.metric("Cancelado ou Glosado", _fmt_num(grupos_processos["cancelado_glosado"]))
-            st.metric("Consistido ou Digitado", _fmt_num(grupos_processos["consistido_digitado"]))
-
-    with col_procedimentos:
-        with st.container(border=True):
-            st.caption("Procedimentos")
-            st.metric("Total", _fmt_num(total_procedimentos))
-            st.metric(
-                "Analisado (Fechado + Calculado)",
-                f"{_fmt_num(grupos_procedimentos['analisado'])} ({_pct(grupos_procedimentos['analisado'], total_procedimentos)})",
-            )
-            st.metric("Cancelado ou Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
-            st.metric("Consistido ou Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
-            st.metric(
-                "Consistido/Digitado — App (todos) + Misto/Não App (com data de entrada)",
-                _fmt_num(procedimentos_consistido_digitado_por_canal(df)),
-            )
+    with st.container(border=True):
+        st.caption("Procedimentos")
+        st.metric("Total", _fmt_num(total_procedimentos))
+        st.metric(
+            "Analisado (Fechado + Calculado)",
+            f"{_fmt_num(grupos_procedimentos['analisado'])} ({_pct(grupos_procedimentos['analisado'], total_procedimentos)})",
+        )
+        st.metric("Cancelado ou Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
+        st.metric("Consistido ou Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
+        st.metric(
+            "Consistido/Digitado — App (todos) + Misto/Não App (com data de entrada)",
+            _fmt_num(procedimentos_consistido_digitado_por_canal(df)),
+        )
 
     if resumo["total_processos"]:
         st.altair_chart(_grafico_status(procedimentos_por_status), use_container_width=True)
