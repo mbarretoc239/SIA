@@ -50,7 +50,9 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
         m1.metric("Total", _fmt_num(total_procedimentos))
         m2.metric(
             "Analisado",
-            f"{_fmt_num(grupos_procedimentos['analisado'])} ({_pct(grupos_procedimentos['analisado'], total_procedimentos)})",
+            _fmt_num(grupos_procedimentos["analisado"]),
+            delta=_pct(grupos_procedimentos["analisado"], total_procedimentos),
+            delta_color="off",
             help="Fechado + Calculado",
         )
         m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
