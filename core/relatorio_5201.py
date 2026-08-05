@@ -14,13 +14,20 @@ COLUNAS_NECESSARIAS = {
     "DATA_CONSISTENCIA", "LOGIN_CONSISTENCIA",
     "DATA_FECHAMENTO", "LOGIN_FECHAMENTO",
 }
-CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS)
+# Colunas extras, só pra cortes de canal de entrada do processo (EXECUCAO:
+# App/Misto/Não App; DATA_RECEBIMENTO_PROCESSO_FISICO: data de entrada).
+# Opcionais -- se o arquivo não tiver (formato mais antigo, ou exportação
+# diferente), a importação não falha, só fica sem esse corte específico.
+COLUNAS_OPCIONAIS = {"EXECUCAO", "DATA_RECEBIMENTO_PROCESSO_FISICO"}
+CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
 STATUS_LABELS = {
     "CONSISTIDO": "Consistido (em aberto)",
     "FECHADO": "Fechado",
     "GLOSADO": "Glosado",
     "CALCULADO": "Calculado",
+    "CANCELADO": "Cancelado",
+    "DIGITADO": "Digitado",
 }
 
 # Mesmos tokens de cor já usados no resto do app (core/settings.py::TEMA) —
@@ -31,8 +38,18 @@ STATUS_CORES = {
     "CONSISTIDO": "#F59E0B",
     "GLOSADO": "#EF5350",
     "CALCULADO": "#6F84A5",
+    "CANCELADO": "#B91C1C",
+    "DIGITADO": "#8B5CF6",
     "_outro": "#6F84A5",
 }
+
+# Agrupamentos usados no resumo rápido da Visão Geral: "analisado" é estado
+# final (processo/procedimento já passou pelo auditor); "cancelado/glosado"
+# é o que não vai gerar pagamento; "consistido/digitado" é o que ainda está
+# em algum ponto do fluxo antes da analise final.
+STATUS_ANALISADO = {"FECHADO", "CALCULADO"}
+STATUS_CANCELADO_GLOSADO = {"CANCELADO", "GLOSADO"}
+STATUS_CONSISTIDO_DIGITADO = {"CONSISTIDO", "DIGITADO"}
 
 
 def _norm(texto) -> str:
@@ -102,6 +119,18 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
     for col in ("DATA_CONSISTENCIA", "DATA_FECHAMENTO"):
         df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
 
+    if "EXECUCAO" in df.columns:
+        df["EXECUCAO"] = df["EXECUCAO"].fillna("").apply(_norm)
+    else:
+        df["EXECUCAO"] = ""
+
+    if "DATA_RECEBIMENTO_PROCESSO_FISICO" in df.columns:
+        df["DATA_RECEBIMENTO_PROCESSO_FISICO"] = pd.to_datetime(
+            df["DATA_RECEBIMENTO_PROCESSO_FISICO"], errors="coerce", dayfirst=True
+        )
+    else:
+        df["DATA_RECEBIMENTO_PROCESSO_FISICO"] = pd.NaT
+
     return df[CAMPOS_REGISTRO]
 
 
@@ -129,7 +158,7 @@ def registros_para_df(registros: list) -> pd.DataFrame:
     if not registros:
         return pd.DataFrame(columns=CAMPOS_REGISTRO)
     df = pd.DataFrame(registros)
-    for col in ("DATA_CONSISTENCIA", "DATA_FECHAMENTO"):
+    for col in ("DATA_CONSISTENCIA", "DATA_FECHAMENTO", "DATA_RECEBIMENTO_PROCESSO_FISICO"):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
     return df
@@ -168,6 +197,37 @@ def resumo_geral(df: pd.DataFrame) -> dict:
         "por_status": por_status,
         "procedimentos_por_status": procedimentos_por_status,
     }
+
+
+def agrupar_por_status(contagens: dict) -> dict:
+    """Soma um dict {STATUS: quantidade} (processos ou procedimentos, tanto
+    faz) nos 3 agrupamentos usados no resumo rápido da Visão Geral."""
+    return {
+        "analisado": sum(contagens.get(s, 0) for s in STATUS_ANALISADO),
+        "cancelado_glosado": sum(contagens.get(s, 0) for s in STATUS_CANCELADO_GLOSADO),
+        "consistido_digitado": sum(contagens.get(s, 0) for s in STATUS_CONSISTIDO_DIGITADO),
+    }
+
+
+EXECUCAO_COM_DATA_OBRIGATORIA = {"MISTO", "N APP"}
+
+
+def procedimentos_consistido_digitado_por_canal(df: pd.DataFrame) -> int:
+    """Procedimentos com STATUS Consistido/Digitado, contando: todo EXECUCAO
+    "APP" (não depende de data de entrada) + "MISTO"/"N APP" que já têm
+    DATA_RECEBIMENTO_PROCESSO_FISICO preenchida (chegada física já
+    registrada — sem isso, o processo físico ainda nem deu entrada)."""
+    colunas = {"STATUS", "EXECUCAO", "QT_PROCEDIMENTO", "DATA_RECEBIMENTO_PROCESSO_FISICO"}
+    if df.empty or not colunas <= set(df.columns):
+        return 0
+
+    em_fluxo = df[df["STATUS"].isin(STATUS_CONSISTIDO_DIGITADO)]
+    app = em_fluxo[em_fluxo["EXECUCAO"] == "APP"]
+    misto_napp_com_data = em_fluxo[
+        em_fluxo["EXECUCAO"].isin(EXECUCAO_COM_DATA_OBRIGATORIA)
+        & em_fluxo["DATA_RECEBIMENTO_PROCESSO_FISICO"].notna()
+    ]
+    return int(app["QT_PROCEDIMENTO"].sum() + misto_napp_com_data["QT_PROCEDIMENTO"].sum())
 
 
 COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"]
