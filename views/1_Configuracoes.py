@@ -338,7 +338,7 @@ if "tabelas_base" in abas_por_id:
     with abas_por_id["tabelas_base"]:
         st.subheader("Base de Conhecimento do Sistema")
         
-        tab_interna1, tab_interna2, tab_interna3 = st.tabs(["Procedimentos (Supabase)", "Classificação de Glosas (Memória)", "Edição de Glosas"])
+        tab_interna1, tab_interna2, tab_interna3 = st.tabs(["Procedimentos", "Classificação de Glosas", "Edição de Glosas"])
         
         with tab_interna1:
             st.markdown("Suba o arquivo TUSS para alimentar a tabela de procedimentos e valores.")
