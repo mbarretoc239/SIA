@@ -277,7 +277,9 @@ elif st.session_state.get("senha_temporaria", False):
     tela_trocar_senha_obrigatoria()
 else:
     role = st.session_state.get("role_interno", "Contas")
+    usuario_id_atual = st.session_state.get("usuario_id")
     permissoes = db.carregar_permissoes_modulos()
+    excecoes_acesso = db.carregar_excecoes_modulos()
 
     # --- ALINHAMENTOS PENDENTES (pop-up obrigatório "Estou Ciente", com checagem ao vivo) ---
     from core.settings import ROLES_CIENCIA_OBRIGATORIA
@@ -313,11 +315,11 @@ else:
 
     # Permissões Módulos Clínicos (configurável por role em Configurações)
     from core.settings import tem_acesso_modulo
-    if tem_acesso_modulo(permissoes, role, "relatorio_5302"):
+    if tem_acesso_modulo(permissoes, role, "relatorio_5302", usuario_id_atual, excecoes_acesso):
         paginas.append(st.Page("views/2_Relatorio_5302.py", title="Relatório 5302"))
-    if tem_acesso_modulo(permissoes, role, "calculadora_glosa"):
+    if tem_acesso_modulo(permissoes, role, "calculadora_glosa", usuario_id_atual, excecoes_acesso):
         paginas.append(st.Page("views/3_Calculadora.py", title="Percentual de Glosa"))
-    if tem_acesso_modulo(permissoes, role, "producao"):
+    if tem_acesso_modulo(permissoes, role, "producao", usuario_id_atual, excecoes_acesso):
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
 
     # Produtividade (Relatório 5201): visível pra todos — Gestor/Admin veem a
@@ -362,7 +364,7 @@ else:
     
     st.sidebar.divider()
     
-    if tem_acesso_modulo(permissoes, role, "copia_rapida"):
+    if tem_acesso_modulo(permissoes, role, "copia_rapida", usuario_id_atual, excecoes_acesso):
         st.sidebar.markdown("**Cópia Rápida**")
         
         texto_com = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS"

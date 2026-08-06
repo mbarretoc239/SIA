@@ -724,6 +724,29 @@ class DatabaseManager:
         response = requests.post(url, headers=headers_upsert, json=data)
         return response.status_code in [200, 201]
 
+    # --- Operações de Banco (Exceções de Acesso por Usuário) ---
+    def carregar_excecoes_modulos(self):
+        # Mesmo padrão de permissoes_modulos: RLS habilitado sem policy,
+        # só service_role consegue ler.
+        url = f"{self.supabase_url}/rest/v1/permissoes_modulos_excecoes?select=*"
+        response = requests.get(url, headers=self._admin_headers())
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def atualizar_excecao_modulo(self, usuario_id, modulo, habilitado):
+        url = f"{self.supabase_url}/rest/v1/permissoes_modulos_excecoes?on_conflict=usuario_id,modulo"
+        headers_upsert = self._admin_headers()
+        headers_upsert["Prefer"] = "resolution=merge-duplicates"
+        data = {"usuario_id": usuario_id, "modulo": modulo, "habilitado": habilitado}
+        response = requests.post(url, headers=headers_upsert, json=data)
+        return response.status_code in [200, 201]
+
+    def remover_excecao_modulo(self, usuario_id, modulo):
+        url = f"{self.supabase_url}/rest/v1/permissoes_modulos_excecoes?usuario_id=eq.{usuario_id}&modulo=eq.{modulo}"
+        response = requests.delete(url, headers=self._admin_headers())
+        return response.status_code in [200, 204]
+
     def marcar_alinhamento_lido(self, alinhamento_id, usuario_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?on_conflict=alinhamento_id,usuario_id"
         headers_upsert = self.headers.copy()

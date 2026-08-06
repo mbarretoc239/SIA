@@ -69,9 +69,17 @@ MODULOS_CONTROLADOS = {
 ROLES_PERMISSAO = ["Contas", "Auditor", "CISO", "Gestor"]
 
 
-def tem_acesso_modulo(permissoes, role, modulo):
-    """Verifica se a role tem acesso ao módulo, dado o resultado de
-    DatabaseManager.carregar_permissoes_modulos(). Admin sempre tem acesso."""
+def tem_acesso_modulo(permissoes, role, modulo, usuario_id=None, excecoes=None):
+    """Verifica se o usuário tem acesso ao módulo.
+
+    Checa primeiro se há uma exceção individual (DatabaseManager.carregar_excecoes_modulos)
+    para usuario_id+modulo — se houver, ela vale independente da role, inclusive Admin.
+    Sem exceção, cai na regra por role (DatabaseManager.carregar_permissoes_modulos),
+    onde Admin sempre tem acesso."""
+    if usuario_id and excecoes:
+        for e in excecoes:
+            if e.get("usuario_id") == usuario_id and e.get("modulo") == modulo:
+                return bool(e.get("habilitado"))
     if role == "Admin":
         return True
     for p in permissoes:

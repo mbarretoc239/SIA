@@ -18,8 +18,10 @@ if "db" not in st.session_state:
     st.session_state.db = DatabaseManager()
 
 _role = st.session_state.get("role_interno", "Contas")
+_usuario_id = st.session_state.get("usuario_id")
 _permissoes = st.session_state.db.carregar_permissoes_modulos()
-if not tem_acesso_modulo(_permissoes, _role, "producao"):
+_excecoes = st.session_state.db.carregar_excecoes_modulos()
+if not tem_acesso_modulo(_permissoes, _role, "producao", _usuario_id, _excecoes):
     st.error("Você não tem permissão para acessar este módulo.")
     st.stop()
 

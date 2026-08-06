@@ -793,6 +793,74 @@ if "permissoes" in abas_por_id:
                 else:
                     st.error(f"{erros} permissões falharam ao salvar.")
 
+        st.divider()
+        st.subheader("Exceção por Usuário")
+        st.markdown("Abra uma exceção para liberar ou bloquear um módulo específico para um login, independente da função dele.")
+
+        usuarios_ativos = [u for u in db.listar_usuarios() if u.get("status") == "Ativo"]
+        excecoes_atuais = db.carregar_excecoes_modulos()
+
+        OPCOES_EXCECAO = ["Padrão (herda da função)", "Permitir", "Bloquear"]
+
+        if not usuarios_ativos:
+            st.info("Nenhum usuário ativo cadastrado.")
+        else:
+            opcoes_usuario = {
+                f"{u['nome_completo']} ({u['usuario_sigo']})": u["id"]
+                for u in usuarios_ativos
+            }
+            label_usuario_excecao = st.selectbox("Usuário", list(opcoes_usuario.keys()), key="excecao_usuario_select")
+            usuario_id_excecao = opcoes_usuario[label_usuario_excecao]
+
+            mapa_excecoes_usuario = {
+                e["modulo"]: e["habilitado"]
+                for e in excecoes_atuais
+                if e.get("usuario_id") == usuario_id_excecao
+            }
+
+            with st.form("form_excecoes_usuario"):
+                escolhas_modulo = {}
+                for modulo, label in MODULOS_CONTROLADOS.items():
+                    if modulo in mapa_excecoes_usuario:
+                        idx_padrao = 1 if mapa_excecoes_usuario[modulo] else 2
+                    else:
+                        idx_padrao = 0
+                    escolhas_modulo[modulo] = st.selectbox(
+                        label, OPCOES_EXCECAO, index=idx_padrao, key=f"excecao_{usuario_id_excecao}_{modulo}",
+                    )
+
+                if st.form_submit_button("Salvar Exceções", type="primary"):
+                    erros_excecao = 0
+                    for modulo, escolha in escolhas_modulo.items():
+                        tinha_excecao = modulo in mapa_excecoes_usuario
+                        if escolha == "Padrão (herda da função)":
+                            if tinha_excecao:
+                                if not db.remover_excecao_modulo(usuario_id_excecao, modulo):
+                                    erros_excecao += 1
+                        else:
+                            novo_habilitado = escolha == "Permitir"
+                            if not tinha_excecao or mapa_excecoes_usuario[modulo] != novo_habilitado:
+                                if not db.atualizar_excecao_modulo(usuario_id_excecao, modulo, novo_habilitado):
+                                    erros_excecao += 1
+                    if erros_excecao == 0:
+                        st.success("Exceções atualizadas!")
+                        st.rerun()
+                    else:
+                        st.error(f"{erros_excecao} exceções falharam ao salvar.")
+
+            if excecoes_atuais:
+                st.markdown("**Exceções ativas no sistema**")
+                mapa_usuarios_por_id = {u["id"]: u for u in usuarios_ativos}
+                linhas_excecao = []
+                for e in excecoes_atuais:
+                    u = mapa_usuarios_por_id.get(e.get("usuario_id"))
+                    linhas_excecao.append({
+                        "Usuário": f"{u['nome_completo']} ({u['usuario_sigo']})" if u else e.get("usuario_id"),
+                        "Módulo": MODULOS_CONTROLADOS.get(e.get("modulo"), e.get("modulo")),
+                        "Acesso": "Permitir" if e.get("habilitado") else "Bloquear",
+                    })
+                st.dataframe(pd.DataFrame(linhas_excecao), use_container_width=True, hide_index=True)
+
 # ==========================================
 # ABA: LINKS PADRÃO (ADMIN/GESTOR)
 # ==========================================
