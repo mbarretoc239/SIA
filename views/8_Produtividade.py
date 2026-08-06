@@ -29,8 +29,6 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
     resumo = resumo_geral(df)
     procedimentos_por_status = resumo["procedimentos_por_status"]
 
-    st.markdown(f"### {titulo}")
-
     grupos_procedimentos = agrupar_por_status(procedimentos_por_status)
     total_procedimentos = resumo["total_procedimentos"]
 
@@ -39,39 +37,40 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
             return "0%"
         return f"{parte / total * 100:.1f}".replace(".", ",") + "%"
 
-    # Resumo rápido nos números que a equipe acompanha: total, analisado
-    # (estado final), cancelado/glosado (não vai gerar pagamento) e
-    # consistido/digitado (ainda em algum ponto do fluxo). O detalhe fino
-    # por status individual continua no gráfico logo abaixo.
-    with st.container(border=True):
-        st.caption("Procedimentos")
-        # Rótulos curtos pra caber em 5 colunas numa linha só sem truncar —
-        # a explicação completa de cada um fica no tooltip (ícone "?" do
-        # st.metric), não precisa estar visível o tempo todo.
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Total", _fmt_num(total_procedimentos))
-        with m2:
-            st.metric("Analisado", _fmt_num(grupos_procedimentos["analisado"]), help="Fechado + Calculado")
-            pct_analisado = _pct(grupos_procedimentos["analisado"], total_procedimentos)
-            st.markdown(
-                f"<span style='background: rgba(148,163,184,0.18); color: #94a3b8; "
-                f"padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; "
-                f"display: inline-block;'>{pct_analisado}</span>",
-                unsafe_allow_html=True,
+    with st.expander(titulo, expanded=True):
+        # Resumo rápido nos números que a equipe acompanha: total, analisado
+        # (estado final), cancelado/glosado (não vai gerar pagamento) e
+        # consistido/digitado (ainda em algum ponto do fluxo). O detalhe fino
+        # por status individual continua no gráfico logo abaixo.
+        with st.container(border=True):
+            st.caption("Procedimentos")
+            # Rótulos curtos pra caber em 5 colunas numa linha só sem truncar —
+            # a explicação completa de cada um fica no tooltip (ícone "?" do
+            # st.metric), não precisa estar visível o tempo todo.
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("Total", _fmt_num(total_procedimentos))
+            with m2:
+                st.metric("Analisado", _fmt_num(grupos_procedimentos["analisado"]), help="Fechado + Calculado")
+                pct_analisado = _pct(grupos_procedimentos["analisado"], total_procedimentos)
+                st.markdown(
+                    f"<span style='background: rgba(148,163,184,0.18); color: #94a3b8; "
+                    f"padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; "
+                    f"display: inline-block;'>{pct_analisado}</span>",
+                    unsafe_allow_html=True,
+                )
+            m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
+            m4.metric("Consistido/Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
+            m5.metric(
+                "App + Misto/Não App",
+                _fmt_num(procedimentos_consistido_digitado_por_canal(df)),
+                help=(
+                    "Dos Consistido/Digitado: todo canal App (independente de "
+                    "data) + Misto/Não App que já têm data de entrada preenchida."
+                ),
             )
-        m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
-        m4.metric("Consistido/Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
-        m5.metric(
-            "App + Misto/Não App",
-            _fmt_num(procedimentos_consistido_digitado_por_canal(df)),
-            help=(
-                "Dos Consistido/Digitado: todo canal App (independente de "
-                "data) + Misto/Não App que já têm data de entrada preenchida."
-            ),
-        )
 
-    if resumo["total_processos"]:
-        st.altair_chart(_grafico_status(procedimentos_por_status), use_container_width=True)
+        if resumo["total_processos"]:
+            st.altair_chart(_grafico_status(procedimentos_por_status), use_container_width=True)
 
 
 def _fmt_num(n: int) -> str:
@@ -88,9 +87,15 @@ def _grafico_status(procedimentos_por_status: dict):
         }
         for status, qtd in procedimentos_por_status.items()
     ])
+    # Domínio do eixo Y com folga acima da maior barra — sem isso o rótulo
+    # (desenhado 8px acima da barra) da barra mais alta encosta no topo da
+    # área do gráfico e fica cortado.
+    maior_valor = df_status["Procedimentos"].max() if not df_status.empty else 0
+    escala_y = alt.Scale(domain=[0, maior_valor * 1.15]) if maior_valor else alt.Scale()
+
     barras = alt.Chart(df_status).mark_bar(cornerRadiusEnd=4, size=40).encode(
         x=alt.X("Status:N", sort="-y", title=None),
-        y=alt.Y("Procedimentos:Q"),
+        y=alt.Y("Procedimentos:Q", scale=escala_y),
         color=alt.Color("_cor:N", scale=None, legend=None),
         tooltip=["Status", "Procedimentos"],
     )
@@ -99,7 +104,7 @@ def _grafico_status(procedimentos_por_status: dict):
     # hover nem de escala log.
     rotulos = alt.Chart(df_status).mark_text(dy=-8, color="white", fontSize=12).encode(
         x=alt.X("Status:N", sort="-y"),
-        y=alt.Y("Procedimentos:Q"),
+        y=alt.Y("Procedimentos:Q", scale=escala_y),
         text="_rotulo:N",
     )
     return barras + rotulos
@@ -190,7 +195,16 @@ if meses:
 # --------------------------------------------------------- Seletor de dia ----
 dias = dias_disponiveis(df)
 opcoes_dia = ["Todos os dias"] + [d.strftime("%d/%m/%Y") for d in dias]
-escolha_dia = st.selectbox("Ver produtividade de:", opcoes_dia)
+
+# Clique numa barra do gráfico "Produtividade ao longo do mês" (mais abaixo)
+# guarda o dia clicado aqui e força um rerun — precisa ser aplicado ANTES do
+# selectbox nascer (senão o widget já existente ignora o novo valor).
+if "_dia_click_pendente" in st.session_state:
+    dia_clicado = st.session_state.pop("_dia_click_pendente")
+    if dia_clicado in opcoes_dia:
+        st.session_state["dia_select_box"] = dia_clicado
+
+escolha_dia = st.selectbox("Ver produtividade de:", opcoes_dia, key="dia_select_box")
 dia_filtro = None
 if escolha_dia != "Todos os dias":
     dia_filtro = dias[opcoes_dia.index(escolha_dia) - 1]
@@ -209,15 +223,17 @@ if _ve_geral:
         st.dataframe(tabela_auditores, use_container_width=True, hide_index=True)
 
         tabela_auditores = tabela_auditores.assign(_rotulo=tabela_auditores["Procedimentos"].apply(_fmt_num))
+        maior_valor_auditores = tabela_auditores["Procedimentos"].max()
+        escala_y_auditores = alt.Scale(domain=[0, maior_valor_auditores * 1.15]) if maior_valor_auditores else alt.Scale()
         barras_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4, size=40).encode(
             x=alt.X("Auditor:N", sort="-y", title=None, axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
+            y=alt.Y("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)", scale=escala_y_auditores),
             color=alt.value("#4F8CFF"),
             tooltip=["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"],
         )
         rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=12).encode(
             x=alt.X("Auditor:N", sort="-y"),
-            y=alt.Y("Procedimentos:Q"),
+            y=alt.Y("Procedimentos:Q", scale=escala_y_auditores),
             text="_rotulo:N",
         )
         st.altair_chart(barras_auditores + rotulos_auditores, use_container_width=True)
@@ -275,12 +291,23 @@ else:
             df_por_dia = pd.DataFrame(linhas_por_dia).sort_values("Dia")
 
             st.markdown("#### Produtividade ao longo do mês")
+            st.caption("Clique numa barra para ver o detalhe daquele dia.")
+            selecao_dia = alt.selection_point(name="selecao_dia", fields=["Dia_fmt"], on="click", empty=False)
             grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
                 x=alt.X("Dia_fmt:N", sort=None, title=None),
                 y=alt.Y("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
                 tooltip=["Dia_fmt", "Fechados", "Calculados", "Total", "Procedimentos"],
+                opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
+            ).add_params(selecao_dia)
+            evento_grafico = st.altair_chart(
+                grafico_dia, use_container_width=True, on_select="rerun", key="grafico_prod_mes",
             )
-            st.altair_chart(grafico_dia, use_container_width=True)
+            pontos_clicados = evento_grafico.selection.get("selecao_dia") if evento_grafico else None
+            if pontos_clicados:
+                dia_clicado = pontos_clicados[0].get("Dia_fmt")
+                if dia_clicado and dia_clicado != escolha_dia:
+                    st.session_state["_dia_click_pendente"] = dia_clicado
+                    st.rerun()
 
             with st.expander("Ver tabela por dia"):
                 st.dataframe(
