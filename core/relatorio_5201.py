@@ -309,6 +309,77 @@ def produtividade_por_auditor(df: pd.DataFrame, dia=None, auditor: str = None) -
     return resultado[COLUNAS_PRODUTIVIDADE].sort_values("Total", ascending=False).reset_index(drop=True)
 
 
+def _formatar_duracao(minutos: float) -> str:
+    """minutos -> "Xd Yh", "Xh Ymin" ou "Xmin", omitindo unidades zeradas."""
+    total = int(round(minutos))
+    horas, resto_min = divmod(total, 60)
+    dias, resto_horas = divmod(horas, 24)
+    partes = []
+    if dias:
+        partes.append(f"{dias}d")
+    if resto_horas:
+        partes.append(f"{resto_horas}h")
+    if resto_min or not partes:
+        partes.append(f"{resto_min}min")
+    return " ".join(partes)
+
+
+def detalhe_processos_dia(df: pd.DataFrame, dia, auditor: str) -> pd.DataFrame:
+    """Uma linha por processo Fechado/Calculado do auditor, naquele dia —
+    número do processo, status, as duas datas e o tempo entre elas.
+
+    Tempo (Consistência -> Fechamento) só é calculado para Fechado com as
+    duas datas presentes e em ordem (delta > 0, protege contra inconsistência
+    na planilha) — Calculado não tem uma segunda data e aparece com "—".
+    `_minutos` fica na saída (float ou None) pra tempo_medio_resolucao usar;
+    quem for exibir a tabela deve descartar essa coluna auxiliar.
+    """
+    colunas = ["Processo", "Status", "Consistência", "Fechamento", "Tempo", "_minutos"]
+    produtivos = _produtivos_com_auditor_e_data(df)
+    if produtivos.empty:
+        return pd.DataFrame(columns=colunas)
+
+    alvo = auditor.strip().upper()
+    filtrado = produtivos[
+        (produtivos["_data"].dt.date == dia)
+        & (produtivos["_auditor"].astype(str).str.strip().str.upper() == alvo)
+    ]
+    if filtrado.empty:
+        return pd.DataFrame(columns=colunas)
+
+    linhas = []
+    for _, row in filtrado.iterrows():
+        consistencia = row["DATA_CONSISTENCIA"]
+        fechamento = row["DATA_FECHAMENTO"]
+        minutos = None
+        if row["STATUS"] == "FECHADO" and pd.notna(consistencia) and pd.notna(fechamento):
+            delta_min = (fechamento - consistencia).total_seconds() / 60
+            if delta_min > 0:
+                minutos = delta_min
+        linhas.append({
+            "Processo": row["ORDEM"],
+            "Status": STATUS_LABELS.get(row["STATUS"], row["STATUS"]),
+            "Consistência": consistencia.strftime("%d/%m/%Y %H:%M") if pd.notna(consistencia) else "—",
+            "Fechamento": fechamento.strftime("%d/%m/%Y %H:%M") if pd.notna(fechamento) else "—",
+            "Tempo": _formatar_duracao(minutos) if minutos is not None else "—",
+            "_minutos": minutos,
+        })
+
+    return pd.DataFrame(linhas)[colunas].sort_values("Consistência").reset_index(drop=True)
+
+
+def tempo_medio_resolucao(detalhe: pd.DataFrame):
+    """Média de `_minutos` de detalhe_processos_dia (ignora os sem duração
+    computável), formatada com _formatar_duracao. None se nenhum processo do
+    dia tiver duração computável (ex.: só Calculados, sem nenhum Fechado)."""
+    if detalhe.empty or "_minutos" not in detalhe.columns:
+        return None
+    validos = detalhe["_minutos"].dropna()
+    if validos.empty:
+        return None
+    return _formatar_duracao(validos.mean())
+
+
 def formatar_status_processo(registro: dict) -> dict:
     """Monta o dict de status/auditor a partir de um registro do REL5201
     (STATUS, LOGIN_FECHAMENTO/CONSISTENCIA, DATA_FECHAMENTO/CONSISTENCIA).

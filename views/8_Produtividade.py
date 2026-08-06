@@ -9,6 +9,7 @@ from core.relatorio_5201 import (
     STATUS_LABELS,
     agrupar_por_status,
     carregar_dados_atuais,
+    detalhe_processos_dia,
     dias_disponiveis,
     ler_relatorio_5201,
     meses_disponiveis,
@@ -16,6 +17,7 @@ from core.relatorio_5201 import (
     procedimentos_consistido_digitado_por_canal,
     produtividade_por_auditor,
     resumo_geral,
+    tempo_medio_resolucao,
 )
 from shared.database import DatabaseManager
 
@@ -101,6 +103,21 @@ def _grafico_status(procedimentos_por_status: dict):
         text="_rotulo:N",
     )
     return barras + rotulos
+
+
+def _secao_detalhe_dia(df: pd.DataFrame, dia, auditor: str):
+    """Detalhe de processos do auditor num dia específico: tempo médio até o
+    fechamento + lista processo a processo. Só faz sentido com um dia
+    específico escolhido (não em "Todos os dias", onde não há uma única
+    janela de tempo pra medir)."""
+    detalhe = detalhe_processos_dia(df, dia, auditor)
+    if detalhe.empty:
+        st.info("Nenhum processo Fechado/Calculado desse auditor nesse dia.")
+        return
+
+    st.metric("Tempo médio até o fechamento", tempo_medio_resolucao(detalhe) or "—")
+    st.dataframe(detalhe.drop(columns=["_minutos"]), use_container_width=True, hide_index=True)
+
 
 st.set_page_config(page_title="Produtividade", page_icon="", layout="wide")
 
@@ -205,6 +222,12 @@ if _ve_geral:
         )
         st.altair_chart(barras_auditores + rotulos_auditores, use_container_width=True)
 
+        if dia_filtro is not None:
+            st.divider()
+            st.markdown("### Detalhe de Processos do Dia")
+            auditor_detalhe = st.selectbox("Ver detalhe de processos de:", tabela_auditores["Auditor"].tolist())
+            _secao_detalhe_dia(df, dia_filtro, auditor_detalhe)
+
 else:
     if not _usuario_sigo:
         st.warning("Não identifiquei seu usuário SIGO nesta sessão — faça login novamente.")
@@ -229,6 +252,10 @@ else:
         c3.metric("Total", _fmt_num(int(linha["Total"])))
         c4.metric("Procedimentos", _fmt_num(int(linha["Procedimentos"])))
 
+        if dia_filtro is not None:
+            st.markdown("#### Detalhe de Processos do Dia")
+            _secao_detalhe_dia(df, dia_filtro, _usuario_sigo)
+
     if dias:
         linhas_por_dia = []
         for d in dias:
@@ -250,7 +277,7 @@ else:
             st.markdown("#### Produtividade ao longo do mês")
             grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
                 x=alt.X("Dia_fmt:N", sort=None, title=None),
-                y=alt.Y("Total:Q", title="Processos concluídos (Fechado + Calculado)"),
+                y=alt.Y("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
                 tooltip=["Dia_fmt", "Fechados", "Calculados", "Total", "Procedimentos"],
             )
             st.altair_chart(grafico_dia, use_container_width=True)
