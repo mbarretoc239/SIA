@@ -39,8 +39,11 @@ COLUNAS_NECESSARIAS = {
 # qualquer outro operador = análise manual, sem biometria.
 OPERADOR_BIOMETRIA = "CONN_APPOD_NEW"
 
-# Colunas mínimas esperadas na planilha mensal de imagem.
-COLUNAS_NECESSARIAS_IMAGEM = {"NU_GUIA", "CD_PROCEDIMENTO", "DENTE_INICIAL", "STATUS_PROCED", "NOME_ARQUIVO"}
+# Colunas mínimas esperadas na planilha mensal de imagem. CD_PROCEDIMENTO e
+# STATUS_PROCED não são exigidas: o layout mudou (planilha atual não traz
+# nem uma nem outra) e nenhuma das duas é lida hoje na tela — só tem_imagem
+# (via NOME_ARQUIVO) e nu_guia são realmente usados no cruzamento.
+COLUNAS_NECESSARIAS_IMAGEM = {"NU_GUIA", "DENTE_INICIAL", "NOME_ARQUIVO"}
 
 SEED_PADRAO = 42
 _is_admin = st.session_state.get("role_interno") == "Admin"
@@ -149,8 +152,11 @@ def _preparar_registros_imagem(arquivo) -> tuple[list, str, int]:
             + ", ".join(sorted(faltantes))
         )
 
-    i_guia, i_cd = idx["NU_GUIA"], idx["CD_PROCEDIMENTO"]
-    i_dente, i_status, i_arquivo = idx["DENTE_INICIAL"], idx["STATUS_PROCED"], idx["NOME_ARQUIVO"]
+    i_guia, i_dente, i_arquivo = idx["NU_GUIA"], idx["DENTE_INICIAL"], idx["NOME_ARQUIVO"]
+    # Opcionais: presentes no layout antigo, ausentes no atual (que trouxe
+    # NOME_PROCEDIMENTO/CODIGO no lugar, sem serem substitutos diretos).
+    i_cd = idx.get("CD_PROCEDIMENTO")
+    i_status = idx.get("STATUS_PROCED")
 
     registros = []
     total_bruto = 0
@@ -161,9 +167,10 @@ def _preparar_registros_imagem(arquivo) -> tuple[list, str, int]:
         tem_imagem = str(linha[i_arquivo] or "").strip().upper() != "SEM IMAGEM"
         registros.append({
             "nu_guia": str(linha[i_guia]).strip(),
-            "cd_procedimento": str(linha[i_cd]).strip(),
+            # cd_procedimento é NOT NULL na tabela; "" quando a coluna não existe na planilha.
+            "cd_procedimento": str(linha[i_cd]).strip() if i_cd is not None and linha[i_cd] is not None else "",
             "dente_inicial": str(linha[i_dente]).strip() if linha[i_dente] is not None else None,
-            "status_proced": str(linha[i_status]).strip() if linha[i_status] is not None else None,
+            "status_proced": str(linha[i_status]).strip() if i_status is not None and linha[i_status] is not None else None,
             "tem_imagem": tem_imagem,
             "mes_referencia": mes_referencia,
         })
@@ -225,9 +232,9 @@ with aba_config:
 
         with st.expander("Importar planilha mensal de imagem (Admin)", expanded=False):
             st.caption(
-                "Sobe a planilha de imagem do mês (colunas NU_GUIA, CD_PROCEDIMENTO, "
-                "DENTE_INICIAL, STATUS_PROCED, NOME_ARQUIVO). O mês de referência é lido "
-                "do nome do arquivo (ex: '06 2026 ... .xlsx' → junho/2026)."
+                "Sobe a planilha de imagem do mês (colunas obrigatórias: NU_GUIA, "
+                "DENTE_INICIAL, NOME_ARQUIVO). O mês de referência é lido do nome do "
+                "arquivo (ex: '06 2026 ... .xlsx' → junho/2026)."
             )
             arquivo_imagem = st.file_uploader("Planilha de imagem (.xlsx)", type=["xlsx"], key="upload_base_imagem")
             if arquivo_imagem and st.button("Importar imagem", key="btn_importar_imagem"):
