@@ -461,56 +461,104 @@ class DatabaseManager:
 
     def obter_risco_prestador(self, prestador: str) -> dict:
         """Estatística de risco do prestador pro card da Amostragem (Fase 2):
-        quantas glosas ele já teve no histórico e que % isso representa do
-        total de procedimentos que ele já processou. Retorna pct_glosa=None
-        se não houver base de procedimentos pra calcular a %% (prestador
-        sem nenhum REL5201 importado ainda com essa captura)."""
+        quantas glosas ele já teve no histórico, em quantos processos, e a
+        média de glosas por processo -- métrica principal, porque "% dos
+        procedimentos" dilui demais em prestadores de alto volume (ver
+        discussão que levou a essa mudança). O %% continua disponível como
+        dado secundário. Campos ficam None quando não há base de
+        procedimentos pra calcular (prestador sem nenhum REL5201 importado
+        ainda com essa captura)."""
         prestador = (prestador or "").strip()
         if not prestador:
-            return {"total_glosas": 0, "total_procedimentos": 0, "pct_glosa": None}
+            return {
+                "total_glosas": 0, "total_procedimentos": 0, "total_processos": 0,
+                "pct_glosa": None, "media_glosas_por_processo": None,
+            }
 
         headers_count = {**self.headers, "Prefer": "count=exact"}
+
         url_glosas = f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
         params_glosas = {"prestador": f"eq.{prestador}", "select": "id", "limit": "1"}
         r_glosas = requests.get(url_glosas, headers=headers_count, params=params_glosas)
-        total_glosas = 0
-        if r_glosas.ok:
-            content_range = r_glosas.headers.get("Content-Range", "")
-            if "/" in content_range:
-                try:
-                    total_glosas = int(content_range.split("/")[-1])
-                except ValueError:
-                    total_glosas = 0
+        total_glosas = self._extrair_content_range(r_glosas)
 
         url_proc = f"{self.supabase_url}/rest/v1/historico_procedimentos_prestador"
-        params_proc = {"prestador": f"eq.{prestador}", "select": "qt_procedimento"}
-        r_proc = requests.get(url_proc, headers=self.headers, params=params_proc)
-        total_procedimentos = sum(row.get("qt_procedimento") or 0 for row in r_proc.json()) if r_proc.ok else 0
+        params_proc_count = {"prestador": f"eq.{prestador}", "select": "id", "limit": "1"}
+        r_proc_count = requests.get(url_proc, headers=headers_count, params=params_proc_count)
+        total_processos = self._extrair_content_range(r_proc_count)
+
+        params_proc_soma = {"prestador": f"eq.{prestador}", "select": "qt_procedimento"}
+        r_proc_soma = requests.get(url_proc, headers=self.headers, params=params_proc_soma)
+        total_procedimentos = sum(row.get("qt_procedimento") or 0 for row in r_proc_soma.json()) if r_proc_soma.ok else 0
 
         pct_glosa = round(total_glosas / total_procedimentos * 100, 1) if total_procedimentos > 0 else None
-        return {"total_glosas": total_glosas, "total_procedimentos": total_procedimentos, "pct_glosa": pct_glosa}
+        media_glosas_por_processo = round(total_glosas / total_processos, 1) if total_processos > 0 else None
+        return {
+            "total_glosas": total_glosas,
+            "total_procedimentos": total_procedimentos,
+            "total_processos": total_processos,
+            "pct_glosa": pct_glosa,
+            "media_glosas_por_processo": media_glosas_por_processo,
+        }
 
-    def obter_detalhe_glosas_prestador(self, prestador: str, limite: int = 8) -> list:
-        """Ranking das glosas (código + justificativa) mais frequentes desse
-        prestador no histórico -- alimenta o expander de detalhe no card da
-        Amostragem (obter_risco_prestador só dá o resumo/%)."""
+    def _extrair_content_range(self, response) -> int:
+        """Lê o total exato de um GET com `Prefer: count=exact` no header
+        Content-Range (ex: '0-0/153') -- evita baixar as linhas só pra
+        contar."""
+        if not response.ok:
+            return 0
+        content_range = response.headers.get("Content-Range", "")
+        if "/" not in content_range:
+            return 0
+        try:
+            return int(content_range.split("/")[-1])
+        except ValueError:
+            return 0
+
+    def obter_detalhe_glosas_prestador(self, prestador: str, limite: int = 8) -> dict:
+        """Rankings das glosas mais frequentes desse prestador no histórico --
+        por (código + justificativa) e por procedimento -- pro expander de
+        detalhe no card da Amostragem. Uma única busca, duas agregações
+        client-side (volume por prestador é pequeno o bastante pra isso ser
+        mais simples que duas queries)."""
         prestador = (prestador or "").strip()
         if not prestador:
-            return []
+            return {"por_glosa": [], "por_procedimento": [], "por_mes": []}
         url = f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
-        params = {"prestador": f"eq.{prestador}", "select": "glosa,justificativa,procedimento"}
+        params = {"prestador": f"eq.{prestador}", "select": "glosa,justificativa,procedimento,mes_referencia"}
         r = requests.get(url, headers=self.headers, params=params)
         if not r.ok:
-            return []
-        contagem = {}
-        for linha in r.json():
-            chave = (linha.get("glosa") or "—", linha.get("justificativa") or "—")
-            contagem[chave] = contagem.get(chave, 0) + 1
-        ranking = sorted(contagem.items(), key=lambda item: item[1], reverse=True)[:limite]
-        return [
-            {"glosa": glosa, "justificativa": justificativa, "quantidade": qtd}
-            for (glosa, justificativa), qtd in ranking
-        ]
+            return {"por_glosa": [], "por_procedimento": [], "por_mes": []}
+
+        linhas = r.json()
+
+        contagem_glosa = {}
+        contagem_procedimento = {}
+        contagem_mes = {}
+        for linha in linhas:
+            chave_glosa = (linha.get("glosa") or "—", linha.get("justificativa") or "—")
+            contagem_glosa[chave_glosa] = contagem_glosa.get(chave_glosa, 0) + 1
+            cod_proc = linha.get("procedimento") or "—"
+            contagem_procedimento[cod_proc] = contagem_procedimento.get(cod_proc, 0) + 1
+            mes = linha.get("mes_referencia") or "—"
+            contagem_mes[mes] = contagem_mes.get(mes, 0) + 1
+
+        ranking_glosa = sorted(contagem_glosa.items(), key=lambda item: item[1], reverse=True)[:limite]
+        ranking_procedimento = sorted(contagem_procedimento.items(), key=lambda item: item[1], reverse=True)[:limite]
+        # Por mês é linha do tempo, não ranking -- ordena cronologicamente,
+        # não por quantidade.
+        serie_mes = sorted(contagem_mes.items(), key=lambda item: item[0])
+
+        return {
+            "por_glosa": [
+                {"glosa": glosa, "justificativa": justificativa, "quantidade": qtd}
+                for (glosa, justificativa), qtd in ranking_glosa
+            ],
+            "por_procedimento": [
+                {"procedimento": cod, "quantidade": qtd} for cod, qtd in ranking_procedimento
+            ],
+            "por_mes": [{"mes_referencia": mes, "quantidade": qtd} for mes, qtd in serie_mes],
+        }
 
     def remover_procs_ignorados(self, pares: list) -> bool:
         """Remove pares (especialidade, cd_procedimento) da lista salva —

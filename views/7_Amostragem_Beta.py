@@ -23,6 +23,7 @@ from core.relatorio_5201 import (
     obter_risco_prestador_cacheado,
     status_processo,
 )
+from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 from shared.database import DatabaseManager
 from shared.ui import aplicar_filtro_numerico, filtro_numerico, pilula
 
@@ -235,27 +236,70 @@ with aba_busca:
             if prestador_ativo:
                 risco_prestador = obter_risco_prestador_cacheado(prestador_ativo)
                 if risco_prestador["total_glosas"] > 0:
-                    pct_glosa = risco_prestador["pct_glosa"]
-                    texto_pct_glosa = f"{pct_glosa}%".replace(".", ",") if pct_glosa is not None else None
-                    trecho_pct = f" ({texto_pct_glosa} dos procedimentos)" if texto_pct_glosa else ""
+                    media = risco_prestador["media_glosas_por_processo"]
+                    # Média de glosas por processo é a métrica principal --
+                    # "% dos procedimentos" dilui demais em prestador de
+                    # alto volume (ex: 126 glosas em 11 mil procedimentos =
+                    # 1,1%, soa pouco, mas pode ser 1+ glosa por processo).
+                    if media is not None:
+                        trecho_media = f" (média de {str(media).replace('.', ',')} glosa(s) por processo)"
+                    else:
+                        trecho_media = ""
                     texto_risco_prestador = (
                         f"📋 Histórico do prestador: {risco_prestador['total_glosas']} glosa(s) registrada(s)"
-                        f" em processos anteriores{trecho_pct}."
+                        f" em processos anteriores{trecho_media}."
                     )
 
     if texto_risco_prestador:
         with st.expander(texto_risco_prestador):
+            pct_glosa = risco_prestador["pct_glosa"]
+            if pct_glosa is not None:
+                st.caption(
+                    f"{risco_prestador['total_glosas']} glosa(s) em {risco_prestador['total_procedimentos']} "
+                    f"procedimento(s) já vistos desse prestador ({str(pct_glosa).replace('.', ',')}%)."
+                )
+
             detalhe = obter_detalhe_glosas_prestador_cacheado(prestador_ativo)
-            if detalhe:
-                st.caption("Glosas mais frequentes desse prestador (todo o histórico):")
+            por_glosa = detalhe.get("por_glosa", [])
+            por_procedimento = detalhe.get("por_procedimento", [])
+            por_mes = detalhe.get("por_mes", [])
+
+            if por_mes:
+                st.markdown("**Glosas por mês:**")
                 st.dataframe(
-                    pd.DataFrame(detalhe).rename(columns={
+                    pd.DataFrame(por_mes).rename(
+                        columns={"mes_referencia": "Mês", "quantidade": "Glosas"}
+                    ),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+
+            if por_glosa:
+                st.markdown("**Glosas mais frequentes** (código + justificativa):")
+                st.dataframe(
+                    pd.DataFrame(por_glosa).rename(columns={
                         "glosa": "Glosa", "justificativa": "Justificativa", "quantidade": "Ocorrências",
                     }),
                     hide_index=True,
                     use_container_width=True,
                 )
-            else:
+
+            if por_procedimento:
+                mapa_procedimentos = carregar_mapa_procedimentos()
+                df_procedimento = pd.DataFrame(por_procedimento)
+                df_procedimento["Descrição"] = df_procedimento["procedimento"].map(
+                    lambda cod: mapa_procedimentos.get(cod, "—")
+                )
+                st.markdown("**Procedimentos mais glosados:**")
+                st.dataframe(
+                    df_procedimento.rename(columns={"procedimento": "Procedimento", "quantidade": "Ocorrências"})[
+                        ["Procedimento", "Descrição", "Ocorrências"]
+                    ],
+                    hide_index=True,
+                    use_container_width=True,
+                )
+
+            if not por_glosa and not por_procedimento and not por_mes:
                 st.caption("Sem detalhe disponível.")
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
