@@ -233,7 +233,7 @@ def procedimentos_consistido_digitado_por_canal(df: pd.DataFrame) -> int:
     return int(app["QT_PROCEDIMENTO"].sum() + misto_napp_com_data["QT_PROCEDIMENTO"].sum())
 
 
-COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"]
+COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total"]
 
 # Só processos num estado final contam como produtividade — CONSISTIDO ainda
 # está em aberto e GLOSADO não é uma ação do auditor.
@@ -269,8 +269,9 @@ def dias_disponiveis(df: pd.DataFrame) -> list:
 
 
 def produtividade_por_auditor(df: pd.DataFrame, dia=None, auditor: str = None) -> pd.DataFrame:
-    """Uma linha por auditor com quantos processos FECHADO/CALCULADO ele é
-    responsável, e a soma de procedimentos desses processos.
+    """Uma linha por auditor com a soma de PROCEDIMENTOS (não processos) dos
+    processos FECHADO/CALCULADO sob sua responsabilidade -- procedimentos é
+    a métrica oficial de produtividade, processos é só o contêiner.
 
     O auditor responsável é LOGIN_FECHAMENTO quando presente (processos
     FECHADO sempre têm) — senão LOGIN_CONSISTENCIA, que é o campo preenchido
@@ -299,10 +300,9 @@ def produtividade_por_auditor(df: pd.DataFrame, dia=None, auditor: str = None) -
     for nome_auditor, grupo in produtivos.groupby("_auditor"):
         linhas.append({
             "Auditor": nome_auditor,
-            "Fechados": int((grupo["STATUS"] == "FECHADO").sum()),
-            "Calculados": int((grupo["STATUS"] == "CALCULADO").sum()),
-            "Total": len(grupo),
-            "Procedimentos": int(grupo["QT_PROCEDIMENTO"].sum()),
+            "Fechados": int(grupo.loc[grupo["STATUS"] == "FECHADO", "QT_PROCEDIMENTO"].sum()),
+            "Calculados": int(grupo.loc[grupo["STATUS"] == "CALCULADO", "QT_PROCEDIMENTO"].sum()),
+            "Total": int(grupo["QT_PROCEDIMENTO"].sum()),
         })
 
     resultado = pd.DataFrame(linhas)

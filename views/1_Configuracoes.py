@@ -1,8 +1,12 @@
+from datetime import date
+
 import streamlit as st
 import pandas as pd
 import io
 from shared.database import DatabaseManager
 
+from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem
+from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 
 st.set_page_config(page_title="Configurações", page_icon="️", layout="wide")
@@ -37,6 +41,7 @@ if role in ["Admin", "Gestor"]:
     abas_definidas.append(("textos_prestadores", "Textos para Prestadores"))
     abas_definidas.append(("links_home", "Links Home"))
     abas_definidas.append(("tabelas_base", "Tabelas Base e Glosas"))
+    abas_definidas.append(("importar_planilhas", "Importação de Planilhas"))
 
 if role == "Admin":
     abas_definidas.append(("debug_testes", "Debug/Testes"))
@@ -962,3 +967,123 @@ if "links_home" in abas_por_id:
                             st.rerun()
                         else:
                             st.error("Erro ao excluir.")
+
+# ==========================================
+# ABA: IMPORTAÇÃO DE PLANILHAS (ADMIN/GESTOR)
+# ==========================================
+# Centraliza aqui os 3 uploads mensais que antes ficavam espalhados (2 na
+# aba própria de Configurações dentro de Amostragem, 1 dentro de
+# Produtividade) -- um só lugar pra quem sobe planilha, em vez de caçar o
+# botão em cada módulo.
+if "importar_planilhas" in abas_por_id:
+    with abas_por_id["importar_planilhas"]:
+        st.caption(
+            "Upload centralizado das planilhas mensais que alimentam o sistema. "
+            "Cada uma substitui só os dados do mês detectado, sem afetar outros meses já importados."
+        )
+
+        if role in ["Admin", "Gestor"]:
+            with st.expander("Relatório 5201 (Produtividade)", expanded=False):
+                st.caption(
+                    "Mesmo arquivo baixado do sistema. Prestador, CPF/CNPJ e demais dados de "
+                    "negócio não são armazenados — só o necessário para status e produtividade, "
+                    "e mesmo assim de forma cifrada no banco."
+                )
+                mes_upload_5201 = st.date_input(
+                    "Mês de referência deste arquivo",
+                    value=date.today().replace(day=1),
+                    help="Normalmente é o mês atual. Mude aqui se estiver subindo o arquivo de um mês "
+                    "anterior — isso NÃO sobrescreve outros meses já importados, só substitui os dados "
+                    "desse mês específico. Só os 2 meses mais recentes ficam guardados.",
+                    key="mes_upload_5201",
+                )
+                mes_referencia_5201 = mes_upload_5201.strftime("%Y-%m")
+                arquivo_5201 = st.file_uploader(
+                    "Relatório REL5201 (.xlsx ou .csv)", type=["xlsx", "csv"], key="upload_rel5201"
+                )
+                if arquivo_5201 and st.button(f"Processar e substituir dados de {mes_referencia_5201}", type="primary"):
+                    try:
+                        with st.spinner("Lendo e importando o relatório..."):
+                            df_bruto = ler_relatorio_5201(arquivo_5201)
+                            registros_5201 = montar_registros(df_bruto)
+                            total_5201 = db.importar_relatorio_5201(
+                                registros_5201,
+                                importado_por=st.session_state.get("usuario_id"),
+                                mes_referencia=mes_referencia_5201,
+                            )
+                        carregar_dados_atuais.clear()
+                        st.success(f"{total_5201} processo(s) importado(s) em {mes_referencia_5201} com sucesso.")
+                        st.rerun()
+                    except Exception as erro:
+                        st.error(f"Falha na importação: {erro}")
+
+        if role == "Admin":
+            with st.expander("Planilha mensal da base IA (Amostragem)", expanded=False):
+                st.caption(
+                    "Sobe a planilha do mês (mesma que alimenta o PowerBI). Substitui "
+                    "os dados do mês detectado e mantém só os 2 meses mais recentes na base."
+                )
+                arquivo_ia = st.file_uploader("Planilha mensal (.xlsx)", type=["xlsx"], key="upload_base_ia")
+                retomar_ia = st.checkbox(
+                    "Retomar import interrompido (reenviando o MESMO arquivo de antes -- "
+                    "não apaga o que já foi salvo, só completa o resto)",
+                    key="retomar_base_ia",
+                )
+                if arquivo_ia and st.button("Importar", key="btn_importar_base_ia"):
+                    try:
+                        with st.spinner("Lendo planilha..."):
+                            registros_ia, mes_referencia_ia, total_bruto_ia = preparar_registros_base_ia(arquivo_ia)
+                        if not registros_ia:
+                            st.warning("Nenhuma linha com LIBERAÇÃO = N encontrada nesta planilha.")
+                        else:
+                            barra_ia = st.progress(0.0, text=f"Importando 0/{len(registros_ia)}...")
+
+                            def _atualizar_barra_ia(enviados, total):
+                                barra_ia.progress(enviados / total, text=f"Importando {enviados}/{total}...")
+
+                            total_inserido_ia = db.importar_base_ia(
+                                registros_ia, mes_referencia_ia, ao_progredir=_atualizar_barra_ia, retomar=retomar_ia
+                            )
+                            barra_ia.empty()
+                            st.success(
+                                f"Mês {mes_referencia_ia}: {total_inserido_ia} de {total_bruto_ia} linha(s) "
+                                f"(LIBERAÇÃO = N) importadas com sucesso."
+                            )
+                    except Exception as erro:
+                        st.error(f"Falha na importação: {erro}")
+
+            with st.expander("Planilha mensal de imagem (Amostragem)", expanded=False):
+                st.caption(
+                    "Sobe a planilha de imagem do mês (colunas obrigatórias: NU_GUIA, "
+                    "DENTE_INICIAL, NOME_ARQUIVO). O mês de referência é lido do nome do "
+                    "arquivo (ex: '06 2026 ... .xlsx' → junho/2026)."
+                )
+                arquivo_imagem = st.file_uploader("Planilha de imagem (.xlsx)", type=["xlsx"], key="upload_base_imagem")
+                retomar_imagem = st.checkbox(
+                    "Retomar import interrompido (reenviando o MESMO arquivo de antes -- "
+                    "não apaga o que já foi salvo, só completa o resto)",
+                    key="retomar_base_imagem",
+                )
+                if arquivo_imagem and st.button("Importar imagem", key="btn_importar_imagem"):
+                    try:
+                        with st.spinner("Lendo planilha..."):
+                            registros_img, mes_referencia_img, total_bruto_img = preparar_registros_imagem(arquivo_imagem)
+                        if not registros_img:
+                            st.warning("Nenhuma linha encontrada nesta planilha.")
+                        else:
+                            barra_img = st.progress(0.0, text=f"Importando 0/{len(registros_img)}...")
+
+                            def _atualizar_barra_img(enviados, total):
+                                barra_img.progress(enviados / total, text=f"Importando {enviados}/{total}...")
+
+                            total_inserido_img = db.importar_base_imagem(
+                                registros_img, mes_referencia_img, ao_progredir=_atualizar_barra_img,
+                                retomar=retomar_imagem,
+                            )
+                            barra_img.empty()
+                            st.success(
+                                f"Mês {mes_referencia_img}: {total_inserido_img} de {total_bruto_img} "
+                                f"linha(s) importadas com sucesso."
+                            )
+                    except Exception as erro:
+                        st.error(f"Falha na importação: {erro}")

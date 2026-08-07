@@ -1,5 +1,3 @@
-from datetime import date
-
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -11,9 +9,7 @@ from core.relatorio_5201 import (
     carregar_dados_atuais,
     detalhe_processos_dia,
     dias_disponiveis,
-    ler_relatorio_5201,
     meses_disponiveis,
-    montar_registros,
     procedimentos_consistido_digitado_por_canal,
     produtividade_por_auditor,
     resumo_geral,
@@ -142,37 +138,10 @@ st.title("Produtividade — Relatório 5201")
 
 if _ve_geral:
     st.caption(
-        "Suba o REL5201 (mesmo arquivo baixado do sistema) para atualizar os números "
-        "abaixo, informando a qual mês ele se refere. Prestador, CPF/CNPJ e demais dados "
-        "de negócio não são armazenados — só o necessário para status e produtividade, "
-        "e mesmo assim de forma cifrada no banco."
+        "Para subir um novo REL5201, vá em **Configurações → Importação de Planilhas**. "
+        "Prestador, CPF/CNPJ e demais dados de negócio não são armazenados — só o "
+        "necessário para status e produtividade, e mesmo assim de forma cifrada no banco."
     )
-
-    with st.expander("Atualizar dados", expanded=False):
-        mes_upload = st.date_input(
-            "Mês de referência deste arquivo",
-            value=date.today().replace(day=1),
-            help="Normalmente é o mês atual. Mude aqui se estiver subindo o arquivo de um mês anterior — "
-            "isso NÃO sobrescreve outros meses já importados, só substitui os dados desse mês específico. "
-            "Só os 2 meses mais recentes ficam guardados; o mais antigo é descartado ao entrar um novo.",
-        )
-        mes_referencia_upload = mes_upload.strftime("%Y-%m")
-        arquivo = st.file_uploader("Relatório REL5201 (.xlsx ou .csv)", type=["xlsx", "csv"], key="upload_rel5201")
-        if arquivo and st.button(f"Processar e substituir dados de {mes_referencia_upload}", type="primary"):
-            try:
-                with st.spinner("Lendo e importando o relatório..."):
-                    df_bruto = ler_relatorio_5201(arquivo)
-                    registros = montar_registros(df_bruto)
-                    total = st.session_state.db.importar_relatorio_5201(
-                        registros,
-                        importado_por=st.session_state.get("usuario_id"),
-                        mes_referencia=mes_referencia_upload,
-                    )
-                carregar_dados_atuais.clear()
-                st.success(f"{total} processo(s) importado(s) em {mes_referencia_upload} com sucesso.")
-                st.rerun()
-            except Exception as erro:
-                st.error(f"Falha na importação: {erro}")
 else:
     st.caption("Acompanhe aqui sua produtividade no Relatório 5201, com base no seu login SIGO.")
 
@@ -222,18 +191,18 @@ if _ve_geral:
     else:
         st.dataframe(tabela_auditores, use_container_width=True, hide_index=True)
 
-        tabela_auditores = tabela_auditores.assign(_rotulo=tabela_auditores["Procedimentos"].apply(_fmt_num))
-        maior_valor_auditores = tabela_auditores["Procedimentos"].max()
+        tabela_auditores = tabela_auditores.assign(_rotulo=tabela_auditores["Total"].apply(_fmt_num))
+        maior_valor_auditores = tabela_auditores["Total"].max()
         escala_y_auditores = alt.Scale(domain=[0, maior_valor_auditores * 1.15]) if maior_valor_auditores else alt.Scale()
         barras_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4, size=40).encode(
             x=alt.X("Auditor:N", sort="-y", title=None, axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)", scale=escala_y_auditores),
+            y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)", scale=escala_y_auditores),
             color=alt.value("#4F8CFF"),
-            tooltip=["Auditor", "Fechados", "Calculados", "Total", "Procedimentos"],
+            tooltip=["Auditor", "Fechados", "Calculados", "Total"],
         )
         rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=12).encode(
             x=alt.X("Auditor:N", sort="-y"),
-            y=alt.Y("Procedimentos:Q", scale=escala_y_auditores),
+            y=alt.Y("Total:Q", scale=escala_y_auditores),
             text="_rotulo:N",
         )
         st.altair_chart(barras_auditores + rotulos_auditores, use_container_width=True)
@@ -262,11 +231,10 @@ else:
         st.info("Nenhum processo fechado/calculado" + (f" em {escolha_dia}." if dia_filtro else " neste mês."))
     else:
         linha = minha_tabela.iloc[0]
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         c1.metric("Fechados", _fmt_num(int(linha["Fechados"])))
         c2.metric("Calculados", _fmt_num(int(linha["Calculados"])))
         c3.metric("Total", _fmt_num(int(linha["Total"])))
-        c4.metric("Procedimentos", _fmt_num(int(linha["Procedimentos"])))
 
         if dia_filtro is not None:
             st.markdown("#### Detalhe de Processos do Dia")
@@ -284,7 +252,6 @@ else:
                     "Fechados": int(linha["Fechados"]),
                     "Calculados": int(linha["Calculados"]),
                     "Total": int(linha["Total"]),
-                    "Procedimentos": int(linha["Procedimentos"]),
                 })
 
         if linhas_por_dia:
@@ -295,18 +262,26 @@ else:
             selecao_dia = alt.selection_point(name="selecao_dia", fields=["Dia_fmt"], on="click", empty=False)
             grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
                 x=alt.X("Dia_fmt:N", sort=None, title=None),
-                y=alt.Y("Procedimentos:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
-                tooltip=["Dia_fmt", "Fechados", "Calculados", "Total", "Procedimentos"],
+                y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
+                tooltip=["Dia_fmt", "Fechados", "Calculados", "Total"],
                 opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
             ).add_params(selecao_dia)
             evento_grafico = st.altair_chart(
                 grafico_dia, use_container_width=True, on_select="rerun", key="grafico_prod_mes",
             )
             pontos_clicados = evento_grafico.selection.get("selecao_dia") if evento_grafico else None
-            if pontos_clicados:
-                dia_clicado = pontos_clicados[0].get("Dia_fmt")
-                if dia_clicado and dia_clicado != escolha_dia:
-                    st.session_state["_dia_click_pendente"] = dia_clicado
+            dia_clicado = pontos_clicados[0].get("Dia_fmt") if pontos_clicados else None
+            # A seleção do Vega-Lite persiste entre reruns até um novo clique
+            # no gráfico — sem essa comparação, o mesmo clique antigo seria
+            # reprocessado a cada rerun (inclusive sobrescrevendo de volta
+            # quando o usuário escolhe "Todos os dias" no selectbox acima).
+            # Só age quando o clique em si mudou desde o último processado.
+            if dia_clicado != st.session_state.get("_dia_click_ultimo"):
+                st.session_state["_dia_click_ultimo"] = dia_clicado
+                # dia_clicado None = clicou fora das barras (deseleção) -> volta pra "Todos os dias".
+                alvo = dia_clicado or "Todos os dias"
+                if alvo != escolha_dia:
+                    st.session_state["_dia_click_pendente"] = alvo
                     st.rerun()
 
             with st.expander("Ver tabela por dia"):

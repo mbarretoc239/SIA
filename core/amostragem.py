@@ -1,9 +1,25 @@
 import html
+import re
 import unicodedata
 
+import openpyxl
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+
+# Colunas mínimas esperadas na planilha mensal da base IA (mesma que alimenta
+# o PowerBI). Nomes normalizados via _norm (maiúsculo, sem acento).
+COLUNAS_NECESSARIAS_BASE_IA = {
+    "NU_ORDEM", "NU_GUIA", "CD_PROCEDIMENTO", "DS_GRUPO", "LIBERACAO",
+    "DT_PRODUCAO", "CD_OPERADOR_ATEND",
+}
+
+# Colunas mínimas esperadas na planilha mensal de imagem. CD_PROCEDIMENTO e
+# STATUS_PROCED não são exigidas: o layout mudou (planilha atual não traz
+# nem uma nem outra) e nenhuma das duas é lida hoje na tela — só tem_imagem
+# (via NOME_ARQUIVO) e nu_guia são realmente usados no cruzamento.
+COLUNAS_NECESSARIAS_IMAGEM = {"NU_GUIA", "DENTE_INICIAL", "NOME_ARQUIVO"}
 
 
 # Especialidades tratadas como críticas (maior valor/risco, normalmente com
@@ -71,6 +87,137 @@ def carregar_procedimentos_criticos() -> set:
 def _norm(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("ASCII")
     return sem_acento.strip().upper()
+
+
+def preparar_registros_base_ia(arquivo) -> tuple[list, str, int]:
+    """Lê a planilha mensal da base IA e devolve (registros_para_inserir, mes_referencia, total_bruto).
+
+    Lê linha a linha via openpyxl (read_only) em vez de pandas.read_excel —
+    a planilha tem centenas de milhares de linhas e carregar tudo num
+    DataFrame de uma vez consome memória demais (gerou MemoryError em
+    máquina com pouca RAM livre).
+
+    Só mantém linhas com LIBERACAO == 'N' (é só isso que a amostragem usa).
+    `mes_referencia` é derivado de DT_PRODUCAO (constante por arquivo,
+    ex: planilha 'IA 07 2026' tem DT_PRODUCAO = 2026-07-01).
+    """
+    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
+    aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
+    ws = wb[aba]
+    linhas = ws.iter_rows(values_only=True)
+
+    header = [_norm(str(c)) for c in next(linhas)]
+    idx = {nome: i for i, nome in enumerate(header)}
+    faltantes = COLUNAS_NECESSARIAS_BASE_IA - set(idx)
+    if faltantes:
+        raise ValueError(
+            "Colunas não encontradas na planilha (aba '" + aba + "'): "
+            + ", ".join(sorted(faltantes))
+        )
+
+    i_ordem, i_guia = idx["NU_ORDEM"], idx["NU_GUIA"]
+    i_cd, i_grupo = idx["CD_PROCEDIMENTO"], idx["DS_GRUPO"]
+    i_lib, i_dt = idx["LIBERACAO"], idx["DT_PRODUCAO"]
+    i_operador = idx["CD_OPERADOR_ATEND"]
+
+    registros = []
+    guias_por_processo = {}  # nu_ordem -> set(nu_guia), inclui S e N — só pra contar o total
+    mes_referencia = None
+    total_bruto = 0
+    for linha in linhas:
+        if linha[i_ordem] is None:
+            continue
+        total_bruto += 1
+        if mes_referencia is None and linha[i_dt] is not None:
+            dt = linha[i_dt]
+            mes_referencia = dt.strftime("%Y-%m") if hasattr(dt, "strftime") else str(dt)[:7]
+
+        nu_ordem = str(int(linha[i_ordem]))
+        nu_guia = str(linha[i_guia]).strip()
+        guias_por_processo.setdefault(nu_ordem, set()).add(nu_guia)
+
+        liberacao = str(linha[i_lib] or "").strip().upper()
+        if liberacao != "N":
+            continue
+
+        registros.append({
+            "nu_ordem": nu_ordem,
+            "nu_guia": nu_guia,
+            "cd_procedimento": str(linha[i_cd]).strip(),
+            "ds_grupo": str(linha[i_grupo]).strip(),
+            "liberacao": "N",
+            "mes_referencia": None,
+            "total_guias_processo": None,
+            "cd_operador_atend": str(linha[i_operador] or "").strip(),
+        })
+
+    wb.close()
+
+    if mes_referencia is None:
+        raise ValueError("Não foi possível ler DT_PRODUCAO para determinar o mês de referência.")
+
+    for registro in registros:
+        registro["mes_referencia"] = mes_referencia
+        registro["total_guias_processo"] = len(guias_por_processo[registro["nu_ordem"]])
+
+    return registros, mes_referencia, total_bruto
+
+
+def preparar_registros_imagem(arquivo) -> tuple[list, str, int]:
+    """Lê a planilha mensal de imagem e devolve (registros, mes_referencia, total_bruto).
+
+    Essa planilha não tem coluna de data — o mês de referência é extraído do
+    NOME do arquivo (padrão observado: "MM AAAA <código> - IMAGEM.xlsx", ex:
+    "06 2026 4016R - IMAGEM.xlsx" -> mes_referencia = "2026-06").
+    """
+    match = re.match(r"^\s*(\d{2})\s+(\d{4})", arquivo.name)
+    if not match:
+        raise ValueError(
+            f"Não consegui identificar o mês/ano no nome do arquivo '{arquivo.name}'. "
+            "Esperado algo como 'MM AAAA ... .xlsx'."
+        )
+    mes, ano = match.group(1), match.group(2)
+    mes_referencia = f"{ano}-{mes}"
+
+    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
+    aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
+    ws = wb[aba]
+    linhas = ws.iter_rows(values_only=True)
+
+    header = [_norm(str(c)) for c in next(linhas)]
+    idx = {nome: i for i, nome in enumerate(header)}
+    faltantes = COLUNAS_NECESSARIAS_IMAGEM - set(idx)
+    if faltantes:
+        raise ValueError(
+            "Colunas não encontradas na planilha (aba '" + aba + "'): "
+            + ", ".join(sorted(faltantes))
+        )
+
+    i_guia, i_dente, i_arquivo = idx["NU_GUIA"], idx["DENTE_INICIAL"], idx["NOME_ARQUIVO"]
+    # Opcionais: presentes no layout antigo, ausentes no atual (que trouxe
+    # NOME_PROCEDIMENTO/CODIGO no lugar, sem serem substitutos diretos).
+    i_cd = idx.get("CD_PROCEDIMENTO")
+    i_status = idx.get("STATUS_PROCED")
+
+    registros = []
+    total_bruto = 0
+    for linha in linhas:
+        if linha[i_guia] is None:
+            continue
+        total_bruto += 1
+        tem_imagem = str(linha[i_arquivo] or "").strip().upper() != "SEM IMAGEM"
+        registros.append({
+            "nu_guia": str(linha[i_guia]).strip(),
+            # cd_procedimento é NOT NULL na tabela; "" quando a coluna não existe na planilha.
+            "cd_procedimento": str(linha[i_cd]).strip() if i_cd is not None and linha[i_cd] is not None else "",
+            "dente_inicial": str(linha[i_dente]).strip() if linha[i_dente] is not None else None,
+            "status_proced": str(linha[i_status]).strip() if i_status is not None and linha[i_status] is not None else None,
+            "tem_imagem": tem_imagem,
+            "mes_referencia": mes_referencia,
+        })
+
+    wb.close()
+    return registros, mes_referencia, total_bruto
 
 
 # Especialidades (DS_GRUPO) conhecidas na base — usado só para popular o
