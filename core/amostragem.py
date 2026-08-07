@@ -307,7 +307,9 @@ def gerenciar_procedimentos_ignorados(db, key_prefix: str):
                 st.warning("Selecione ao menos um procedimento.")
             else:
                 pares = [(especialidade_nova, opcoes_todas[lbl]) for lbl in labels_novos]
-                if db.salvar_procs_ignorados(pares):
+                with st.spinner("Salvando..."):
+                    sucesso = db.salvar_procs_ignorados(pares)
+                if sucesso:
                     st.toast(f"Adicionado(s) a {especialidade_nova}.")
                     st.rerun()
                 else:

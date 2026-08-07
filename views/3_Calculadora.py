@@ -2,8 +2,9 @@ import streamlit as st
 
 from core.settings import tem_acesso_modulo
 from shared.database import DatabaseManager
+from shared.ui import COR_PERIGO, COR_SUCESSO
 
-st.set_page_config(page_title="Calculadora de Glosa", page_icon="", layout="centered")
+st.set_page_config(page_title="Calculadora de Glosa", page_icon="🦷", layout="centered")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -74,7 +75,7 @@ with st.container():
                 if glosado == 0:
                     st.success("Sem glosas aplicadas! 100% pago.")
                 else:
-                    st.error(f"**Taxa de Glosa:** {pct_glosa:.1f}%")
+                    st.warning(f"**Taxa de Glosa:** {pct_glosa:.1f}%")
                 
                 # Exibição visual com métricas
                 c1, c2, c3 = st.columns(3)
@@ -85,8 +86,8 @@ with st.container():
                 # Barra de progresso visual simulada com HTML
                 st.markdown("#### Proporção Visual")
                 st.markdown(f"""
-                <div style="width: 100%; background-color: #ff4b4b; border-radius: 8px; overflow: hidden; display: flex; height: 24px;">
-                    <div style="width: {pct_pago}%; background-color: #00cc96; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">
+                <div style="width: 100%; background-color: {COR_PERIGO}; border-radius: 8px; overflow: hidden; display: flex; height: 24px;">
+                    <div style="width: {pct_pago}%; background-color: {COR_SUCESSO}; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">
                         {pct_pago:.0f}% Pago
                     </div>
                 </div>

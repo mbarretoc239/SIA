@@ -16,7 +16,7 @@ from core.amostragem import (
 from core.relatorio_5201 import carregar_dados_atuais, formatar_status_processo, status_processo
 from shared.database import DatabaseManager
 
-st.set_page_config(page_title="Amostragem", page_icon="", layout="wide")
+st.set_page_config(page_title="Amostragem", page_icon="🦷", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -80,7 +80,8 @@ with aba_busca:
         st.info("Digite o número do processo e clique em Buscar guias.")
         st.stop()
 
-    guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
+    with st.spinner("Buscando guias..."):
+        guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
     df = _guias_para_df(guias)
 
     if df.empty:

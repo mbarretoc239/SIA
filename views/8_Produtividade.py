@@ -2,6 +2,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from shared.ui import fmt_num as _fmt_num, pilula
+
 from core.relatorio_5201 import (
     STATUS_CORES,
     STATUS_LABELS,
@@ -48,12 +50,7 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
             with m2:
                 st.metric("Analisado", _fmt_num(grupos_procedimentos["analisado"]), help="Fechado + Calculado")
                 pct_analisado = _pct(grupos_procedimentos["analisado"], total_procedimentos)
-                st.markdown(
-                    f"<span style='background: rgba(148,163,184,0.18); color: #94a3b8; "
-                    f"padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; "
-                    f"display: inline-block;'>{pct_analisado}</span>",
-                    unsafe_allow_html=True,
-                )
+                st.markdown(pilula(pct_analisado), unsafe_allow_html=True)
             m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))
             m4.metric("Consistido/Digitado", _fmt_num(grupos_procedimentos["consistido_digitado"]))
             m5.metric(
@@ -67,10 +64,6 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
 
         if resumo["total_processos"]:
             st.altair_chart(_grafico_status(procedimentos_por_status), use_container_width=True)
-
-
-def _fmt_num(n: int) -> str:
-    return f"{n:,}".replace(",", ".")
 
 
 def _grafico_status(procedimentos_por_status: dict):
@@ -174,11 +167,18 @@ def _secao_produtividade_individual(
     st.markdown("#### Produtividade ao longo do mês")
     st.caption("Clique numa barra para ver o detalhe daquele dia.")
     selecao_dia = alt.selection_point(name=f"selecao_dia_{key_prefix}", fields=["Dia_fmt"], on="click", empty=False)
+    # Padding proporcional no eixo X -- sem isso, com poucos dias (ex: só 3)
+    # as barras ficam enormes e coladas; com muitos dias, ficam apertadas.
+    # Mesmo ajuste já aplicado no gráfico "Produtividade por Auditor".
+    escala_x_dia = alt.Scale(paddingInner=0.35, paddingOuter=0.15)
     grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
         # labelOverlap=False -- mesmo cuidado do gráfico por auditor: sem
         # isso, um mês com muitos dias faz o Vega-Lite esconder alguns
         # rótulos de data silenciosamente.
-        x=alt.X("Dia_fmt:N", sort=None, title=None, axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
+        x=alt.X(
+            "Dia_fmt:N", sort=None, title=None,
+            axis=alt.Axis(labelAngle=-45, labelOverlap=False), scale=escala_x_dia,
+        ),
         y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
         tooltip=["Dia_fmt", "Fechados", "Calculados", "Total"],
         opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
@@ -209,7 +209,7 @@ def _secao_produtividade_individual(
         )
 
 
-st.set_page_config(page_title="Produtividade", page_icon="", layout="wide")
+st.set_page_config(page_title="Produtividade", page_icon="🦷", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")

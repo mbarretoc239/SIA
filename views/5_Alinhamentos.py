@@ -5,8 +5,10 @@ import streamlit as st
 
 from core.settings import NIVEL_HIERARQUIA, ROLES_CIENCIA_OBRIGATORIA
 from shared.database import DatabaseManager
+from shared.ui import estilizar_botoes_exclusao
 
-st.set_page_config(page_title="Alinhamentos", page_icon="", layout="wide")
+st.set_page_config(page_title="Alinhamentos", page_icon="🦷", layout="wide")
+estilizar_botoes_exclusao()
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar os alinhamentos.")
@@ -164,7 +166,7 @@ if pode_gerenciar:
                 st.session_state["alinhamento_em_edicao"] = "NOVO"
                 st.rerun()
         with col_busca2:
-            busca2 = st.text_input("Pesquisar", placeholder="Ex: biometria, glosa 480...", key="gerenciar_busca")
+            busca2 = st.text_input("Pesquisar (título ou conteúdo)", placeholder="Ex: biometria, glosa 480...", key="gerenciar_busca")
         with col_cat2:
             categoria_filtro2 = st.selectbox("Categoria", ["Todas"] + CATEGORIAS, key="gerenciar_categoria", width=300)
         with col_equipe2:
@@ -356,7 +358,7 @@ if pode_gerenciar:
                         st.markdown(f"Excluir **{a.get('titulo', '')}**?")
                         st.caption("O alinhamento vai para a área \"Excluídos\" — nada é apagado de fato.")
                         motivo_excl = st.text_area("Motivo da exclusão (obrigatório)", key=f"motivo_excl_{aid}", height=80)
-                        if st.button("Confirmar exclusão", key=f"conf_excl_{aid}", type="primary", use_container_width=True):
+                        if st.button("Confirmar exclusão", key=f"btn_excluir_alinhamento_{aid}", type="primary", use_container_width=True):
                             if not motivo_excl.strip():
                                 st.warning("Motivo obrigatório.")
                             elif db.excluir_alinhamento_com_motivo(aid, motivo_excl, usuario_id):

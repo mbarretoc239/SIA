@@ -7,7 +7,7 @@ from services.relatorio_5302.parser_strategy import processar_csv, processar_pdf
 from services.relatorio_5302.text_engine import gerar_texto, mixar_textos_inteligente
 from shared.ai_utils import melhorar_texto_com_ia
 
-st.set_page_config(page_title="Relatório 5302", page_icon="", layout="wide")
+st.set_page_config(page_title="Relatório 5302", page_icon="🦷", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -32,7 +32,7 @@ st.caption(
     "prestador solicitou restauração para um dente ausente\"."
 )
 
-pdf_file = st.file_uploader("Selecione o arquivo", type=["pdf", "csv"])
+pdf_file = st.file_uploader("Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"])
 
 if pdf_file is not None:
     if "dados_pdf" not in st.session_state or st.session_state.get("pdf_name") != pdf_file.name:

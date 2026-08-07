@@ -8,8 +8,10 @@ from shared.database import DatabaseManager
 from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
+from shared.ui import estilizar_botoes_exclusao
 
-st.set_page_config(page_title="Configurações", page_icon="️", layout="wide")
+st.set_page_config(page_title="Configurações", page_icon="🦷", layout="wide")
+estilizar_botoes_exclusao()
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar as configurações.")
@@ -134,7 +136,7 @@ if "meus_links" in abas_por_id:
                             st.session_state["meu_link_editando_id"] = link.get('id')
                             st.rerun()
                     with col_del:
-                        if st.button("Excluir", key=f"del_link_{link.get('id')}", use_container_width=True):
+                        if st.button("Excluir", key=f"btn_excluir_link_{link.get('id')}", use_container_width=True):
                             if db.deletar_link_util(link.get('id')):
                                 st.rerun()
 
@@ -181,7 +183,7 @@ if "aprovacao_equipe" in abas_por_id:
                                 else:
                                     st.error("Erro ao atualizar usuário no Supabase.")
                         with col_del:
-                            if st.button("Excluir", key=f"btn_del_pend_{row['id']}", use_container_width=True):
+                            if st.button("Excluir", key=f"btn_excluir_pendente_{row['id']}", use_container_width=True):
                                 if db.excluir_usuario(row['id'], role):
                                     st.success("Usuário excluído.")
                                     st.rerun()
@@ -214,7 +216,7 @@ if "aprovacao_equipe" in abas_por_id:
                     def modal_confirmar_exclusao(uid, user_name):
                         st.warning(f"Você está prestes a excluir permanentemente o usuário **{user_name}**.")
                         st.markdown("Esta ação não pode ser desfeita.")
-                        if st.button("Sim, excluir permanentemente", type="primary", use_container_width=True):
+                        if st.button("Sim, excluir permanentemente", key="btn_excluir_usuario_confirmar", type="primary", use_container_width=True):
                             if db.excluir_usuario(uid, role):
                                 st.success("Usuário excluído com sucesso.")
                                 st.rerun()
@@ -223,7 +225,7 @@ if "aprovacao_equipe" in abas_por_id:
                         if st.button("Cancelar", use_container_width=True):
                             st.rerun()
 
-                    if st.button("Excluir Usuário", key="btn_del_usuario", type="primary", use_container_width=True):
+                    if st.button("Excluir Usuário", key="btn_excluir_usuario_abrir", type="primary", use_container_width=True):
                         alvo_id = opcoes_del[label_del]
                         modal_confirmar_exclusao(alvo_id, label_del)
 
@@ -330,7 +332,7 @@ if "debug_testes" in abas_por_id:
                     with col_info:
                         st.markdown(f"**{a.get('titulo')}** — {a.get('categoria', 'Geral')} — {a.get('nivel_minimo', 'Auditor')}")
                     with col_del:
-                        if st.button("️ Excluir", key=f"del_teste_{a['id']}", use_container_width=True):
+                        if st.button("Excluir", key=f"btn_excluir_teste_{a['id']}", use_container_width=True):
                             if db.excluir_alinhamento(a["id"]):
                                 st.rerun()
                             else:
@@ -442,7 +444,7 @@ if "tabelas_base" in abas_por_id:
             em_edicao = st.session_state.get("glosa_em_edicao", None)
             if em_edicao:
                 st.divider()
-                st.subheader("️ Editor de Glosa" if em_edicao != "NOVA" else " Nova Glosa")
+                st.subheader("Editor de Glosa" if em_edicao != "NOVA" else "Nova Glosa")
                 
                 with st.container(border=True):
                     g_alvo = dict_glosas.get(em_edicao, {"codigo": "", "descricao": "", "tipo": "Técnica", "is_critica": False}) if em_edicao != "NOVA" else {"codigo": "", "descricao": "", "tipo": "Técnica", "is_critica": False}
@@ -506,7 +508,7 @@ if "tabelas_base" in abas_por_id:
                         sg_c2.markdown(desc if desc else "*sem descrição*")
 
                 if subs_custom:
-                    st.caption("️ Customizadas (Supabase)")
+                    st.caption("Customizadas (Supabase)")
                     for sg in subs_custom:
                         sub_num = sg['codigo'].split('.')[-1]
                         sg_c1, sg_c2, sg_c3, sg_c4 = st.columns([1, 4, 2, 1])
@@ -565,7 +567,7 @@ if "tabelas_base" in abas_por_id:
             if len(resultados) > max_mostrar:
                 st.info(f"Mostrando 50 de {len(resultados)} resultados. Use a barra de pesquisa para refinar.")
             st.divider()
-            st.markdown("#### ️ Manutenção do Banco de Dados (Supabase)")
+            st.markdown("#### Manutenção do Banco de Dados (Supabase)")
             st.markdown("Para não lotar seu banco de dados, apague históricos antigos de auditoria.")
             col_meses, col_btn = st.columns([2, 1])
             with col_meses:
@@ -751,7 +753,7 @@ if "textos_prestadores" in abas_por_id:
                     if b_edit.button("Editar", key=f"edit_txt_{t['id']}", use_container_width=True):
                         st.session_state["texto_em_edicao"] = t['id']
                         st.rerun()
-                    if b_del.button("Excluir", key=f"del_txt_{t['id']}", use_container_width=True):
+                    if b_del.button("Excluir", key=f"btn_excluir_texto_{t['id']}", use_container_width=True):
                         if db.deletar_texto_prestador(t['id']):
                             st.rerun()
 
@@ -963,7 +965,7 @@ if "links_home" in abas_por_id:
                     if b_edit.button("Editar", key=f"lp_edit_{l['id']}", use_container_width=True):
                         st.session_state["link_padrao_em_edicao"] = l['id']
                         st.rerun()
-                    if b_del.button("Excluir", key=f"lp_del_{l['id']}", use_container_width=True):
+                    if b_del.button("Excluir", key=f"btn_excluir_linkpadrao_{l['id']}", use_container_width=True):
                         if db.deletar_link_padrao(l["id"], atuante_role=role):
                             st.rerun()
                         else:

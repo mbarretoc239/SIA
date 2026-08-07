@@ -7,8 +7,9 @@ import io
 
 from core.settings import tem_acesso_modulo
 from shared.database import DatabaseManager
+from shared.ui import fmt_num
 
-st.set_page_config(page_title="Análise de Produção", page_icon="", layout="wide")
+st.set_page_config(page_title="Análise de Produção", page_icon="🦷", layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -152,8 +153,8 @@ if uploaded_files:
                 st.markdown("### Visão Geral")
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Prestador", dados["prestador"][:20] + "..." if len(dados["prestador"]) > 20 else dados["prestador"])
-                c2.metric("Total de PDFs", dados["qtd_pdfs"])
-                c3.metric("Procedimentos Lidos", dados["total_linhas"])
+                c2.metric("Total de PDFs", fmt_num(dados["qtd_pdfs"]))
+                c3.metric("Procedimentos Lidos", fmt_num(dados["total_linhas"]))
                 top1 = dados["ranking"][0][0] if dados["ranking"] else "-"
                 c4.metric("Top 1", top1[:20] + "..." if len(top1) > 20 else top1)
                 

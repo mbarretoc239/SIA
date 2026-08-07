@@ -3,11 +3,12 @@ import re
 import time
 from shared.database import DatabaseManager
 from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro
+from shared.ui import COR_SUBTITULO, COR_TITULO
 
 # Configuração da Página principal (deve ser a primeira coisa)
 st.set_page_config(
     page_title="SIA Web - Auditoria",
-    page_icon="️",
+    page_icon="🦷",
     layout="wide"
 )
 
@@ -105,8 +106,8 @@ def validar_senha(senha):
     return True, ""
 
 def tela_login():
-    st.markdown("<h1 style='text-align: center; color: #2C3E50;'>Sistema Integrado de Auditoria - SIA</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #7F8C8D;'>Plataforma com ferramentas diárias para auditoria e gestão</p>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='text-align: center; color: {COR_TITULO};'>Sistema Integrado de Auditoria - SIA</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: {COR_SUBTITULO};'>Plataforma com ferramentas diárias para auditoria e gestão</p>", unsafe_allow_html=True)
     
     col_vazia1, col_login, col_vazia2 = st.columns([1, 2, 1])
     
@@ -232,8 +233,8 @@ if not st.session_state.get("logado", False):
 def tela_trocar_senha_obrigatoria():
     """Tela exibida logo apos o login quando o usuario tem senha_temporaria=True.
     Bloqueia acesso ao restante do app ate que ele defina uma senha propria."""
-    st.markdown("<h1 style='text-align: center; color: #2C3E50;'>Redefinir senha</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #7F8C8D;'>Sua senha foi redefinida por um administrador. Escolha uma nova senha para continuar.</p>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='text-align: center; color: {COR_TITULO};'>Redefinir senha</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: {COR_SUBTITULO};'>Sua senha foi redefinida por um administrador. Escolha uma nova senha para continuar.</p>", unsafe_allow_html=True)
 
     col_v1, col_form, col_v2 = st.columns([1, 2, 1])
     with col_form:
