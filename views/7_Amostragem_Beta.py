@@ -19,6 +19,7 @@ from core.relatorio_5201 import (
     STATUS_CORES,
     carregar_dados_atuais,
     formatar_status_processo,
+    obter_detalhe_glosas_prestador_cacheado,
     obter_risco_prestador_cacheado,
     status_processo,
 )
@@ -194,6 +195,9 @@ with aba_busca:
     total_guias_exibir = qt_guias_rel if qt_guias_rel is not None else total_guias_processo
     texto_total_guias = str(total_guias_exibir) if total_guias_exibir else "—"
 
+    texto_risco_prestador = None
+    prestador_ativo = None
+
     with st.container(border=True):
         st.markdown(f"**Processo:** {processo_ativo}")
         st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
@@ -234,10 +238,25 @@ with aba_busca:
                     pct_glosa = risco_prestador["pct_glosa"]
                     texto_pct_glosa = f"{pct_glosa}%".replace(".", ",") if pct_glosa is not None else None
                     trecho_pct = f" ({texto_pct_glosa} dos procedimentos)" if texto_pct_glosa else ""
-                    st.caption(
+                    texto_risco_prestador = (
                         f"📋 Histórico do prestador: {risco_prestador['total_glosas']} glosa(s) registrada(s)"
                         f" em processos anteriores{trecho_pct}."
                     )
+
+    if texto_risco_prestador:
+        with st.expander(texto_risco_prestador):
+            detalhe = obter_detalhe_glosas_prestador_cacheado(prestador_ativo)
+            if detalhe:
+                st.caption("Glosas mais frequentes desse prestador (todo o histórico):")
+                st.dataframe(
+                    pd.DataFrame(detalhe).rename(columns={
+                        "glosa": "Glosa", "justificativa": "Justificativa", "quantidade": "Ocorrências",
+                    }),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+            else:
+                st.caption("Sem detalhe disponível.")
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais

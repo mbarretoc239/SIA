@@ -500,3 +500,12 @@ def obter_risco_prestador_cacheado(prestador: str) -> dict:
     from shared.database import DatabaseManager
     db = DatabaseManager()
     return db.obter_risco_prestador(prestador)
+
+
+@st.cache_data(ttl=300)
+def obter_detalhe_glosas_prestador_cacheado(prestador: str) -> list:
+    """Wrapper cacheado de DatabaseManager.obter_detalhe_glosas_prestador --
+    mesmo padrão de obter_risco_prestador_cacheado."""
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
+    return db.obter_detalhe_glosas_prestador(prestador)

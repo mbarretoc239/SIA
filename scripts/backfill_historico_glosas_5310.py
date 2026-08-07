@@ -25,6 +25,11 @@ ARQUIVOS = [
 def _texto(v) -> str:
     if pd.isna(v):
         return ""
+    # Colunas de código (procedimento/glosa/subglosa) vêm como float no
+    # pandas quando a coluna do Excel tem alguma célula vazia (NaN força o
+    # dtype pra float64) -- sem isso, "430" vira "430.0" no banco.
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
     return str(v).strip()
 
 

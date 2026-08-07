@@ -490,6 +490,28 @@ class DatabaseManager:
         pct_glosa = round(total_glosas / total_procedimentos * 100, 1) if total_procedimentos > 0 else None
         return {"total_glosas": total_glosas, "total_procedimentos": total_procedimentos, "pct_glosa": pct_glosa}
 
+    def obter_detalhe_glosas_prestador(self, prestador: str, limite: int = 8) -> list:
+        """Ranking das glosas (código + justificativa) mais frequentes desse
+        prestador no histórico -- alimenta o expander de detalhe no card da
+        Amostragem (obter_risco_prestador só dá o resumo/%)."""
+        prestador = (prestador or "").strip()
+        if not prestador:
+            return []
+        url = f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
+        params = {"prestador": f"eq.{prestador}", "select": "glosa,justificativa,procedimento"}
+        r = requests.get(url, headers=self.headers, params=params)
+        if not r.ok:
+            return []
+        contagem = {}
+        for linha in r.json():
+            chave = (linha.get("glosa") or "—", linha.get("justificativa") or "—")
+            contagem[chave] = contagem.get(chave, 0) + 1
+        ranking = sorted(contagem.items(), key=lambda item: item[1], reverse=True)[:limite]
+        return [
+            {"glosa": glosa, "justificativa": justificativa, "quantidade": qtd}
+            for (glosa, justificativa), qtd in ranking
+        ]
+
     def remover_procs_ignorados(self, pares: list) -> bool:
         """Remove pares (especialidade, cd_procedimento) da lista salva —
         volta a considerar o procedimento na análise por padrão."""
