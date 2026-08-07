@@ -175,7 +175,10 @@ def _secao_produtividade_individual(
     st.caption("Clique numa barra para ver o detalhe daquele dia.")
     selecao_dia = alt.selection_point(name=f"selecao_dia_{key_prefix}", fields=["Dia_fmt"], on="click", empty=False)
     grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
-        x=alt.X("Dia_fmt:N", sort=None, title=None),
+        # labelOverlap=False -- mesmo cuidado do gráfico por auditor: sem
+        # isso, um mês com muitos dias faz o Vega-Lite esconder alguns
+        # rótulos de data silenciosamente.
+        x=alt.X("Dia_fmt:N", sort=None, title=None, axis=alt.Axis(labelAngle=-45, labelOverlap=False)),
         y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
         tooltip=["Dia_fmt", "Fechados", "Calculados", "Total"],
         opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
@@ -244,7 +247,7 @@ if "_importado_em" in df.columns and df["_importado_em"].notna().any():
 # -------------------------------------------------------- Seletor de mês ----
 meses = meses_disponiveis(df)
 if meses:
-    escolha_mes = st.selectbox("Mês de referência", meses, index=0)
+    escolha_mes = st.selectbox("Mês de referência", meses, index=0, width=300)
     df = df[df["_mes_referencia"] == escolha_mes]
 
 # --------------------------------------------------------- Seletor de dia ----
@@ -259,7 +262,7 @@ if "_dia_click_pendente" in st.session_state:
     if dia_clicado in opcoes_dia:
         st.session_state["dia_select_box"] = dia_clicado
 
-escolha_dia = st.selectbox("Ver produtividade de:", opcoes_dia, key="dia_select_box")
+escolha_dia = st.selectbox("Ver produtividade de:", opcoes_dia, key="dia_select_box", width=300)
 dia_filtro = None
 if escolha_dia != "Todos os dias":
     dia_filtro = dias[opcoes_dia.index(escolha_dia) - 1]
@@ -280,29 +283,75 @@ if _ve_geral:
         tabela_auditores = tabela_auditores.assign(_rotulo=tabela_auditores["Total"].apply(_fmt_num))
         maior_valor_auditores = tabela_auditores["Total"].max()
         escala_y_auditores = alt.Scale(domain=[0, maior_valor_auditores * 1.15]) if maior_valor_auditores else alt.Scale()
-        barras_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4, size=40).encode(
-            x=alt.X("Auditor:N", sort="-y", title=None, axis=alt.Axis(labelAngle=-45)),
+        # Largura de barra fixa (size=40) ficava apertada com muitos auditores
+        # -- barras coladas, rótulos vizinhos colidindo (ex: dois valores
+        # próximos como 103.111/103.059 desenhados quase na mesma posição).
+        # Padding proporcional no eixo X deixa o espaçamento consistente
+        # não importa quantos auditores entrem na tabela.
+        escala_x_auditores = alt.Scale(paddingInner=0.35, paddingOuter=0.15)
+        # Clique numa barra seleciona esse auditor no seletor de produtividade
+        # individual logo abaixo (mesmo padrão de clique-seleciona já usado
+        # no gráfico "Produtividade ao longo do mês").
+        selecao_auditor = alt.selection_point(name="selecao_auditor", fields=["Auditor"], on="click", empty=False)
+        barras_auditores = alt.Chart(tabela_auditores).mark_bar(cornerRadiusEnd=4).encode(
+            # labelOverlap=False -- por padrão o Vega-Lite esconde rótulos do
+            # eixo que colidiriam entre si (com muitos auditores, alguns
+            # nomes somem silenciosamente). Força todos a aparecer.
+            x=alt.X(
+                "Auditor:N", sort="-y", title=None,
+                axis=alt.Axis(labelAngle=-45, labelOverlap=False),
+                scale=escala_x_auditores,
+            ),
             y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)", scale=escala_y_auditores),
             color=alt.value("#4F8CFF"),
+            opacity=alt.condition(selecao_auditor, alt.value(1), alt.value(0.65)),
             tooltip=["Auditor", "Fechados", "Calculados", "Total"],
-        )
-        rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=12).encode(
-            x=alt.X("Auditor:N", sort="-y"),
+        ).add_params(selecao_auditor)
+        rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=11).encode(
+            x=alt.X("Auditor:N", sort="-y", scale=escala_x_auditores),
             y=alt.Y("Total:Q", scale=escala_y_auditores),
             text="_rotulo:N",
         )
-        st.altair_chart(barras_auditores + rotulos_auditores, use_container_width=True)
+        st.caption("Clique numa barra pra ver a produtividade individual desse auditor.")
+        evento_grafico_auditor = st.altair_chart(
+            (barras_auditores + rotulos_auditores).properties(height=380),
+            use_container_width=True, on_select="rerun", key="grafico_prod_auditor",
+        )
+        pontos_clicados_auditor = evento_grafico_auditor.selection.get("selecao_auditor") if evento_grafico_auditor else None
+        auditor_clicado = pontos_clicados_auditor[0].get("Auditor") if pontos_clicados_auditor else None
+        # Mesmo cuidado do clique-no-dia: só age quando o clique em si mudou
+        # desde o último processado, senão a seleção do Vega-Lite (que
+        # persiste entre reruns) reprocessaria o mesmo clique sem parar.
+        if auditor_clicado != st.session_state.get("_auditor_click_ultimo"):
+            st.session_state["_auditor_click_ultimo"] = auditor_clicado
+            if auditor_clicado and auditor_clicado != st.session_state.get("gestor_auditor_escolhido"):
+                st.session_state["_auditor_click_pendente"] = auditor_clicado
+                st.session_state["gestor_auditor_expander_aberto"] = True
+                st.rerun()
 
-        st.divider()
-        st.markdown("### Ver produtividade individual")
-        st.caption("Mesma visão que o próprio auditor tem da produtividade dele.")
-        auditor_escolhido = st.selectbox(
-            "Auditor", tabela_auditores["Auditor"].tolist(), key="gestor_auditor_escolhido",
-        )
-        _secao_produtividade_individual(
-            df, auditor_escolhido, dias, dia_filtro, escolha_dia,
-            key_prefix=f"gestor_{auditor_escolhido}", titulo=f"Produtividade de {auditor_escolhido}",
-        )
+        # Aplica o clique pendente ANTES do selectbox nascer (senão o widget
+        # já existente ignora o novo valor) -- mesmo padrão do seletor de dia.
+        if "_auditor_click_pendente" in st.session_state:
+            auditor_pendente = st.session_state.pop("_auditor_click_pendente")
+            if auditor_pendente in tabela_auditores["Auditor"].tolist():
+                st.session_state["gestor_auditor_escolhido"] = auditor_pendente
+
+        with st.expander(
+            "Ver produtividade individual",
+            expanded=st.session_state.get("gestor_auditor_expander_aberto", False),
+            key="gestor_auditor_expander_aberto",
+            # Controlar o estado via session_state (pra abrir sozinho quando
+            # o usuário clica numa barra) só funciona de verdade com
+            # on_change="rerun" -- sem isso o key não fica de fato vinculado.
+            on_change="rerun",
+        ):
+            auditor_escolhido = st.selectbox(
+                "Auditor", tabela_auditores["Auditor"].tolist(), key="gestor_auditor_escolhido", width=300,
+            )
+            _secao_produtividade_individual(
+                df, auditor_escolhido, dias, dia_filtro, escolha_dia,
+                key_prefix=f"gestor_{auditor_escolhido}", titulo=f"Produtividade de {auditor_escolhido}",
+            )
 
 else:
     if not _usuario_sigo:
