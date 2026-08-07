@@ -120,6 +120,92 @@ def _secao_detalhe_dia(df: pd.DataFrame, dia, auditor: str):
     st.dataframe(detalhe.drop(columns=["_minutos"]), use_container_width=True, hide_index=True)
 
 
+def _secao_produtividade_individual(
+    df: pd.DataFrame, auditor: str, dias: list, dia_filtro, escolha_dia: str,
+    key_prefix: str, titulo: str = "Minha Produtividade",
+):
+    """Produtividade de UM auditor: métricas do período + detalhe do dia (se
+    filtrado) + gráfico dia-a-dia do mês com clique pra detalhar. Usada tanto
+    pelo próprio auditor (vendo a si mesmo) quanto pelo Gestor (escolhendo
+    quem quiser ver) -- é a mesma seção, só muda quem é o `auditor`.
+
+    `key_prefix`: só precisa ser único quando o Gestor pode trocar de
+    auditor na mesma página -- evita que o clique/seleção do gráfico de um
+    auditor vaze pro de outro ao trocar a escolha (mesmo problema que já
+    tivemos com a seleção do Vega-Lite persistindo entre reruns)."""
+    st.markdown(f"### {titulo}")
+    st.caption("Só conta processos em estado final (Fechado ou Calculado) — Consistido ainda está em aberto e não entra na contagem.")
+    tabela = produtividade_por_auditor(df, dia=dia_filtro, auditor=auditor)
+    if tabela.empty:
+        st.info("Nenhum processo fechado/calculado" + (f" em {escolha_dia}." if dia_filtro else " neste mês."))
+    else:
+        linha = tabela.iloc[0]
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Fechados", _fmt_num(int(linha["Fechados"])))
+        c2.metric("Calculados", _fmt_num(int(linha["Calculados"])))
+        c3.metric("Total", _fmt_num(int(linha["Total"])))
+
+        if dia_filtro is not None:
+            st.markdown("#### Detalhe de Processos do Dia")
+            _secao_detalhe_dia(df, dia_filtro, auditor)
+
+    if not dias:
+        return
+
+    linhas_por_dia = []
+    for d in dias:
+        t = produtividade_por_auditor(df, dia=d, auditor=auditor)
+        if not t.empty:
+            linha = t.iloc[0]
+            linhas_por_dia.append({
+                "Dia": d,
+                "Dia_fmt": d.strftime("%d/%m/%Y"),
+                "Fechados": int(linha["Fechados"]),
+                "Calculados": int(linha["Calculados"]),
+                "Total": int(linha["Total"]),
+            })
+
+    if not linhas_por_dia:
+        st.caption("Nenhum dia com produtividade registrada ainda.")
+        return
+
+    df_por_dia = pd.DataFrame(linhas_por_dia).sort_values("Dia")
+
+    st.markdown("#### Produtividade ao longo do mês")
+    st.caption("Clique numa barra para ver o detalhe daquele dia.")
+    selecao_dia = alt.selection_point(name=f"selecao_dia_{key_prefix}", fields=["Dia_fmt"], on="click", empty=False)
+    grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
+        x=alt.X("Dia_fmt:N", sort=None, title=None),
+        y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
+        tooltip=["Dia_fmt", "Fechados", "Calculados", "Total"],
+        opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
+    ).add_params(selecao_dia)
+    evento_grafico = st.altair_chart(
+        grafico_dia, use_container_width=True, on_select="rerun", key=f"grafico_prod_mes_{key_prefix}",
+    )
+    pontos_clicados = evento_grafico.selection.get(f"selecao_dia_{key_prefix}") if evento_grafico else None
+    dia_clicado = pontos_clicados[0].get("Dia_fmt") if pontos_clicados else None
+    # A seleção do Vega-Lite persiste entre reruns até um novo clique no
+    # gráfico -- sem essa comparação, o mesmo clique antigo seria
+    # reprocessado a cada rerun (inclusive sobrescrevendo de volta quando o
+    # usuário escolhe "Todos os dias" no selectbox acima). Só age quando o
+    # clique em si mudou desde o último processado.
+    chave_click_ultimo = f"_dia_click_ultimo_{key_prefix}"
+    if dia_clicado != st.session_state.get(chave_click_ultimo):
+        st.session_state[chave_click_ultimo] = dia_clicado
+        # dia_clicado None = clicou fora das barras (deseleção) -> volta pra "Todos os dias".
+        alvo = dia_clicado or "Todos os dias"
+        if alvo != escolha_dia:
+            st.session_state["_dia_click_pendente"] = alvo
+            st.rerun()
+
+    with st.expander("Ver tabela por dia"):
+        st.dataframe(
+            df_por_dia.drop(columns=["Dia"]).rename(columns={"Dia_fmt": "Dia"}),
+            use_container_width=True, hide_index=True,
+        )
+
+
 st.set_page_config(page_title="Produtividade", page_icon="", layout="wide")
 
 if not st.session_state.get("logado", False):
@@ -207,11 +293,16 @@ if _ve_geral:
         )
         st.altair_chart(barras_auditores + rotulos_auditores, use_container_width=True)
 
-        if dia_filtro is not None:
-            st.divider()
-            st.markdown("### Detalhe de Processos do Dia")
-            auditor_detalhe = st.selectbox("Ver detalhe de processos de:", tabela_auditores["Auditor"].tolist())
-            _secao_detalhe_dia(df, dia_filtro, auditor_detalhe)
+        st.divider()
+        st.markdown("### Ver produtividade individual")
+        st.caption("Mesma visão que o próprio auditor tem da produtividade dele.")
+        auditor_escolhido = st.selectbox(
+            "Auditor", tabela_auditores["Auditor"].tolist(), key="gestor_auditor_escolhido",
+        )
+        _secao_produtividade_individual(
+            df, auditor_escolhido, dias, dia_filtro, escolha_dia,
+            key_prefix=f"gestor_{auditor_escolhido}", titulo=f"Produtividade de {auditor_escolhido}",
+        )
 
 else:
     if not _usuario_sigo:
@@ -224,70 +315,6 @@ else:
 
     st.divider()
 
-    st.markdown("### Minha Produtividade")
-    st.caption("Só conta processos em estado final (Fechado ou Calculado) — Consistido ainda está em aberto e não entra na contagem.")
-    minha_tabela = produtividade_por_auditor(df, dia=dia_filtro, auditor=_usuario_sigo)
-    if minha_tabela.empty:
-        st.info("Nenhum processo fechado/calculado" + (f" em {escolha_dia}." if dia_filtro else " neste mês."))
-    else:
-        linha = minha_tabela.iloc[0]
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Fechados", _fmt_num(int(linha["Fechados"])))
-        c2.metric("Calculados", _fmt_num(int(linha["Calculados"])))
-        c3.metric("Total", _fmt_num(int(linha["Total"])))
-
-        if dia_filtro is not None:
-            st.markdown("#### Detalhe de Processos do Dia")
-            _secao_detalhe_dia(df, dia_filtro, _usuario_sigo)
-
-    if dias:
-        linhas_por_dia = []
-        for d in dias:
-            t = produtividade_por_auditor(df, dia=d, auditor=_usuario_sigo)
-            if not t.empty:
-                linha = t.iloc[0]
-                linhas_por_dia.append({
-                    "Dia": d,
-                    "Dia_fmt": d.strftime("%d/%m/%Y"),
-                    "Fechados": int(linha["Fechados"]),
-                    "Calculados": int(linha["Calculados"]),
-                    "Total": int(linha["Total"]),
-                })
-
-        if linhas_por_dia:
-            df_por_dia = pd.DataFrame(linhas_por_dia).sort_values("Dia")
-
-            st.markdown("#### Produtividade ao longo do mês")
-            st.caption("Clique numa barra para ver o detalhe daquele dia.")
-            selecao_dia = alt.selection_point(name="selecao_dia", fields=["Dia_fmt"], on="click", empty=False)
-            grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
-                x=alt.X("Dia_fmt:N", sort=None, title=None),
-                y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
-                tooltip=["Dia_fmt", "Fechados", "Calculados", "Total"],
-                opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
-            ).add_params(selecao_dia)
-            evento_grafico = st.altair_chart(
-                grafico_dia, use_container_width=True, on_select="rerun", key="grafico_prod_mes",
-            )
-            pontos_clicados = evento_grafico.selection.get("selecao_dia") if evento_grafico else None
-            dia_clicado = pontos_clicados[0].get("Dia_fmt") if pontos_clicados else None
-            # A seleção do Vega-Lite persiste entre reruns até um novo clique
-            # no gráfico — sem essa comparação, o mesmo clique antigo seria
-            # reprocessado a cada rerun (inclusive sobrescrevendo de volta
-            # quando o usuário escolhe "Todos os dias" no selectbox acima).
-            # Só age quando o clique em si mudou desde o último processado.
-            if dia_clicado != st.session_state.get("_dia_click_ultimo"):
-                st.session_state["_dia_click_ultimo"] = dia_clicado
-                # dia_clicado None = clicou fora das barras (deseleção) -> volta pra "Todos os dias".
-                alvo = dia_clicado or "Todos os dias"
-                if alvo != escolha_dia:
-                    st.session_state["_dia_click_pendente"] = alvo
-                    st.rerun()
-
-            with st.expander("Ver tabela por dia"):
-                st.dataframe(
-                    df_por_dia.drop(columns=["Dia"]).rename(columns={"Dia_fmt": "Dia"}),
-                    use_container_width=True, hide_index=True,
-                )
-        else:
-            st.caption("Nenhum dia com produtividade registrada ainda.")
+    _secao_produtividade_individual(
+        df, _usuario_sigo, dias, dia_filtro, escolha_dia, key_prefix="proprio", titulo="Minha Produtividade",
+    )
