@@ -6,6 +6,23 @@ import bcrypt
 from datetime import datetime, timezone
 from cryptography.fernet import Fernet
 
+# Dado bruto mensal (base_ia_guias, base_imagem_procedimentos) mora no Turso,
+# não no Supabase -- são as 2 maiores tabelas e não têm dado sensível (nunca
+# tiveram nome de prestador/CPF/CNPJ, só guia/procedimento/operador). Listas
+# abaixo são a ÚNICA porta de entrada pro Turso: qualquer campo fora dessas
+# listas é rejeitado em vez de ignorado silenciosamente (ver
+# _importar_por_mes_turso) -- trava contra um campo sensível entrar por
+# engano numa edição futura.
+TURSO_CAMPOS_BASE_IA = (
+    "nu_ordem", "nu_guia", "cd_procedimento", "ds_grupo",
+    "liberacao", "mes_referencia", "total_guias_processo", "cd_operador_atend",
+)
+TURSO_CAMPOS_BASE_IMAGEM = (
+    "nu_guia", "cd_procedimento", "dente_inicial", "status_proced",
+    "tem_imagem", "mes_referencia",
+)
+
+
 class DatabaseManager:
     def __init__(self):
         # Acessa os segredos do Streamlit
@@ -26,6 +43,13 @@ class DatabaseManager:
             "Prefer": "return=representation"
         }
 
+        # Turso: só as tabelas de dado bruto mensal (ver TURSO_CAMPOS_* acima).
+        # URL vem como libsql://..., a API HTTP usa https://.
+        turso_cfg = st.secrets.get("turso", {})
+        self.turso_url = turso_cfg.get("url", "").replace("libsql://", "https://")
+        self._turso_token_leitura = turso_cfg.get("token_leitura", "")
+        self._turso_token_escrita = turso_cfg.get("token_escrita", "")
+
     def _admin_headers(self):
         """Headers com service_role para operações que exigem privilégio total.
         Nunca chamado a partir de código que possa ser acionado por usuário
@@ -44,6 +68,159 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
+    # --- Turso (API HTTP /v2/pipeline) -- só base_ia_guias/base_imagem_procedimentos ---
+    @staticmethod
+    def _turso_arg(valor):
+        """Converte um valor Python pro formato tipado que a API do Turso espera em `args`."""
+        if valor is None:
+            return {"type": "null"}
+        if isinstance(valor, bool):
+            return {"type": "integer", "value": "1" if valor else "0"}
+        if isinstance(valor, int):
+            return {"type": "integer", "value": str(valor)}
+        if isinstance(valor, float):
+            return {"type": "float", "value": valor}
+        return {"type": "text", "value": str(valor)}
+
+    @staticmethod
+    def _turso_valor(celula: dict):
+        """Converte uma célula tipada do resultado do Turso de volta pra Python."""
+        tipo = celula.get("type")
+        if tipo == "null":
+            return None
+        if tipo == "integer":
+            return int(celula["value"])
+        if tipo == "float":
+            return float(celula["value"])
+        return celula.get("value")
+
+    def _turso_linhas(self, resultado: dict) -> list:
+        """Converte {cols, rows} do Turso numa lista de dicts (mesmo formato
+        que os métodos do Supabase já devolvem)."""
+        colunas = [c["name"] for c in resultado.get("cols", [])]
+        return [
+            {col: self._turso_valor(cel) for col, cel in zip(colunas, linha)}
+            for linha in resultado.get("rows", [])
+        ]
+
+    def _turso_pipeline(self, statements: list, token: str) -> list:
+        """Executa uma lista de statements SQL ({"sql":..., "args":[...]})
+        numa única requisição HTTP ao Turso. Retorna a lista de `result`,
+        um por statement, na mesma ordem."""
+        if not token:
+            raise RuntimeError("Token do Turso não configurado em st.secrets['turso']")
+        body = {"requests": [{"type": "execute", "stmt": s} for s in statements] + [{"type": "close"}]}
+        resp = requests.post(
+            f"{self.turso_url}/v2/pipeline",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=body,
+            timeout=60,
+        )
+        if not resp.ok:
+            raise RuntimeError(f"Falha no Turso: HTTP {resp.status_code} — {resp.text[:500]}")
+        data = resp.json()
+        resultados = []
+        for item in data["results"][:-1]:  # último item é sempre o "close"
+            if item["type"] == "error":
+                raise RuntimeError(f"Falha no Turso (SQL): {item.get('error')}")
+            resultados.append(item["response"]["result"])
+        return resultados
+
+    def _importar_por_mes_turso(
+        self, tabela: str, registros: list, mes_referencia: str,
+        campos_permitidos: tuple, manter_meses: int = 2, lote: int = 500,
+        ao_progredir=None, retomar: bool = False,
+    ) -> int:
+        """Equivalente ao _importar_por_mes (Supabase), mas pro Turso: apaga
+        o mês informado, insere os novos registros em lotes (multi-row
+        INSERT) e mantém só `manter_meses` mais recentes. Só aceita campos
+        em `campos_permitidos` -- ver comentário nas constantes TURSO_CAMPOS_*
+        no topo do arquivo. `ao_progredir(enviados, total)`, se informado, é
+        chamado a cada lote inserido -- pra UI mostrar barra de progresso.
+
+        `retomar=True`: pula o DELETE e conta quantas linhas desse mês já
+        existem na tabela, pulando essa quantidade no INÍCIO de `registros`
+        antes de inserir o resto -- retoma um import que caiu no meio sem
+        reenviar tudo de novo. Só é seguro se `registros` vier do MESMO
+        arquivo/mesma ordem do import interrompido (a leitura do xlsx é
+        sempre na mesma ordem, então reenviar o mesmo arquivo é seguro)."""
+        permitidos = set(campos_permitidos)
+        for reg in registros:
+            extras = set(reg.keys()) - permitidos
+            if extras:
+                raise ValueError(
+                    f"Campo(s) não permitido(s) pro Turso ({tabela}): {sorted(extras)}. "
+                    f"Só {sorted(permitidos)} são aceitos."
+                )
+
+        token = self._turso_token_escrita
+
+        def _apagar_em_lotes(mes: str, lote_delete: int = 20000):
+            # Mesmo cuidado do Supabase: apaga em páginas em vez de um DELETE
+            # só, pra nunca arriscar estourar timeout num mês com centenas de
+            # milhares de linhas.
+            while True:
+                resultado = self._turso_pipeline([{
+                    "sql": f"DELETE FROM {tabela} WHERE id IN "
+                           f"(SELECT id FROM {tabela} WHERE mes_referencia = ? LIMIT ?)",
+                    "args": [self._turso_arg(mes), self._turso_arg(lote_delete)],
+                }], token)[0]
+                if int(resultado.get("affected_row_count") or 0) == 0:
+                    break
+
+        total_registros = len(registros)
+        ja_inseridas = 0
+        if retomar:
+            resultado_count = self._turso_pipeline([{
+                "sql": f"SELECT COUNT(*) AS n FROM {tabela} WHERE mes_referencia = ?",
+                "args": [self._turso_arg(mes_referencia)],
+            }], token)[0]
+            ja_inseridas = int(resultado_count["rows"][0][0]["value"])
+        else:
+            _apagar_em_lotes(mes_referencia)
+
+        colunas = list(campos_permitidos)
+        pendentes = registros[ja_inseridas:]
+        total = ja_inseridas
+        if ao_progredir and ja_inseridas:
+            ao_progredir(total, total_registros)
+        for i in range(0, len(pendentes), lote):
+            pedaco = pendentes[i:i + lote]
+            placeholder_linha = "(" + ",".join("?" * len(colunas)) + ")"
+            sql = (
+                f"INSERT INTO {tabela} ({','.join(colunas)}) VALUES "
+                + ",".join([placeholder_linha] * len(pedaco))
+            )
+            args = [self._turso_arg(reg.get(col)) for reg in pedaco for col in colunas]
+            self._turso_pipeline([{"sql": sql, "args": args}], token)
+            total += len(pedaco)
+            if ao_progredir:
+                ao_progredir(total, total_registros)
+
+        # Quais meses existem, pra decidir o que apagar: consulta a
+        # _controle_meses (poucas linhas) em vez de "SELECT DISTINCT
+        # mes_referencia FROM tabela", que varreria a tabela inteira
+        # (centenas de milhares de linhas) só pra achar 1-2 valores --
+        # desperdício de read/write no Turso.
+        self._turso_pipeline([{
+            "sql": "INSERT INTO _controle_meses (tabela, mes_referencia) VALUES (?, ?) "
+                   "ON CONFLICT(tabela, mes_referencia) DO NOTHING",
+            "args": [self._turso_arg(tabela), self._turso_arg(mes_referencia)],
+        }], token)
+        resultado_meses = self._turso_pipeline([{
+            "sql": "SELECT mes_referencia FROM _controle_meses WHERE tabela = ?",
+            "args": [self._turso_arg(tabela)],
+        }], token)[0]
+        meses = sorted({linha[0]["value"] for linha in resultado_meses.get("rows", [])}, reverse=True)
+        for mes_antigo in meses[manter_meses:]:
+            _apagar_em_lotes(mes_antigo)
+            self._turso_pipeline([{
+                "sql": "DELETE FROM _controle_meses WHERE tabela = ? AND mes_referencia = ?",
+                "args": [self._turso_arg(tabela), self._turso_arg(mes_antigo)],
+            }], token)
+
+        return total
+
     def buscar_guias_vistas(self, nu_guias: list) -> set:
         """Guias (NU_GUIA) já marcadas como auditadas/vistas, dentre as informadas.
 
@@ -57,20 +234,25 @@ class DatabaseManager:
         return {item["nu_guia"] for item in r.json()} if r.ok else set()
 
     # --- Base IA (Amostragem BETA): guias LIBERACAO=N importadas mensalmente ---
+    # Tabela vive no Turso (dado bruto, sem informação sensível) -- ver
+    # TURSO_CAMPOS_BASE_IA no topo do arquivo.
     def buscar_guias_ia_por_processo(self, nu_ordem: str) -> list:
         """Guias com LIBERACAO=N da base IA para um número de processo (NU_ORDEM)."""
-        url = (
-            f"{self.supabase_url}/rest/v1/base_ia_guias"
-            f"?nu_ordem=eq.{nu_ordem}&select=nu_guia,cd_procedimento,ds_grupo,total_guias_processo,cd_operador_atend"
-        )
-        r = requests.get(url, headers=self.headers)
-        return r.json() if r.ok else []
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, total_guias_processo, cd_operador_atend "
+                   "FROM base_ia_guias WHERE nu_ordem = ?",
+            "args": [self._turso_arg(str(nu_ordem))],
+        }], self._turso_token_leitura)[0]
+        return self._turso_linhas(resultado)
 
-    def _importar_por_mes(self, tabela: str, registros: list, mes_referencia: str, lote: int = 2000) -> int:
+    def _importar_por_mes(
+        self, tabela: str, registros: list, mes_referencia: str, lote: int = 2000, manter_meses: int = 2
+    ) -> int:
         """Substitui os dados do `mes_referencia` informado numa tabela com
-        coluna `mes_referencia` (reimportação idempotente) e mantém só os 2
-        meses mais recentes. Usado por importar_base_ia e importar_base_imagem
-        — mesmo padrão de importação mensal nas duas tabelas."""
+        coluna `mes_referencia` (reimportação idempotente) e mantém só os
+        `manter_meses` mais recentes. Usado por importar_relatorio_5201 --
+        base_ia_guias/base_imagem_procedimentos migraram pro Turso, ver
+        _importar_por_mes_turso."""
         def _garantir_ok(response, contexto: str):
             if not response.ok:
                 raise RuntimeError(
@@ -86,8 +268,29 @@ class DatabaseManager:
         headers_admin = self._admin_headers()
         headers_insert = {**headers_admin, "Prefer": "return=minimal"}
 
-        r_delete = requests.delete(f"{url}?mes_referencia=eq.{mes_referencia}", headers=headers_admin)
-        _garantir_ok(r_delete, f"apagar dados antigos do mês {mes_referencia} em {tabela}")
+        def _apagar_em_lotes(filtro_query: str, contexto: str, lote_delete: int = 5000):
+            # Um DELETE só cobrindo o mês inteiro estoura o statement_timeout
+            # de 2min em tabelas grandes (ex: base_imagem_procedimentos, ~900k
+            # linhas/mês). Pega o maior id de uma página ordenada e apaga tudo
+            # até ali -- URL curta (não depende de listar todos os ids no
+            # filtro) e cada lote rápido o bastante pra nunca chegar perto do
+            # timeout.
+            while True:
+                r_pagina = requests.get(
+                    f"{url}?{filtro_query}&select=id&order=id.asc&limit={lote_delete}",
+                    headers=self.headers,
+                )
+                _garantir_ok(r_pagina, f"listar ids antigos para apagar ({contexto})")
+                pagina = r_pagina.json()
+                if not pagina:
+                    break
+                maior_id = pagina[-1]["id"]
+                r_delete = requests.delete(
+                    f"{url}?{filtro_query}&id=lte.{maior_id}", headers=headers_admin
+                )
+                _garantir_ok(r_delete, f"apagar lote antigo ({contexto})")
+
+        _apagar_em_lotes(f"mes_referencia=eq.{mes_referencia}", f"mês {mes_referencia} em {tabela}")
 
         total = 0
         for i in range(0, len(registros), lote):
@@ -99,44 +302,66 @@ class DatabaseManager:
         r_meses = requests.get(f"{url}?select=mes_referencia", headers=self.headers)
         if r_meses.ok:
             meses = sorted({item["mes_referencia"] for item in r_meses.json()}, reverse=True)
-            antigos = meses[2:]
+            antigos = meses[manter_meses:]
             if antigos:
                 filtro = ",".join(antigos)
-                r_cleanup = requests.delete(f"{url}?mes_referencia=in.({filtro})", headers=headers_admin)
-                _garantir_ok(r_cleanup, f"limpar meses antigos ({', '.join(antigos)}) em {tabela}")
+                _apagar_em_lotes(f"mes_referencia=in.({filtro})", f"meses antigos ({', '.join(antigos)}) em {tabela}")
 
         return total
 
-    def importar_base_ia(self, registros: list, mes_referencia: str, lote: int = 2000) -> int:
-        """Substitui os dados do `mes_referencia` informado (reimportação
-        idempotente) e mantém só os 2 meses mais recentes na tabela.
+    def importar_base_ia(
+        self, registros: list, mes_referencia: str, lote: int = 500, ao_progredir=None, retomar: bool = False
+    ) -> int:
+        """Substitui os dados do `mes_referencia` informado no Turso
+        (reimportação idempotente) e mantém só os 2 meses mais recentes.
 
         `registros`: lista de dicts com nu_ordem/nu_guia/cd_procedimento/
         ds_grupo/liberacao/mes_referencia já prontos para inserir.
+        `ao_progredir(enviados, total)`: chamado a cada lote, opcional.
+        `retomar`: retoma um import interrompido em vez de apagar e reinserir
+        tudo -- ver docstring de _importar_por_mes_turso.
         """
-        return self._importar_por_mes("base_ia_guias", registros, mes_referencia, lote)
+        return self._importar_por_mes_turso(
+            "base_ia_guias", registros, mes_referencia, TURSO_CAMPOS_BASE_IA,
+            manter_meses=2, lote=lote, ao_progredir=ao_progredir, retomar=retomar,
+        )
 
-    def importar_base_imagem(self, registros: list, mes_referencia: str, lote: int = 2000) -> int:
-        """Substitui os dados do `mes_referencia` informado (reimportação
-        idempotente) e mantém só os 2 meses mais recentes na tabela.
+    def importar_base_imagem(
+        self, registros: list, mes_referencia: str, lote: int = 500, ao_progredir=None, retomar: bool = False
+    ) -> int:
+        """Substitui os dados do `mes_referencia` informado no Turso
+        (reimportação idempotente) e mantém só o mês mais recente -- essa é
+        a maior tabela (era ~193MB, 91% do banco Supabase antes de migrar),
+        então guarda só 1 mês em vez de 2 pra conter o espaço.
 
         `registros`: lista de dicts com nu_guia/cd_procedimento/dente_inicial/
         status_proced/tem_imagem/mes_referencia já prontos para inserir.
+        `ao_progredir(enviados, total)`: chamado a cada lote, opcional.
+        `retomar`: retoma um import interrompido em vez de apagar e reinserir
+        tudo -- ver docstring de _importar_por_mes_turso.
         """
-        return self._importar_por_mes("base_imagem_procedimentos", registros, mes_referencia, lote)
+        # tem_imagem é bool em Python; Turso/SQLite guarda como INTEGER 0/1.
+        registros = [{**r, "tem_imagem": 1 if r.get("tem_imagem") else 0} for r in registros]
+        return self._importar_por_mes_turso(
+            "base_imagem_procedimentos", registros, mes_referencia, TURSO_CAMPOS_BASE_IMAGEM,
+            manter_meses=1, lote=lote, ao_progredir=ao_progredir, retomar=retomar,
+        )
 
     def buscar_imagem_por_guias(self, nu_guias: list) -> list:
         """Registros de imagem (guia, procedimento, dente, status, tem_imagem)
         para as guias informadas."""
         if not nu_guias:
             return []
-        filtro = ",".join(str(g) for g in nu_guias)
-        url = (
-            f"{self.supabase_url}/rest/v1/base_imagem_procedimentos"
-            f"?nu_guia=in.({filtro})&select=nu_guia,cd_procedimento,dente_inicial,status_proced,tem_imagem"
-        )
-        r = requests.get(url, headers=self.headers)
-        return r.json() if r.ok else []
+        placeholders = ",".join("?" * len(nu_guias))
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_guia, cd_procedimento, dente_inicial, status_proced, tem_imagem "
+                   f"FROM base_imagem_procedimentos WHERE nu_guia IN ({placeholders})",
+            "args": [self._turso_arg(str(g)) for g in nu_guias],
+        }], self._turso_token_leitura)[0]
+        linhas = self._turso_linhas(resultado)
+        for linha in linhas:
+            linha["tem_imagem"] = bool(linha["tem_imagem"])
+        return linhas
 
     # --- Procedimentos ignorados na Amostragem (persistente, por especialidade) ---
     def carregar_procs_ignorados(self) -> dict:
