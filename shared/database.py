@@ -407,6 +407,34 @@ class DatabaseManager:
         r = requests.post(url, headers=headers_insert, json=data)
         return r.ok
 
+    # --- Histórico de glosas por prestador (risco/desvio na Amostragem) ---
+    def salvar_historico_glosas(self, registros: list, lote: int = 500) -> int:
+        """Insere ocorrências de glosa no histórico por prestador --
+        idempotente via UNIQUE(guia, procedimento, glosa, subglosa):
+        reprocessar o mesmo 5302/5310 não duplica, só ignora o que já
+        existe (Prefer: resolution=ignore-duplicates, mesmo padrão de
+        salvar_procs_ignorados).
+
+        `registros`: lista de dicts com processo/prestador/mes_referencia/
+        procedimento/glosa/subglosa/justificativa/guia/origem já prontos.
+        Retorna quantos registros foram enviados (não necessariamente todos
+        novos -- duplicatas são silenciosamente ignoradas pelo Postgres)."""
+        if not registros:
+            return 0
+        url = (
+            f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
+            "?on_conflict=guia,procedimento,glosa,subglosa"
+        )
+        headers_insert = {**self.headers, "Prefer": "resolution=ignore-duplicates,return=minimal"}
+        total = 0
+        for i in range(0, len(registros), lote):
+            pedaco = registros[i:i + lote]
+            r = requests.post(url, headers=headers_insert, json=pedaco)
+            if not r.ok:
+                raise RuntimeError(f"Falha ao salvar histórico de glosas: HTTP {r.status_code} — {r.text[:500]}")
+            total += len(pedaco)
+        return total
+
     def remover_procs_ignorados(self, pares: list) -> bool:
         """Remove pares (especialidade, cd_procedimento) da lista salva —
         volta a considerar o procedimento na análise por padrão."""

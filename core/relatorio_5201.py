@@ -6,24 +6,29 @@ import streamlit as st
 
 # Campos do REL5201 usados pelo painel de Produtividade e pelo aviso de
 # status/auditor na Amostragem. O relatório tem dezenas de colunas
-# (financeiro, filial, prestador, CPF/CNPJ...) que não servem a nenhuma das
-# duas telas e por isso não são lidas nem armazenadas (minimiza o que fica
-# gravado, mesmo cifrado).
+# (financeiro, filial, CPF/CNPJ...) que não servem a nenhuma das duas telas
+# e por isso não são lidas nem armazenadas (minimiza o que fica gravado,
+# mesmo cifrado).
 COLUNAS_NECESSARIAS = {
     "ORDEM", "STATUS", "QT_PROCEDIMENTO",
     "DATA_CONSISTENCIA", "LOGIN_CONSISTENCIA",
     "DATA_FECHAMENTO", "LOGIN_FECHAMENTO",
 }
 # Colunas extras, só pra cortes de canal de entrada do processo (EXECUCAO:
-# App/Misto/Não App; DATA_RECEBIMENTO_PROCESSO_FISICO: data de entrada) e pra
+# App/Misto/Não App; DATA_RECEBIMENTO_PROCESSO_FISICO: data de entrada), pra
 # contagem oficial de guias (QT_GUIAS/QUANTIDADE_*_LIBERADOS_IA -- vem pronta
 # do sistema, mais confiável que recalcular a partir da planilha da base IA,
-# que é só um snapshot mensal e pode ficar defasado). Opcionais -- se o
-# arquivo não tiver (formato mais antigo, ou exportação diferente), a
-# importação não falha, só fica sem esse corte específico.
+# que é só um snapshot mensal e pode ficar defasado) e pro nome do prestador
+# (PRESTADOR -- reversão parcial e consciente da decisão de não capturar
+# dado de prestador: só o nome, sem CPF/CNPJ, usado como chave pra cruzar
+# com o histórico de glosas do Relatório 5302/5310 -- ver
+# historico_glosas_prestador). Opcionais -- se o arquivo não tiver (formato
+# mais antigo, ou exportação diferente), a importação não falha, só fica
+# sem esse corte específico.
 COLUNAS_OPCIONAIS = {
     "EXECUCAO", "DATA_RECEBIMENTO_PROCESSO_FISICO",
     "QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
+    "PRESTADOR",
 }
 CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
@@ -144,6 +149,14 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
         else:
             df[col] = pd.array([None] * len(df), dtype="Int64")
+
+    if "PRESTADOR" in df.columns:
+        # Sem _norm() (que uppercase e tira acento) -- mantém o mesmo
+        # formato do nome que o parser do 5302 extrai, pra bater na hora de
+        # cruzar (ver historico_glosas_prestador).
+        df["PRESTADOR"] = df["PRESTADOR"].fillna("").astype(str).str.strip()
+    else:
+        df["PRESTADOR"] = ""
 
     return df[CAMPOS_REGISTRO]
 

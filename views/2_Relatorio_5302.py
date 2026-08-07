@@ -32,6 +32,51 @@ st.caption(
     "prestador solicitou restauração para um dente ausente\"."
 )
 
+def _mes_referencia_de_producao(producao: str) -> str:
+    """Converte 'MM/YYYY' (formato do parser do 5302) para 'YYYY-MM'."""
+    try:
+        mes, ano = producao.strip().split("/")
+        if len(mes) == 2 and len(ano) == 4:
+            return f"{ano}-{mes}"
+    except (AttributeError, ValueError):
+        pass
+    return ""
+
+
+def _salvar_historico_glosas_silenciosamente(glosas: list, meta: dict) -> None:
+    """Acumula ocorrências de glosa por prestador para uso estatístico futuro
+    (Fase 2, risco/desvio na Amostragem). Não deve afetar o fluxo do 5302
+    de forma alguma -- por isso o try/except amplo."""
+    try:
+        prestador = (meta.get("prestador") or "").strip()
+        processo = (meta.get("processo") or "").strip()
+        if not prestador or not glosas:
+            return
+        mes_referencia = _mes_referencia_de_producao(meta.get("producao", ""))
+        vistos = set()
+        registros = []
+        for g in glosas:
+            chave = (g.get("Guia"), g.get("Cód. Procedimento"), g.get("Glosa"), g.get("Cód. Sub-Glosa"))
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            registros.append({
+                "processo": processo,
+                "prestador": prestador,
+                "mes_referencia": mes_referencia,
+                "procedimento": g.get("Cód. Procedimento") or "",
+                "glosa": g.get("Glosa") or "",
+                "subglosa": g.get("Cód. Sub-Glosa") or "",
+                "justificativa": g.get("Descrição Oficial") or "",
+                "guia": g.get("Guia") or "",
+                "origem": "5302",
+            })
+        if registros:
+            st.session_state.db.salvar_historico_glosas(registros)
+    except Exception:
+        pass
+
+
 pdf_file = st.file_uploader("Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"])
 
 if pdf_file is not None:
@@ -44,6 +89,7 @@ if pdf_file is not None:
             st.session_state["dados_pdf"] = glosas
             st.session_state["meta_pdf"] = meta
             st.session_state["pdf_name"] = pdf_file.name
+            _salvar_historico_glosas_silenciosamente(glosas, meta)
 
     dados = st.session_state.get("dados_pdf", [])
     meta = st.session_state.get("meta_pdf", {"processo": "Desconhecido", "prestador": "Desconhecido", "producao": "Desconhecida"})
