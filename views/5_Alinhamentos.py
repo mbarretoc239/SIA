@@ -87,9 +87,9 @@ with aba_historico:
 
         col_cat, col_ano, col_busca = st.columns([1, 1, 2])
         with col_cat:
-            categoria_filtro = st.selectbox("Categoria", ["Todas"] + CATEGORIAS)
+            categoria_filtro = st.selectbox("Categoria", ["Todas"] + CATEGORIAS, width=300)
         with col_ano:
-            ano_filtro = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis])
+            ano_filtro = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis], width=300)
         with col_busca:
             busca = st.text_input("Pesquisar (título ou conteúdo)", placeholder="Ex: biometria, glosa 480...")
 
@@ -166,11 +166,11 @@ if pode_gerenciar:
         with col_busca2:
             busca2 = st.text_input("Pesquisar", placeholder="Ex: biometria, glosa 480...", key="gerenciar_busca")
         with col_cat2:
-            categoria_filtro2 = st.selectbox("Categoria", ["Todas"] + CATEGORIAS, key="gerenciar_categoria")
+            categoria_filtro2 = st.selectbox("Categoria", ["Todas"] + CATEGORIAS, key="gerenciar_categoria", width=300)
         with col_equipe2:
-            equipe_filtro2 = st.selectbox("Equipe", ["Todas"] + NIVEIS, key="gerenciar_equipe")
+            equipe_filtro2 = st.selectbox("Equipe", ["Todas"] + NIVEIS, key="gerenciar_equipe", width=300)
         with col_ano2:
-            ano_filtro2 = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis2], key="gerenciar_ano")
+            ano_filtro2 = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis2], key="gerenciar_ano", width=300)
 
         # Carregados uma vez, usados tanto no formulário (ciência detalhada do
         # item selecionado) quanto na lista (mini indicador por linha).
@@ -196,10 +196,10 @@ if pode_gerenciar:
             col_c1, col_c2, col_c3 = st.columns(3)
             with col_c1:
                 idx_cat = CATEGORIAS.index(a_alvo.get("categoria")) if a_alvo.get("categoria") in CATEGORIAS else 0
-                e_categoria = st.selectbox("Categoria", CATEGORIAS, index=idx_cat, key="edit_alinh_categoria")
+                e_categoria = st.selectbox("Categoria", CATEGORIAS, index=idx_cat, key="edit_alinh_categoria", width=300)
             with col_c2:
                 idx_nivel = NIVEIS.index(a_alvo.get("nivel_minimo")) if a_alvo.get("nivel_minimo") in NIVEIS else 1
-                e_nivel = st.selectbox("Nível mínimo (quem recebe e precisa confirmar ciência)", NIVEIS, index=idx_nivel, key="edit_alinh_nivel")
+                e_nivel = st.selectbox("Nível mínimo (quem recebe e precisa confirmar ciência)", NIVEIS, index=idx_nivel, key="edit_alinh_nivel", width=300)
             with col_c3:
                 e_data = None
                 if em_edicao != "NOVO" and a_alvo.get("created_at"):

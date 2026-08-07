@@ -162,15 +162,15 @@ if "aprovacao_equipe" in abas_por_id:
                     with st.expander(f"⏳ {row['nome_completo']} ({row['usuario_sigo']})"):
                         c1, c2, c3 = st.columns(3)
                         with c1:
-                            novo_status = st.selectbox("Status", ["Pendente", "Ativo", "Bloqueado"], key=f"s_{row['id']}")
+                            novo_status = st.selectbox("Status", ["Pendente", "Ativo", "Bloqueado"], key=f"s_{row['id']}", width=300)
                         with c2:
                             EQUIPES_CADASTRO = ["Contas", "Auditoria", "CISO", "Gestor"]
                             idx_equipe = EQUIPES_CADASTRO.index(row['equipe']) if row['equipe'] in EQUIPES_CADASTRO else 0
-                            nova_equipe = st.selectbox("Equipe", EQUIPES_CADASTRO, index=idx_equipe, key=f"e_{row['id']}")
+                            nova_equipe = st.selectbox("Equipe", EQUIPES_CADASTRO, index=idx_equipe, key=f"e_{row['id']}", width=300)
                         with c3:
                             ROLES_CADASTRO = ["Contas", "Auditor", "CISO", "Gestor", "Admin"]
                             idx_role = ROLES_CADASTRO.index(row['role_interno']) if row['role_interno'] in ROLES_CADASTRO else 0
-                            novo_role = st.selectbox("Role do Sistema", ROLES_CADASTRO, index=idx_role, key=f"r_{row['id']}")
+                            novo_role = st.selectbox("Role do Sistema", ROLES_CADASTRO, index=idx_role, key=f"r_{row['id']}", width=300)
                         
                         col_save, col_del = st.columns(2)
                         with col_save:
@@ -205,7 +205,7 @@ if "aprovacao_equipe" in abas_por_id:
                 }
                 col_u_del, col_b_del = st.columns([3, 1])
                 with col_u_del:
-                    label_del = st.selectbox("Selecione o Usuário", list(opcoes_del.keys()), key="del_alvo_usuario")
+                    label_del = st.selectbox("Selecione o Usuário", list(opcoes_del.keys()), key="del_alvo_usuario", width=300)
                 with col_b_del:
                     st.write("")
                     st.write("")
@@ -241,7 +241,7 @@ if "aprovacao_equipe" in abas_por_id:
                 }
                 col_u, col_s = st.columns([2, 2])
                 with col_u:
-                    label_alvo = st.selectbox("Usuário", list(opcoes_reset.keys()), key="reset_alvo")
+                    label_alvo = st.selectbox("Usuário", list(opcoes_reset.keys()), key="reset_alvo", width=300)
                 with col_s:
                     senha_temp = st.text_input(
                         "Senha temporária",
@@ -281,9 +281,9 @@ if "debug_testes" in abas_por_id:
             t_conteudo = st.text_area("Conteúdo", value="Conteúdo de teste para validar o fluxo de notificação.", height=80)
             col_t1, col_t2 = st.columns(2)
             with col_t1:
-                t_categoria = st.selectbox("Categoria", ["Geral", "Técnico", "Administrativo", "CAP"], key="debug_categoria")
+                t_categoria = st.selectbox("Categoria", ["Geral", "Técnico", "Administrativo", "CAP"], key="debug_categoria", width=300)
             with col_t2:
-                t_nivel = st.selectbox("Nível mínimo", ["Contas", "Auditor", "CISO", "Gestor"], index=0, key="debug_nivel")
+                t_nivel = st.selectbox("Nível mínimo", ["Contas", "Auditor", "CISO", "Gestor"], index=0, key="debug_nivel", width=300)
 
             if st.form_submit_button("Registrar Alinhamento de Teste", type="primary"):
                 titulo_final = f"[TESTE] {t_titulo}" if not t_titulo.startswith("[TESTE]") else t_titulo
@@ -304,7 +304,7 @@ if "debug_testes" in abas_por_id:
             st.info("Nenhum alinhamento cadastrado.")
         else:
             opcoes = {f"[{a.get('categoria', 'Geral')}] {a.get('titulo', '')}": a["id"] for a in todos_alinhamentos}
-            escolha = st.selectbox("Alinhamento", list(opcoes.keys()), key="debug_notif_select")
+            escolha = st.selectbox("Alinhamento", list(opcoes.keys()), key="debug_notif_select", width=300)
             if st.button("Resetar minha ciência e forçar popup", type="primary"):
                 aid_escolhido = opcoes[escolha]
                 if db.remover_leitura_alinhamento(aid_escolhido, usuario_id_admin):
@@ -384,7 +384,7 @@ if "tabelas_base" in abas_por_id:
             df_glosas = pd.DataFrame(rows)
 
             if not df_glosas.empty:
-                filtro_tipo = st.selectbox("Filtrar por Tipo:", ["Todos"] + list(df_glosas["tipo_glosa"].dropna().unique()))
+                filtro_tipo = st.selectbox("Filtrar por Tipo:", ["Todos"] + list(df_glosas["tipo_glosa"].dropna().unique()), width=300)
                 if filtro_tipo != "Todos":
                     df_glosas = df_glosas[df_glosas["tipo_glosa"] == filtro_tipo]
 
@@ -455,7 +455,7 @@ if "tabelas_base" in abas_por_id:
                         
                     form_c3, form_c4 = st.columns([1, 1])
                     with form_c3:
-                        f_tipo = st.selectbox("Tipo", ["Técnica", "Administrativa"], index=0 if g_alvo["tipo"]=="Técnica" else 1)
+                        f_tipo = st.selectbox("Tipo", ["Técnica", "Administrativa"], index=0 if g_alvo["tipo"]=="Técnica" else 1, width=300)
                     with form_c4:
                         st.write("")
                         st.write("")
@@ -532,7 +532,7 @@ if "tabelas_base" in abas_por_id:
                     sg_cod = f"{codigo_pai}.{sg_sub_num.strip()}" if sg_sub_num.strip() else ""
                     sg_c4, sg_c5 = st.columns([2, 1])
                     with sg_c4:
-                        sg_tipo = st.selectbox("Tipo", ["Técnica", "Administrativa"], key="nova_sg_tipo")
+                        sg_tipo = st.selectbox("Tipo", ["Técnica", "Administrativa"], key="nova_sg_tipo", width=300)
                     with sg_c5:
                         st.write("")
                         sg_crit = st.checkbox("Crítica", key="nova_sg_crit")
@@ -814,7 +814,7 @@ if "permissoes" in abas_por_id:
                 f"{u['nome_completo']} ({u['usuario_sigo']})": u["id"]
                 for u in usuarios_ativos
             }
-            label_usuario_excecao = st.selectbox("Usuário", list(opcoes_usuario.keys()), key="excecao_usuario_select")
+            label_usuario_excecao = st.selectbox("Usuário", list(opcoes_usuario.keys()), key="excecao_usuario_select", width=300)
             usuario_id_excecao = opcoes_usuario[label_usuario_excecao]
 
             mapa_excecoes_usuario = {
@@ -832,6 +832,7 @@ if "permissoes" in abas_por_id:
                         idx_padrao = 0
                     escolhas_modulo[modulo] = st.selectbox(
                         label, OPCOES_EXCECAO, index=idx_padrao, key=f"excecao_{usuario_id_excecao}_{modulo}",
+                        width=300,
                     )
 
                 if st.form_submit_button("Salvar Exceções", type="primary"):

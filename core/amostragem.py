@@ -293,6 +293,7 @@ def gerenciar_procedimentos_ignorados(db, key_prefix: str):
                 "Especialidade",
                 ESPECIALIDADES_CONHECIDAS,
                 key=f"{key_prefix}_gerenciar_esp_nova",
+                width=300,
             )
         with col_proc_novo:
             labels_novos = st.multiselect(

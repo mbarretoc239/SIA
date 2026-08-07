@@ -178,7 +178,7 @@ def tela_login():
                 
                 novo_usr = st.text_input("Usuário SIGO", help="Mesmo login utilizado no sistema da empresa")
                 novo_nome = st.text_input("Nome Completo")
-                nova_equipe = st.selectbox("Qual sua equipe?", ["Contas", "Auditoria", "CISO", "Gestor"])
+                nova_equipe = st.selectbox("Qual sua equipe?", ["Contas", "Auditoria", "CISO", "Gestor"], width=300)
                 
                 col_s1, col_s2 = st.columns(2)
                 with col_s1:
