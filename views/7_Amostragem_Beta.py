@@ -293,7 +293,7 @@ with aba_busca:
                 mapa_procedimentos = carregar_mapa_procedimentos()
                 df_procedimento = pd.DataFrame(por_procedimento)
                 df_procedimento["Descrição"] = df_procedimento.apply(
-                    lambda linha: linha["descricao"] or mapa_procedimentos.get(linha["procedimento"], "—"),
+                    lambda linha: linha.get("descricao") or mapa_procedimentos.get(linha.get("procedimento"), "—"),
                     axis=1,
                 )
                 st.markdown("**Procedimentos mais glosados:**")
