@@ -15,7 +15,13 @@ from core.amostragem import (
     selecionar_procedimentos_ignorados,
     gerenciar_procedimentos_ignorados,
 )
-from core.relatorio_5201 import STATUS_CORES, carregar_dados_atuais, formatar_status_processo, status_processo
+from core.relatorio_5201 import (
+    STATUS_CORES,
+    carregar_dados_atuais,
+    formatar_status_processo,
+    obter_risco_prestador_cacheado,
+    status_processo,
+)
 from shared.database import DatabaseManager
 from shared.ui import aplicar_filtro_numerico, filtro_numerico, pilula
 
@@ -190,29 +196,48 @@ with aba_busca:
 
     with st.container(border=True):
         st.markdown(f"**Processo:** {processo_ativo}")
-        st.markdown(f"**{len(df)}** item(ns) sem liberação pela IA — **{texto_total_guias}** guia(s) no total do processo")
+        st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
 
         if info_status is None:
             st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
         else:
-            pct_ia = info_status.get("pct_liberacao_ia")
-            texto_pct = f"{pct_ia}%".replace(".", ",") if pct_ia is not None else "—"
-            st.markdown(f"**Porcentagem de IA:** {texto_pct}")
+            col_status, col_auditor, col_tipo, col_pct = st.columns(4)
 
             cor_status = STATUS_CORES.get(info_status["status"], STATUS_CORES["_outro"])
-            st.markdown(
-                f"**Status:** {pilula(info_status['status_label'], cor_texto=cor_status)}",
-                unsafe_allow_html=True,
-            )
-
-            auditor_texto = info_status["auditor"] or "—"
-            desde = f" (desde {info_status['data_fmt']})" if info_status["data_fmt"] else ""
-            st.markdown(f"**Auditor:** {auditor_texto}{desde}")
-
-            st.markdown(f"**Tipo de processo:** {info_status.get('execucao') or '—'}")
+            with col_status:
+                st.markdown(
+                    f"**Status:** {pilula(info_status['status_label'], cor_texto=cor_status)}",
+                    unsafe_allow_html=True,
+                )
+            with col_auditor:
+                auditor_texto = info_status["auditor"] or "—"
+                desde = f" (desde {info_status['data_fmt']})" if info_status["data_fmt"] else ""
+                st.markdown(f"**Auditor:** {auditor_texto}{desde}")
+            with col_tipo:
+                st.markdown(f"**Tipo de processo:** {info_status.get('execucao') or '—'}")
+            with col_pct:
+                pct_ia = info_status.get("pct_liberacao_ia")
+                texto_pct = f"{pct_ia}%".replace(".", ",") if pct_ia is not None else "—"
+                st.markdown(f"**Porcentagem de IA:** {texto_pct}")
 
             if info_status["situacao"] == "em_analise":
                 st.caption("⚠️ Confira antes de duplicar o trabalho — processo já em análise.")
+
+            # Risco do prestador (histórico de glosas em processos
+            # anteriores dele -- não desse processo específico, que pode
+            # nem ter passado pelo 5302 ainda). Só aparece se já houver
+            # alguma glosa registrada no histórico pra esse prestador.
+            prestador_ativo = info_status.get("prestador")
+            if prestador_ativo:
+                risco_prestador = obter_risco_prestador_cacheado(prestador_ativo)
+                if risco_prestador["total_glosas"] > 0:
+                    pct_glosa = risco_prestador["pct_glosa"]
+                    texto_pct_glosa = f"{pct_glosa}%".replace(".", ",") if pct_glosa is not None else None
+                    trecho_pct = f" ({texto_pct_glosa} dos procedimentos)" if texto_pct_glosa else ""
+                    st.caption(
+                        f"📋 Histórico do prestador: {risco_prestador['total_glosas']} glosa(s) registrada(s)"
+                        f" em processos anteriores{trecho_pct}."
+                    )
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais

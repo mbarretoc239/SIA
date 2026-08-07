@@ -435,6 +435,61 @@ class DatabaseManager:
             total += len(pedaco)
         return total
 
+    def salvar_historico_procedimentos(self, registros: list, lote: int = 1000) -> int:
+        """Guarda o QT_PROCEDIMENTO de cada processo por prestador -- é o
+        denominador usado em obter_risco_prestador (glosas / total de
+        procedimentos). Upsert por `processo` (merge-duplicates, não
+        ignore): ao contrário da glosa, aqui queremos sempre o valor mais
+        recente se o mesmo processo aparecer de novo num REL5201 futuro,
+        não o primeiro visto. Chamado silenciosamente a cada importação do
+        REL5201 (ver views/1_Configuracoes.py)."""
+        if not registros:
+            return 0
+        url = (
+            f"{self.supabase_url}/rest/v1/historico_procedimentos_prestador"
+            "?on_conflict=processo"
+        )
+        headers_upsert = {**self.headers, "Prefer": "resolution=merge-duplicates,return=minimal"}
+        total = 0
+        for i in range(0, len(registros), lote):
+            pedaco = registros[i:i + lote]
+            r = requests.post(url, headers=headers_upsert, json=pedaco)
+            if not r.ok:
+                raise RuntimeError(f"Falha ao salvar histórico de procedimentos: HTTP {r.status_code} — {r.text[:500]}")
+            total += len(pedaco)
+        return total
+
+    def obter_risco_prestador(self, prestador: str) -> dict:
+        """Estatística de risco do prestador pro card da Amostragem (Fase 2):
+        quantas glosas ele já teve no histórico e que % isso representa do
+        total de procedimentos que ele já processou. Retorna pct_glosa=None
+        se não houver base de procedimentos pra calcular a %% (prestador
+        sem nenhum REL5201 importado ainda com essa captura)."""
+        prestador = (prestador or "").strip()
+        if not prestador:
+            return {"total_glosas": 0, "total_procedimentos": 0, "pct_glosa": None}
+
+        headers_count = {**self.headers, "Prefer": "count=exact"}
+        url_glosas = f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
+        params_glosas = {"prestador": f"eq.{prestador}", "select": "id", "limit": "1"}
+        r_glosas = requests.get(url_glosas, headers=headers_count, params=params_glosas)
+        total_glosas = 0
+        if r_glosas.ok:
+            content_range = r_glosas.headers.get("Content-Range", "")
+            if "/" in content_range:
+                try:
+                    total_glosas = int(content_range.split("/")[-1])
+                except ValueError:
+                    total_glosas = 0
+
+        url_proc = f"{self.supabase_url}/rest/v1/historico_procedimentos_prestador"
+        params_proc = {"prestador": f"eq.{prestador}", "select": "qt_procedimento"}
+        r_proc = requests.get(url_proc, headers=self.headers, params=params_proc)
+        total_procedimentos = sum(row.get("qt_procedimento") or 0 for row in r_proc.json()) if r_proc.ok else 0
+
+        pct_glosa = round(total_glosas / total_procedimentos * 100, 1) if total_procedimentos > 0 else None
+        return {"total_glosas": total_glosas, "total_procedimentos": total_procedimentos, "pct_glosa": pct_glosa}
+
     def remover_procs_ignorados(self, pares: list) -> bool:
         """Remove pares (especialidade, cd_procedimento) da lista salva —
         volta a considerar o procedimento na análise por padrão."""

@@ -470,6 +470,9 @@ def formatar_status_processo(registro: dict) -> dict:
         "pct_liberacao_ia": pct_liberacao_ia,
         # MISTO/N_APP/APP -- canal de entrada do processo.
         "execucao": execucao,
+        # Nome do prestador -- chave pra cruzar com o histórico de glosas
+        # (ver DatabaseManager.obter_risco_prestador).
+        "prestador": (registro.get("PRESTADOR") or "").strip() or None,
     }
 
 
@@ -487,3 +490,13 @@ def status_processo(df: pd.DataFrame, nu_ordem: str) -> dict:
     if encontrado.empty:
         return None
     return formatar_status_processo(encontrado.iloc[0].to_dict())
+
+
+@st.cache_data(ttl=300)
+def obter_risco_prestador_cacheado(prestador: str) -> dict:
+    """Wrapper cacheado de DatabaseManager.obter_risco_prestador (5min --
+    mesmo padrão de carregar_dados_atuais), pra não bater no Supabase toda
+    vez que a tela de Amostragem faz rerun com o mesmo processo aberto."""
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
+    return db.obter_risco_prestador(prestador)

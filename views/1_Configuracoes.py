@@ -1014,6 +1014,21 @@ if "importar_planilhas" in abas_por_id:
                                 importado_por=st.session_state.get("usuario_id"),
                                 mes_referencia=mes_referencia_5201,
                             )
+                            try:
+                                registros_proc = [
+                                    {
+                                        "processo": str(reg.get("ORDEM")).strip(),
+                                        "prestador": str(reg.get("PRESTADOR") or "").strip(),
+                                        "qt_procedimento": int(reg.get("QT_PROCEDIMENTO") or 0),
+                                        "mes_referencia": mes_referencia_5201,
+                                    }
+                                    for reg in registros_5201
+                                    if reg.get("ORDEM") and reg.get("PRESTADOR")
+                                ]
+                                if registros_proc:
+                                    db.salvar_historico_procedimentos(registros_proc)
+                            except Exception:
+                                pass
                         carregar_dados_atuais.clear()
                         st.success(f"{total_5201} processo(s) importado(s) em {mes_referencia_5201} com sucesso.")
                         st.rerun()
