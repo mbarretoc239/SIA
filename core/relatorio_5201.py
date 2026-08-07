@@ -400,12 +400,18 @@ def formatar_status_processo(registro: dict) -> dict:
     data_ts = pd.to_datetime(data, errors="coerce")
     data_fmt = data_ts.strftime("%d/%m/%Y %H:%M") if pd.notna(data_ts) else ""
 
+    qt_procedimento = registro.get("QT_PROCEDIMENTO")
+
     return {
         "status": status,
         "status_label": STATUS_LABELS.get(status, status),
         "auditor": auditor,
         "data_fmt": data_fmt,
         "situacao": situacao,
+        # Já vem no mesmo payload decifrado (REL5201) -- não é uma busca
+        # extra, só não era exposto no resumo. Mostrar isso na tela de
+        # Amostragem cruza com o PowerBI sem custo de latência adicional.
+        "qt_procedimento": int(qt_procedimento) if qt_procedimento is not None else None,
     }
 
 

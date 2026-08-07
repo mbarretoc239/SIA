@@ -109,15 +109,25 @@ with aba_busca:
         info_status = status_processo(carregar_dados_atuais(), processo_ativo)
     if info_status is None:
         st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
-    elif info_status["situacao"] == "fechado":
-        st.success(f"✅ Processo já **FECHADO** por **{info_status['auditor']}** em {info_status['data_fmt']}.")
-    elif info_status["situacao"] == "em_analise":
-        st.warning(
-            f"🟡 Processo em análise (**{info_status['status_label']}**) por **{info_status['auditor']}** "
-            f"desde {info_status['data_fmt']} — confira antes de duplicar o trabalho."
-        )
     else:
-        st.info(f"Processo listado como **{info_status['status_label']}**, ainda sem auditor associado no relatório do dia.")
+        qt_proc = info_status.get("qt_procedimento")
+        # Mesmo dado do REL5201/PowerBI (Total de Procedimentos), já decifrado
+        # acima -- só complementa a mensagem, sem busca nem decifragem extra.
+        texto_proc = f" — **{qt_proc:,}** procedimento(s)".replace(",", ".") if qt_proc is not None else ""
+        if info_status["situacao"] == "fechado":
+            st.success(
+                f"✅ Processo já **FECHADO** por **{info_status['auditor']}** em {info_status['data_fmt']}{texto_proc}."
+            )
+        elif info_status["situacao"] == "em_analise":
+            st.warning(
+                f"🟡 Processo em análise (**{info_status['status_label']}**) por **{info_status['auditor']}** "
+                f"desde {info_status['data_fmt']}{texto_proc} — confira antes de duplicar o trabalho."
+            )
+        else:
+            st.info(
+                f"Processo listado como **{info_status['status_label']}**{texto_proc}, "
+                "ainda sem auditor associado no relatório do dia."
+            )
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais
