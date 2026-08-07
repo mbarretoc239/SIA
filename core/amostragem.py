@@ -447,6 +447,116 @@ def guias_com_proc_critico(df_esp_guias: pd.DataFrame, procedimentos_criticos: s
     return df_esp_guias[tem_critico]
 
 
+@st.cache_data(ttl=300)
+def carregar_processos_turso() -> list:
+    """Lista agregada de processos do mês (Turso) -- cacheada por 5min,
+    mesmo padrão de carregar_dados_atuais() (REL5201), pra não reconsultar
+    a cada rerun da tela."""
+    from shared.database import DatabaseManager
+    db = DatabaseManager()
+    return db.listar_processos_agregado()
+
+
+def montar_lista_processos_mes(
+    processos_turso: list, df_rel5201: pd.DataFrame, procedimentos_criticos: set,
+) -> pd.DataFrame:
+    """Uma linha por processo do mês, cruzando a base IA (Turso, agregada
+    por DatabaseManager.listar_processos_agregado) com o REL5201 já
+    carregado -- pronta pra exibir/filtrar na lista de processos da
+    Amostragem.
+
+    % Liberação IA / Total de Guias / Procedimentos vêm do REL5201 -- é a
+    contagem oficial do sistema, mais confiável que recalcular a partir da
+    planilha da base IA (só um snapshot mensal, pode ficar defasado).
+    Especialidades e crítica vêm do Turso -- o REL5201 não detalha por
+    guia, só o total do processo.
+
+    % Liberação IA = LIBERADOS_IA / (LIBERADOS_IA + NAO_LIBERADOS_IA) -- é
+    por PROCEDIMENTO avaliado pela IA, não por guia (confirmado nos dados:
+    a soma dos dois bate com QT_PROCEDIMENTO na maioria dos processos, quase
+    nunca com QT_GUIAS).
+
+    Status/Execução também vêm do REL5201 (STATUS_LABELS/valores normalizados
+    já usados em Produtividade -- APP/MISTO/N_APP)."""
+    from core.relatorio_5201 import STATUS_LABELS
+
+    colunas_finais = [
+        "Processo", "Status", "Execução", "% Liberação IA", "Total de Guias",
+        "Procedimentos", "Especialidades", "Crítica",
+    ]
+    if not processos_turso:
+        return pd.DataFrame(columns=colunas_finais)
+
+    df_turso = pd.DataFrame(processos_turso)
+    especialidades_lista = df_turso["especialidades"].fillna("").apply(
+        lambda s: sorted({e.strip() for e in s.split(",") if e.strip()})
+    )
+    procedimentos_lista = df_turso["procedimentos"].fillna("").apply(
+        lambda s: {p.strip() for p in s.split(",") if p.strip()}
+    )
+    tem_especialidade_critica = especialidades_lista.apply(
+        lambda esps: any(_norm(e) in ORDEM_CRITICAS for e in esps)
+    )
+    tem_procedimento_critico = procedimentos_lista.apply(
+        lambda procs: bool(procs & procedimentos_criticos)
+    )
+    df_turso["Crítica"] = tem_especialidade_critica | tem_procedimento_critico
+    df_turso["Especialidades"] = especialidades_lista.apply(lambda l: ", ".join(l))
+
+    campos_rel5201 = [
+        "ORDEM", "STATUS", "EXECUCAO", "QT_GUIAS", "QT_PROCEDIMENTO",
+        "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
+    ]
+    campos_disponiveis = [c for c in campos_rel5201 if c in df_rel5201.columns]
+    if "ORDEM" in campos_disponiveis:
+        df_rel = df_rel5201[campos_disponiveis].drop_duplicates(subset="ORDEM")
+    else:
+        df_rel = pd.DataFrame(columns=campos_rel5201)
+
+    df_final = df_turso.merge(df_rel, left_on="nu_ordem", right_on="ORDEM", how="left")
+    df_final["Processo"] = df_final["nu_ordem"]
+
+    def _coluna_num(nome: str) -> pd.Series:
+        # df_final.get(nome) devolve None (não uma Series) quando a coluna
+        # não existe -- o REL5201 já importado antes dessas colunas serem
+        # capturadas não as tem. Sem isso, contas tipo liberados+nao_liberados
+        # quebram com TypeError em vez de só ficar em branco na tela.
+        if nome in df_final.columns:
+            return df_final[nome]
+        return pd.Series(pd.NA, index=df_final.index, dtype="Int64")
+
+    df_final["Total de Guias"] = _coluna_num("QT_GUIAS")
+    df_final["Procedimentos"] = _coluna_num("QT_PROCEDIMENTO")
+
+    liberados = _coluna_num("QUANTIDADE_LIBERADOS_IA")
+    nao_liberados = _coluna_num("QUANTIDADE_NAO_LIBERADOS_IA")
+    total_avaliado = liberados + nao_liberados
+    pct_liberacao = (liberados / total_avaliado * 100).where(total_avaliado > 0)
+    df_final["% Liberação IA"] = pct_liberacao.round(1)
+
+    if "STATUS" in df_final.columns:
+        df_final["Status"] = df_final["STATUS"].apply(lambda s: STATUS_LABELS.get(s, s) if s else None)
+    else:
+        df_final["Status"] = None
+
+    if "EXECUCAO" in df_final.columns:
+        df_final["Execução"] = df_final["EXECUCAO"].replace("", None)
+    else:
+        df_final["Execução"] = None
+
+    # Processos sem nenhum match no REL5201 (Status vazio) vão pro fim da
+    # lista -- não têm status/auditor/% pra mostrar, então atrapalham menos
+    # lá embaixo do que misturados com o resto.
+    sem_match = df_final["Status"].isna()
+    return (
+        df_final[colunas_finais]
+        .assign(_sem_match=sem_match)
+        .sort_values(["_sem_match", "Processo"])
+        .drop(columns="_sem_match")
+        .reset_index(drop=True)
+    )
+
+
 def _guia_tem_proc_prioritario(procs_str: str, procs_prioridade_normal: set) -> bool:
     """True se a guia contém pelo menos um procedimento fora da lista de
     prioridade normal (ou seja, um procedimento de alta prioridade que força

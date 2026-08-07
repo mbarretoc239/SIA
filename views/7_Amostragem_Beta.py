@@ -6,15 +6,18 @@ from core.amostragem import (
     REGRAS_AMOSTRAGEM,
     _norm,
     carregar_procedimentos_criticos,
+    carregar_processos_turso,
     consolidar_por_guia,
     guias_com_proc_critico,
     marcar_amostra,
+    montar_lista_processos_mes,
     renderizar_tabela_guias,
     selecionar_procedimentos_ignorados,
     gerenciar_procedimentos_ignorados,
 )
-from core.relatorio_5201 import carregar_dados_atuais, formatar_status_processo, status_processo
+from core.relatorio_5201 import STATUS_CORES, carregar_dados_atuais, formatar_status_processo, status_processo
 from shared.database import DatabaseManager
+from shared.ui import aplicar_filtro_numerico, filtro_numerico, pilula
 
 st.set_page_config(page_title="Amostragem", page_icon="🦷", layout="wide")
 
@@ -74,6 +77,76 @@ with aba_busca:
     if buscar:
         st.session_state["_amostragem_beta_processo"] = processo_digitado.strip()
 
+    if st.session_state.get("role_interno") in ("Gestor", "Admin"):
+        with st.expander("Lista de processos do mês"):
+            with st.spinner("Carregando processos..."):
+                df_processos = montar_lista_processos_mes(
+                    carregar_processos_turso(), carregar_dados_atuais(), carregar_procedimentos_criticos()
+                )
+
+            if df_processos.empty:
+                st.info("Nenhum processo encontrado na base do mês.")
+            else:
+                col_filtro_critica, col_filtro_status, col_filtro_execucao = st.columns(3)
+                with col_filtro_critica:
+                    filtro_critica = st.segmented_control(
+                        "Crítica", ["Todos", "Somente críticas", "Sem críticas"],
+                        default="Todos", key="lista_proc_filtro_critica",
+                    )
+                with col_filtro_status:
+                    todos_status = sorted(df_processos["Status"].dropna().unique())
+                    filtro_status = st.multiselect("Status", todos_status, key="lista_proc_filtro_status")
+                with col_filtro_execucao:
+                    todas_execucoes = sorted(df_processos["Execução"].dropna().unique())
+                    filtro_execucao = st.multiselect("Execução", todas_execucoes, key="lista_proc_filtro_execucao")
+
+                todas_especialidades = sorted({
+                    e for lista in df_processos["Especialidades"].str.split(", ") for e in lista if e
+                })
+                filtro_especialidades = st.multiselect(
+                    "Especialidade", todas_especialidades, key="lista_proc_filtro_esp",
+                )
+
+                col_filtro_pct, col_filtro_guias, col_filtro_proc = st.columns(3)
+                with col_filtro_pct:
+                    filtro_pct = filtro_numerico("% Liberação IA", "lista_proc_filtro_pct")
+                with col_filtro_guias:
+                    filtro_guias = filtro_numerico("Total de Guias", "lista_proc_filtro_guias")
+                with col_filtro_proc:
+                    filtro_proc = filtro_numerico("Procedimentos", "lista_proc_filtro_proc")
+
+                df_lista_filtrada = df_processos
+                if filtro_critica == "Somente críticas":
+                    df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Crítica"]]
+                elif filtro_critica == "Sem críticas":
+                    df_lista_filtrada = df_lista_filtrada[~df_lista_filtrada["Crítica"]]
+                if filtro_status:
+                    df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Status"].isin(filtro_status)]
+                if filtro_execucao:
+                    df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Execução"].isin(filtro_execucao)]
+                if filtro_especialidades:
+                    alvo = set(filtro_especialidades)
+                    df_lista_filtrada = df_lista_filtrada[
+                        df_lista_filtrada["Especialidades"].apply(
+                            lambda s: bool(set(s.split(", ")) & alvo)
+                        )
+                    ]
+                df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "% Liberação IA", filtro_pct)
+                df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "Total de Guias", filtro_guias)
+                df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "Procedimentos", filtro_proc)
+
+                st.caption(f"{len(df_lista_filtrada)} de {len(df_processos)} processo(s) -- clique numa linha pra abrir.")
+                evento_lista = st.dataframe(
+                    df_lista_filtrada, use_container_width=True, hide_index=True,
+                    on_select="rerun", selection_mode="single-row", key="lista_processos_tabela",
+                )
+                linhas_selecionadas = evento_lista.selection.get("rows") if evento_lista else []
+                if linhas_selecionadas:
+                    processo_clicado = str(df_lista_filtrada.iloc[linhas_selecionadas[0]]["Processo"])
+                    if processo_clicado != st.session_state.get("_amostragem_beta_processo"):
+                        st.session_state["_amostragem_beta_processo"] = processo_clicado
+                        st.rerun()
+
     processo_ativo = st.session_state.get("_amostragem_beta_processo", "")
 
     if not processo_ativo:
@@ -93,8 +166,6 @@ with aba_busca:
         st.stop()
 
     total_guias_processo = guias[0].get("total_guias_processo") if guias else None
-    texto_total_guias = f" — {total_guias_processo} guia(s) no total do processo" if total_guias_processo else ""
-    st.success(f"Processo {processo_ativo}: {len(df)} item(ns) sem liberação pela IA{texto_total_guias}.")
 
     # Status/auditor do processo no snapshot mais recente do REL5201 —
     # visível para todos os roles, pra ninguém se esbarrar auditando o
@@ -108,27 +179,40 @@ with aba_busca:
         info_status = formatar_status_processo(registro_direto)
     else:
         info_status = status_processo(carregar_dados_atuais(), processo_ativo)
-    if info_status is None:
-        st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
-    else:
-        qt_proc = info_status.get("qt_procedimento")
-        # Mesmo dado do REL5201/PowerBI (Total de Procedimentos), já decifrado
-        # acima -- só complementa a mensagem, sem busca nem decifragem extra.
-        texto_proc = f" — **{qt_proc:,}** procedimento(s)".replace(",", ".") if qt_proc is not None else ""
-        if info_status["situacao"] == "fechado":
-            st.success(
-                f"✅ Processo já **FECHADO** por **{info_status['auditor']}** em {info_status['data_fmt']}{texto_proc}."
-            )
-        elif info_status["situacao"] == "em_analise":
-            st.warning(
-                f"🟡 Processo em análise (**{info_status['status_label']}**) por **{info_status['auditor']}** "
-                f"desde {info_status['data_fmt']}{texto_proc} — confira antes de duplicar o trabalho."
-            )
+
+    # Total de guias: prefere o REL5201 (QT_GUIAS -- contagem oficial do
+    # sistema) e só cai pro total_guias_processo da base IA (recalculado a
+    # partir de um snapshot mensal, pode ficar defasado) se o processo ainda
+    # não tiver match no REL5201 importado.
+    qt_guias_rel = info_status.get("qt_guias") if info_status else None
+    total_guias_exibir = qt_guias_rel if qt_guias_rel is not None else total_guias_processo
+    texto_total_guias = str(total_guias_exibir) if total_guias_exibir else "—"
+
+    with st.container(border=True):
+        st.markdown(f"**Processo:** {processo_ativo}")
+        st.markdown(f"**{len(df)}** item(ns) sem liberação pela IA — **{texto_total_guias}** guia(s) no total do processo")
+
+        if info_status is None:
+            st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
         else:
-            st.info(
-                f"Processo listado como **{info_status['status_label']}**{texto_proc}, "
-                "ainda sem auditor associado no relatório do dia."
+            pct_ia = info_status.get("pct_liberacao_ia")
+            texto_pct = f"{pct_ia}%".replace(".", ",") if pct_ia is not None else "—"
+            st.markdown(f"**Porcentagem de IA:** {texto_pct}")
+
+            cor_status = STATUS_CORES.get(info_status["status"], STATUS_CORES["_outro"])
+            st.markdown(
+                f"**Status:** {pilula(info_status['status_label'], cor_texto=cor_status)}",
+                unsafe_allow_html=True,
             )
+
+            auditor_texto = info_status["auditor"] or "—"
+            desde = f" (desde {info_status['data_fmt']})" if info_status["data_fmt"] else ""
+            st.markdown(f"**Auditor:** {auditor_texto}{desde}")
+
+            st.markdown(f"**Tipo de processo:** {info_status.get('execucao') or '—'}")
+
+            if info_status["situacao"] == "em_analise":
+                st.caption("⚠️ Confira antes de duplicar o trabalho — processo já em análise.")
 
     # Biometria por guia: computado do df ANTES do filtro de procedimentos
     # ignorados (é atributo de quem atendeu, não depende de quais

@@ -245,6 +245,27 @@ class DatabaseManager:
         }], self._turso_token_leitura)[0]
         return self._turso_linhas(resultado)
 
+    def listar_processos_agregado(self) -> list:
+        """Um registro por NU_ORDEM (processo) do mês mais recente em
+        base_ia_guias, com as especialidades e procedimentos distintos entre
+        as guias sem liberação desse processo -- agregado em SQL (uma query
+        só), não puxa as centenas de milhares de linhas cruas pro Python.
+
+        Usado pela lista de processos do mês (Amostragem). Guia individual
+        e contagens oficiais (total de guias, procedimentos) vêm de outro
+        lugar -- aqui é só o que dá pra saber a partir da base IA: quais
+        especialidades/procedimentos aparecem em cada processo, pra decidir
+        se tem crítica."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_ordem, "
+                   "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
+                   "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos "
+                   "FROM base_ia_guias "
+                   "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
+                   "GROUP BY nu_ordem",
+        }], self._turso_token_leitura)[0]
+        return self._turso_linhas(resultado)
+
     def _importar_por_mes(
         self, tabela: str, registros: list, mes_referencia: str, lote: int = 2000, manter_meses: int = 2
     ) -> int:

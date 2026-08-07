@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 
 # Paleta compartilhada -- antes de criar uma cor nova numa tela nova,
@@ -19,15 +20,54 @@ def fmt_num(n: int) -> str:
     return f"{n:,}".replace(",", ".")
 
 
-def pilula(texto: str) -> str:
-    """HTML de uma "pílula" neutra (badge arredondado) -- mesmo componente
-    visual em qualquer tela que precise disso, em vez de cada uma inventar
-    seu próprio <span> com cores diferentes. Usar com unsafe_allow_html=True."""
+def pilula(texto: str, cor_texto: str = None, cor_fundo: str = None) -> str:
+    """HTML de uma "pílula" (badge arredondado) -- mesmo componente visual
+    em qualquer tela que precise disso, em vez de cada uma inventar seu
+    próprio <span> com cores diferentes. Neutro por padrão; passe cor_texto
+    (e opcionalmente cor_fundo) pra variantes semânticas (ex: por status).
+    Usar com unsafe_allow_html=True."""
+    cor_texto = cor_texto or COR_NEUTRA_TEXTO
+    cor_fundo = cor_fundo or COR_NEUTRA_BG
     return (
-        f"<span style='background: {COR_NEUTRA_BG}; color: {COR_NEUTRA_TEXTO}; "
+        f"<span style='background: {cor_fundo}; color: {cor_texto}; "
         f"padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; "
         f"display: inline-block;'>{texto}</span>"
     )
+
+
+_OPERADORES_NUMERICOS = {
+    "Maior que": lambda serie, v: serie > v,
+    "Menor que": lambda serie, v: serie < v,
+    "Maior ou igual a": lambda serie, v: serie >= v,
+    "Menor ou igual a": lambda serie, v: serie <= v,
+    "Igual a": lambda serie, v: serie == v,
+}
+
+
+def filtro_numerico(label: str, key_prefix: str):
+    """Filtro 'operador + valor' (>, >=, <, <=, =) pra coluna numérica --
+    devolve (operador, valor) ou None quando "Todos" (sem filtro). Passar
+    pra aplicar_filtro_numerico() junto com o DataFrame e a coluna alvo."""
+    col_op, col_val = st.columns([1, 1])
+    with col_op:
+        operador = st.selectbox(
+            label, ["Todos", *_OPERADORES_NUMERICOS.keys()], key=f"{key_prefix}_operador", width=140,
+        )
+    if operador == "Todos":
+        return None
+    with col_val:
+        valor = st.number_input("Valor", key=f"{key_prefix}_valor", label_visibility="collapsed", width=140)
+    return (operador, valor)
+
+
+def aplicar_filtro_numerico(df: pd.DataFrame, coluna: str, filtro) -> pd.DataFrame:
+    """Aplica o filtro devolvido por filtro_numerico() num DataFrame --
+    linhas com valor nulo na coluna nunca passam (não há como comparar
+    "sem dado" com um número)."""
+    if filtro is None:
+        return df
+    operador, valor = filtro
+    return df[_OPERADORES_NUMERICOS[operador](df[coluna], valor)]
 
 
 def estilizar_botoes_exclusao():

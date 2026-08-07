@@ -15,10 +15,16 @@ COLUNAS_NECESSARIAS = {
     "DATA_FECHAMENTO", "LOGIN_FECHAMENTO",
 }
 # Colunas extras, só pra cortes de canal de entrada do processo (EXECUCAO:
-# App/Misto/Não App; DATA_RECEBIMENTO_PROCESSO_FISICO: data de entrada).
-# Opcionais -- se o arquivo não tiver (formato mais antigo, ou exportação
-# diferente), a importação não falha, só fica sem esse corte específico.
-COLUNAS_OPCIONAIS = {"EXECUCAO", "DATA_RECEBIMENTO_PROCESSO_FISICO"}
+# App/Misto/Não App; DATA_RECEBIMENTO_PROCESSO_FISICO: data de entrada) e pra
+# contagem oficial de guias (QT_GUIAS/QUANTIDADE_*_LIBERADOS_IA -- vem pronta
+# do sistema, mais confiável que recalcular a partir da planilha da base IA,
+# que é só um snapshot mensal e pode ficar defasado). Opcionais -- se o
+# arquivo não tiver (formato mais antigo, ou exportação diferente), a
+# importação não falha, só fica sem esse corte específico.
+COLUNAS_OPCIONAIS = {
+    "EXECUCAO", "DATA_RECEBIMENTO_PROCESSO_FISICO",
+    "QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
+}
 CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
 STATUS_LABELS = {
@@ -130,6 +136,14 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
         )
     else:
         df["DATA_RECEBIMENTO_PROCESSO_FISICO"] = pd.NaT
+
+    # Numéricos opcionais: None (não 0) quando o arquivo não tem a coluna --
+    # "não sei" é diferente de "zero guias".
+    for col in ("QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+        else:
+            df[col] = pd.array([None] * len(df), dtype="Int64")
 
     return df[CAMPOS_REGISTRO]
 
@@ -400,7 +414,31 @@ def formatar_status_processo(registro: dict) -> dict:
     data_ts = pd.to_datetime(data, errors="coerce")
     data_fmt = data_ts.strftime("%d/%m/%Y %H:%M") if pd.notna(data_ts) else ""
 
-    qt_procedimento = registro.get("QT_PROCEDIMENTO")
+    def _int_ou_none(valor):
+        # registro pode vir de dois lugares: JSON decifrado direto (None
+        # de verdade pra campo faltante) ou reconstruído via pandas
+        # (status_processo -> DataFrame -> .to_dict(), onde campo faltante
+        # vira NaN/pd.NA, não None) -- pd.isna() cobre os dois casos, `is
+        # not None` sozinho deixaria NaN passar e quebrar no int(NaN).
+        if valor is None or pd.isna(valor):
+            return None
+        return int(valor)
+
+    qt_procedimento = _int_ou_none(registro.get("QT_PROCEDIMENTO"))
+    qt_guias = _int_ou_none(registro.get("QT_GUIAS"))
+    qt_guias_nao_liberadas = _int_ou_none(registro.get("QUANTIDADE_NAO_LIBERADOS_IA"))
+    qt_liberados_ia = _int_ou_none(registro.get("QUANTIDADE_LIBERADOS_IA"))
+    execucao_bruta = registro.get("EXECUCAO")
+    execucao = execucao_bruta if execucao_bruta and pd.notna(execucao_bruta) else None
+
+    # % Liberação IA = liberados / (liberados + não liberados) -- é por
+    # PROCEDIMENTO avaliado pela IA, não por guia (mesma conta da lista de
+    # processos, ver core/amostragem.py::montar_lista_processos_mes).
+    pct_liberacao_ia = None
+    if qt_liberados_ia is not None and qt_guias_nao_liberadas is not None:
+        total_avaliado = qt_liberados_ia + qt_guias_nao_liberadas
+        if total_avaliado > 0:
+            pct_liberacao_ia = round(qt_liberados_ia / total_avaliado * 100, 1)
 
     return {
         "status": status,
@@ -411,7 +449,14 @@ def formatar_status_processo(registro: dict) -> dict:
         # Já vem no mesmo payload decifrado (REL5201) -- não é uma busca
         # extra, só não era exposto no resumo. Mostrar isso na tela de
         # Amostragem cruza com o PowerBI sem custo de latência adicional.
-        "qt_procedimento": int(qt_procedimento) if qt_procedimento is not None else None,
+        "qt_procedimento": qt_procedimento,
+        # Contagem oficial de guias (vem pronta do REL5201) -- não recalcula
+        # a partir da planilha da base IA, que é só um snapshot mensal.
+        "qt_guias": qt_guias,
+        "qt_guias_nao_liberadas": qt_guias_nao_liberadas,
+        "pct_liberacao_ia": pct_liberacao_ia,
+        # MISTO/N_APP/APP -- canal de entrada do processo.
+        "execucao": execucao,
     }
 
 
