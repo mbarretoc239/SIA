@@ -65,6 +65,7 @@ def montar_registros(caminho: str) -> list:
             "glosa": glosa,
             "subglosa": subglosa,
             "justificativa": _texto(row.get("JUSTIFICATIVA DA GLOSA")),
+            "descricao_procedimento": _texto(row.get("NOMECLATURA DO PROCEDIMENTO GLOSADO")),
             "guia": guia,
             "origem": "5310_backfill",
         })

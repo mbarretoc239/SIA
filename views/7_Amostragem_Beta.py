@@ -285,10 +285,16 @@ with aba_busca:
                 )
 
             if por_procedimento:
+                # Descrição vem gravada na própria linha (fonte original --
+                # 5310/5302), não de tabela_procedimentos: o REL5310 usa
+                # código TUSS longo e o catálogo usa o código interno curto
+                # do 5302, então cruzar os dois não funciona. Só cai pro
+                # catálogo em linhas antigas que não tinham essa captura.
                 mapa_procedimentos = carregar_mapa_procedimentos()
                 df_procedimento = pd.DataFrame(por_procedimento)
-                df_procedimento["Descrição"] = df_procedimento["procedimento"].map(
-                    lambda cod: mapa_procedimentos.get(cod, "—")
+                df_procedimento["Descrição"] = df_procedimento.apply(
+                    lambda linha: linha["descricao"] or mapa_procedimentos.get(linha["procedimento"], "—"),
+                    axis=1,
                 )
                 st.markdown("**Procedimentos mais glosados:**")
                 st.dataframe(

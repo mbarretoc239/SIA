@@ -68,6 +68,7 @@ def _salvar_historico_glosas_silenciosamente(glosas: list, meta: dict) -> None:
                 "glosa": g.get("Glosa") or "",
                 "subglosa": g.get("Cód. Sub-Glosa") or "",
                 "justificativa": g.get("Descrição Oficial") or "",
+                "descricao_procedimento": g.get("Procedimento") or "",
                 "guia": g.get("Guia") or "",
                 "origem": "5302",
             })

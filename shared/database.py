@@ -411,21 +411,22 @@ class DatabaseManager:
     def salvar_historico_glosas(self, registros: list, lote: int = 500) -> int:
         """Insere ocorrências de glosa no histórico por prestador --
         idempotente via UNIQUE(guia, procedimento, glosa, subglosa):
-        reprocessar o mesmo 5302/5310 não duplica, só ignora o que já
-        existe (Prefer: resolution=ignore-duplicates, mesmo padrão de
-        salvar_procs_ignorados).
+        reprocessar o mesmo 5302/5310 não duplica. Usa merge-duplicates (não
+        ignore): o registro em si nunca muda de identidade (a chave é o
+        evento real), mas campos como justificativa/descricao_procedimento
+        podem ser preenchidos/corrigidos depois -- reprocessar deve
+        atualizar essas colunas, não travar no primeiro valor salvo.
 
         `registros`: lista de dicts com processo/prestador/mes_referencia/
-        procedimento/glosa/subglosa/justificativa/guia/origem já prontos.
-        Retorna quantos registros foram enviados (não necessariamente todos
-        novos -- duplicatas são silenciosamente ignoradas pelo Postgres)."""
+        procedimento/glosa/subglosa/justificativa/descricao_procedimento/
+        guia/origem já prontos. Retorna quantos registros foram enviados."""
         if not registros:
             return 0
         url = (
             f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
             "?on_conflict=guia,procedimento,glosa,subglosa"
         )
-        headers_insert = {**self.headers, "Prefer": "resolution=ignore-duplicates,return=minimal"}
+        headers_insert = {**self.headers, "Prefer": "resolution=merge-duplicates,return=minimal"}
         total = 0
         for i in range(0, len(registros), lote):
             pedaco = registros[i:i + lote]
@@ -525,7 +526,10 @@ class DatabaseManager:
         if not prestador:
             return {"por_glosa": [], "por_procedimento": [], "por_mes": []}
         url = f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
-        params = {"prestador": f"eq.{prestador}", "select": "glosa,justificativa,procedimento,mes_referencia"}
+        params = {
+            "prestador": f"eq.{prestador}",
+            "select": "glosa,justificativa,procedimento,descricao_procedimento,mes_referencia",
+        }
         r = requests.get(url, headers=self.headers, params=params)
         if not r.ok:
             return {"por_glosa": [], "por_procedimento": [], "por_mes": []}
@@ -534,12 +538,15 @@ class DatabaseManager:
 
         contagem_glosa = {}
         contagem_procedimento = {}
+        descricao_por_procedimento = {}
         contagem_mes = {}
         for linha in linhas:
             chave_glosa = (linha.get("glosa") or "—", linha.get("justificativa") or "—")
             contagem_glosa[chave_glosa] = contagem_glosa.get(chave_glosa, 0) + 1
             cod_proc = linha.get("procedimento") or "—"
             contagem_procedimento[cod_proc] = contagem_procedimento.get(cod_proc, 0) + 1
+            if linha.get("descricao_procedimento"):
+                descricao_por_procedimento[cod_proc] = linha["descricao_procedimento"]
             mes = linha.get("mes_referencia") or "—"
             contagem_mes[mes] = contagem_mes.get(mes, 0) + 1
 
@@ -555,7 +562,12 @@ class DatabaseManager:
                 for (glosa, justificativa), qtd in ranking_glosa
             ],
             "por_procedimento": [
-                {"procedimento": cod, "quantidade": qtd} for cod, qtd in ranking_procedimento
+                {
+                    "procedimento": cod,
+                    "descricao": descricao_por_procedimento.get(cod, ""),
+                    "quantidade": qtd,
+                }
+                for cod, qtd in ranking_procedimento
             ],
             "por_mes": [{"mes_referencia": mes, "quantidade": qtd} for mes, qtd in serie_mes],
         }
