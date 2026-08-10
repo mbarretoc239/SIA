@@ -5,7 +5,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
-_DESTINATARIOS = ["matheus.cardoso@hapvida.com.br", "matheusb239@gmail.com"]
+_DESTINATARIOS = [
+    "matheus.cardoso@hapvida.com.br",
+    "matheusb239@gmail.com",
+    # Canal "Notificações do SIA - Auditoria Odonto" no Teams: qualquer
+    # e-mail mandado aqui vira post automático no canal (sem Power Automate).
+    "1b732a3f.hapvida.com.br@amer.teams.ms",
+]
 
 
 def _enviar_email(assunto: str, corpo: str, anexos: list = None, erro_key: str = "_erro_envio_email") -> bool:
@@ -59,10 +65,10 @@ def enviar_reporte_bug(titulo: str, texto: str, autor: str, anexos: list) -> boo
 
 
 def notificar_esqueci_senha(usuario_sigo: str, nome_completo: str = "") -> bool:
-    """Avisa que alguém clicou em 'Esqueci a senha' na tela de login. Tag
-    '[SIA]' no assunto pro Power Automate identificar e repassar pro Teams
-    (mesmo mecanismo já usado no FAROL: e-mail -> flow -> canal). Reset em
-    si continua manual, em Configurações > Redefinir senha de usuário."""
+    """Avisa que alguém clicou em 'Esqueci a senha' na tela de login. Vai
+    pros _DESTINATARIOS, incluindo o e-mail do canal do Teams (post direto,
+    sem Power Automate). Reset em si continua manual, em Configurações >
+    Redefinir senha de usuário."""
     quem = f"{nome_completo} ({usuario_sigo})" if nome_completo else usuario_sigo
     corpo = (
         f"Pedido de redefinição de senha no SIA:\n\n"
