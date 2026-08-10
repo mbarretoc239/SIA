@@ -96,7 +96,7 @@ def _carregar_versao_5302_no_estado(achado: dict) -> None:
     st.session_state.pop("mostrar_texto", None)
 
 
-with st.expander("🔎 Já processei esse processo antes — buscar sem reenviar o arquivo"):
+with st.expander("🔎 Buscar processo já analisado"):
     st.caption(
         "Busca a tabela de glosas já editada (Incluir no Relatório / Justificativa) da última "
         "vez que alguém gerou texto pra esse processo. O texto em si é regerado na hora. "
