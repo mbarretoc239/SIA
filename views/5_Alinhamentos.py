@@ -71,11 +71,8 @@ def _render_status_inativo(a):
     de passar batido depois de abrir o card e ler o conteúdo normalmente."""
     if a.get("ativo", True):
         return
-    st.error("🔴 **Este alinhamento está INATIVO no momento.**")
-    if a.get("justificativa_inativacao"):
-        st.caption(f"Motivo: {a['justificativa_inativacao']}")
-    else:
-        st.caption("Sem motivo de inativação registrado (inativado antes do histórico existir).")
+    motivo = a.get("justificativa_inativacao") or "Sem motivo de inativação registrado (inativado antes do histórico existir)."
+    st.error(f"🔴 **Este alinhamento está INATIVO no momento.**\n\n**Motivo:** {motivo}")
 
 
 def _render_historico_status(aid, historico_por_alinhamento):
