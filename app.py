@@ -2,7 +2,7 @@ import streamlit as st
 import re
 import time
 from shared.database import DatabaseManager
-from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro, notificar_esqueci_senha
+from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro, notificar_esqueci_senha, pode_notificar_esqueci_senha
 from shared.ui import COR_SUBTITULO, COR_TITULO
 
 # Configuração da Página principal (deve ser a primeira coisa)
@@ -178,6 +178,8 @@ def tela_login():
                     if st.button("Enviar aviso", key="btn_esqueci_senha", use_container_width=True):
                         if not usr_esqueci:
                             st.warning("Informe o usuário SIGO.")
+                        elif not pode_notificar_esqueci_senha(usr_esqueci):
+                            st.warning("Já enviamos um aviso pra esse usuário há pouco. Aguarde alguns minutos e tente de novo.")
                         else:
                             with st.spinner("Enviando..."):
                                 usuario_encontrado = db.buscar_usuario_por_sigo(usr_esqueci)

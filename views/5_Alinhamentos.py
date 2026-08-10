@@ -65,6 +65,19 @@ def _obrigados_ciencia(alinhamento, usuarios_ativos):
     ]
 
 
+def _render_status_inativo(a):
+    """Banner de destaque quando o alinhamento está inativo. Antes só o
+    ponto vermelho no título do expander (fechado) sinalizava isso — fácil
+    de passar batido depois de abrir o card e ler o conteúdo normalmente."""
+    if a.get("ativo", True):
+        return
+    st.error("🔴 **Este alinhamento está INATIVO no momento.**")
+    if a.get("justificativa_inativacao"):
+        st.caption(f"Motivo: {a['justificativa_inativacao']}")
+    else:
+        st.caption("Sem motivo de inativação registrado (inativado antes do histórico existir).")
+
+
 def _render_historico_status(aid, historico_por_alinhamento):
     """Popover com a linha do tempo de inativações/reativações do item.
     Não é um expander (Streamlit não permite expander dentro de expander) —
@@ -153,15 +166,11 @@ with aba_historico:
                 label = f"{status_emoji} {a.get('titulo', '')} · {data_fmt} · {a.get('categoria', 'Geral')}{equipe_tag}"
 
                 with st.expander(label):
+                    _render_status_inativo(a)
                     st.markdown(_conteudo_markdown(a.get("conteudo", "")))
                     if a.get("anexo_url"):
                         st.link_button("Abrir anexo", a["anexo_url"])
                     st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
-                    if not ativo:
-                        if a.get("justificativa_inativacao"):
-                            st.warning(f"**Motivo da inativação atual:** {a['justificativa_inativacao']}")
-                        else:
-                            st.caption("Sem motivo de inativação registrado (inativado antes do histórico existir).")
                     _render_historico_status(aid, historico_por_alinhamento)
 
             if total_paginas_hist > 1:
@@ -351,6 +360,7 @@ if pode_gerenciar:
                     _form_edicao(a, aid)
                     continue
 
+                _render_status_inativo(a)
                 st.markdown(_conteudo_markdown(a.get("conteudo", "")))
                 if a.get("anexo_url"):
                     st.link_button("Abrir anexo", a["anexo_url"])

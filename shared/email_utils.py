@@ -1,5 +1,6 @@
 import html
 import smtplib
+import time
 import streamlit as st
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
@@ -69,9 +70,28 @@ def enviar_reporte_bug(titulo: str, texto: str, autor: str, anexos: list) -> boo
     return _enviar_email(f"[SIA] Reporte de bug: {titulo}", corpo, anexos, erro_key="_erro_envio_bug")
 
 
+_ULTIMO_PEDIDO_ESQUECI_SENHA = {}  # usuario_sigo (lower) -> timestamp do ultimo aviso enviado
+_INTERVALO_ESQUECI_SENHA_SEG = 5 * 60
+
+
+def pode_notificar_esqueci_senha(usuario_sigo: str) -> bool:
+    """Rate-limit de 1 pedido por SIGO a cada 5 min -- a tela de login não
+    exige autenticação, então sem isso dava pra martelar o botão e floodar
+    e-mail/Teams. Dict em memória de módulo (não st.session_state, que é
+    por sessão/navegador e seria trivial de burlar dando F5)."""
+    chave = usuario_sigo.strip().lower()
+    agora = time.monotonic()
+    ultimo = _ULTIMO_PEDIDO_ESQUECI_SENHA.get(chave)
+    if ultimo is not None and (agora - ultimo) < _INTERVALO_ESQUECI_SENHA_SEG:
+        return False
+    _ULTIMO_PEDIDO_ESQUECI_SENHA[chave] = agora
+    return True
+
+
 def notificar_esqueci_senha(usuario_sigo: str, nome_completo: str = "") -> bool:
     """Avisa que alguém clicou em 'Esqueci a senha' na tela de login. Reset
-    em si continua manual, em Configurações > Redefinir senha de usuário."""
+    em si continua manual, em Configurações > Redefinir senha de usuário.
+    Chame pode_notificar_esqueci_senha() antes, pra respeitar o rate-limit."""
     quem = f"{nome_completo} ({usuario_sigo})" if nome_completo else usuario_sigo
     corpo = (
         f"Pedido de redefinição de senha no SIA:\n\n"
