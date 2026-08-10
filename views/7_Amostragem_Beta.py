@@ -23,6 +23,7 @@ from core.relatorio_5201 import (
     obter_risco_prestador_cacheado,
     status_processo,
 )
+from core.settings import tem_acesso_modulo
 from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 from shared.database import DatabaseManager
 from shared.ui import aplicar_filtro_numerico, filtro_numerico, pilula
@@ -41,6 +42,50 @@ if "db" not in st.session_state:
 OPERADOR_BIOMETRIA = "CONN_APPOD_NEW"
 
 SEED_PADRAO = 42
+
+
+def _botao_flutuante_upload_5302():
+    """FAB fixo no canto da tela: sobe o relatório 5302 sem sair da
+    Amostragem pra clicar na sidebar + upload separado. O arquivo vai pro
+    session_state e a navegação usa switch_page -- o Relatório 5302 lê esse
+    'pendente' como fallback quando o file_uploader nativo dele tá vazio
+    (ver views/2_Relatorio_5302.py)."""
+    role_fab = st.session_state.get("role_interno", "Contas")
+    usuario_id_fab = st.session_state.get("usuario_id")
+    permissoes_fab = st.session_state.db.carregar_permissoes_modulos()
+    excecoes_fab = st.session_state.db.carregar_excecoes_modulos()
+    if not tem_acesso_modulo(permissoes_fab, role_fab, "relatorio_5302", usuario_id_fab, excecoes_fab):
+        return
+
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stPopover"] {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            z-index: 9999;
+        }
+        div[data-testid="stPopover"] > div > button {
+            border-radius: 999px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.popover("📤 Subir 5302"):
+        st.caption("Envia o relatório 5302 e já abre a tela dele com o arquivo carregado.")
+        arquivo_fab = st.file_uploader(
+            "Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"], key="fab_upload_5302",
+        )
+        if arquivo_fab is not None:
+            st.session_state["_pendente_5302_bytes"] = arquivo_fab.getvalue()
+            st.session_state["_pendente_5302_name"] = arquivo_fab.name
+            st.switch_page("views/2_Relatorio_5302.py")
+
+
+_botao_flutuante_upload_5302()
 
 
 def _guias_para_df(guias: list) -> pd.DataFrame:

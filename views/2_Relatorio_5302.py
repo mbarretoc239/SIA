@@ -1,3 +1,5 @@
+import io
+
 import streamlit as st
 import pandas as pd
 
@@ -79,6 +81,20 @@ def _salvar_historico_glosas_silenciosamente(glosas: list, meta: dict) -> None:
 
 
 pdf_file = st.file_uploader("Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"])
+
+if pdf_file is not None:
+    # Um upload de verdade no widget nativo sempre tem prioridade sobre
+    # qualquer arquivo pendente vindo do botão flutuante da Amostragem.
+    st.session_state.pop("_pendente_5302_bytes", None)
+    st.session_state.pop("_pendente_5302_name", None)
+elif st.session_state.get("_pendente_5302_bytes") is not None:
+    # Veio do botão flutuante "Subir 5302" na Amostragem (ver
+    # views/7_Amostragem_Beta.py) -- reconstrói um arquivo em memória com
+    # .name pra se comportar igual ao retorno do file_uploader. Fica no
+    # session_state (não é consumido de uma vez só) porque o file_uploader
+    # nativo continua vazio nos reruns seguintes desta página.
+    pdf_file = io.BytesIO(st.session_state["_pendente_5302_bytes"])
+    pdf_file.name = st.session_state["_pendente_5302_name"]
 
 if pdf_file is not None:
     if "dados_pdf" not in st.session_state or st.session_state.get("pdf_name") != pdf_file.name:
