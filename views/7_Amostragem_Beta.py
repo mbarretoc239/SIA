@@ -66,6 +66,7 @@ def _botao_flutuante_upload_5302():
             left: 20px;
             z-index: 9999;
             width: fit-content !important;
+            transition: left 0.2s ease;
         }
         div[data-testid="stPopover"] > div {
             width: fit-content !important;
@@ -74,15 +75,20 @@ def _botao_flutuante_upload_5302():
             width: fit-content !important;
             border-radius: 999px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-            padding: 2px 12px;
-            font-size: 0.8rem;
+            padding: 8px 20px;
+            font-size: 0.95rem;
             min-height: 0;
+        }
+        /* Sidebar aberta cobre o canto esquerdo -- desloca o botão pra depois
+           dela (Streamlit expõe o estado via aria-expanded no <section>). */
+        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div[data-testid="stPopover"] {
+            left: 22rem;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
-    with st.popover("📤 Subir 5302"):
+    with st.popover("📤 Gerar Relatório 5302"):
         st.caption("Envia o relatório 5302 e já abre a tela dele com o arquivo carregado.")
         arquivo_fab = st.file_uploader(
             "Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"], key="fab_upload_5302",
