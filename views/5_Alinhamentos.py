@@ -129,11 +129,22 @@ with aba_historico:
                 if busca_lower in a.get("titulo", "").lower() or busca_lower in a.get("conteudo", "").lower()
             ]
 
+        POR_PAGINA_HIST = 15
+        filtro_assinatura_hist = (busca, categoria_filtro, equipe_filtro, ano_filtro)
+        if st.session_state.get("alinh_hist_filtro_assinatura") != filtro_assinatura_hist:
+            st.session_state["alinh_hist_filtro_assinatura"] = filtro_assinatura_hist
+            st.session_state["alinh_hist_pagina"] = 0
+
+        total_paginas_hist = max(1, -(-len(filtrados) // POR_PAGINA_HIST))
+        pagina_atual_hist = min(st.session_state.get("alinh_hist_pagina", 0), total_paginas_hist - 1)
+        inicio_hist = pagina_atual_hist * POR_PAGINA_HIST
+        pagina_itens_hist = filtrados[inicio_hist:inicio_hist + POR_PAGINA_HIST]
+
+        st.markdown(f"**{len(filtrados)} alinhamento(s)** · página {pagina_atual_hist + 1} de {total_paginas_hist}")
         if not filtrados:
             st.info("Nenhum alinhamento encontrado com esses filtros.")
         else:
-            st.caption(f"{len(filtrados)} alinhamento(s)")
-            for a in filtrados:
+            for a in pagina_itens_hist:
                 aid = a["id"]
                 ativo = a.get("ativo", True)
                 data_fmt = pd.to_datetime(a["created_at"]).strftime("%d/%m/%Y") if a.get("created_at") else "—"
@@ -146,9 +157,23 @@ with aba_historico:
                     if a.get("anexo_url"):
                         st.link_button("Abrir anexo", a["anexo_url"])
                     st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
-                    if not ativo and a.get("justificativa_inativacao"):
-                        st.warning(f"**Motivo da inativação atual:** {a['justificativa_inativacao']}")
+                    if not ativo:
+                        if a.get("justificativa_inativacao"):
+                            st.warning(f"**Motivo da inativação atual:** {a['justificativa_inativacao']}")
+                        else:
+                            st.caption("Sem motivo de inativação registrado (inativado antes do histórico existir).")
                     _render_historico_status(aid, historico_por_alinhamento)
+
+            if total_paginas_hist > 1:
+                col_prev, col_meio, col_next = st.columns([1, 3, 1])
+                with col_prev:
+                    if st.button("← Anterior", disabled=(pagina_atual_hist == 0), key="alinh_hist_prev", use_container_width=True):
+                        st.session_state["alinh_hist_pagina"] = pagina_atual_hist - 1
+                        st.rerun()
+                with col_next:
+                    if st.button("Próxima →", disabled=(pagina_atual_hist >= total_paginas_hist - 1), key="alinh_hist_next", use_container_width=True):
+                        st.session_state["alinh_hist_pagina"] = pagina_atual_hist + 1
+                        st.rerun()
 
 
 if pode_gerenciar:
