@@ -2,7 +2,7 @@ import streamlit as st
 import re
 import time
 from shared.database import DatabaseManager
-from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro
+from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro, notificar_esqueci_senha
 from shared.ui import COR_SUBTITULO, COR_TITULO
 
 # Configuração da Página principal (deve ser a primeira coisa)
@@ -171,6 +171,24 @@ def tela_login():
                                         st.rerun()
                                 else:
                                     st.error("Usuário ou senha incorretos.")
+
+                with st.popover("Esqueci minha senha", use_container_width=True):
+                    st.caption("Manda um aviso pro administrador redefinir sua senha.")
+                    usr_esqueci = st.text_input("Usuário SIGO", value=usuario, key="esqueci_senha_usr")
+                    if st.button("Enviar aviso", key="btn_esqueci_senha", use_container_width=True):
+                        if not usr_esqueci:
+                            st.warning("Informe o usuário SIGO.")
+                        else:
+                            with st.spinner("Enviando..."):
+                                usuario_encontrado = db.buscar_usuario_por_sigo(usr_esqueci)
+                                nome_encontrado = usuario_encontrado.get("nome_completo", "") if usuario_encontrado else ""
+                                if notificar_esqueci_senha(usr_esqueci, nome_encontrado):
+                                    st.success("Aviso enviado! O administrador vai te procurar em breve.")
+                                else:
+                                    st.error(
+                                        "Não foi possível enviar agora: "
+                                        + st.session_state.get("_erro_envio_esqueci_senha", "erro desconhecido")
+                                    )
 
         with tab_cadastrar:
             with st.container(border=True):

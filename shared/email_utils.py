@@ -58,6 +58,22 @@ def enviar_reporte_bug(titulo: str, texto: str, autor: str, anexos: list) -> boo
     return _enviar_email(f"[SIA] Reporte de bug: {titulo}", corpo, anexos, erro_key="_erro_envio_bug")
 
 
+def notificar_esqueci_senha(usuario_sigo: str, nome_completo: str = "") -> bool:
+    """Avisa que alguém clicou em 'Esqueci a senha' na tela de login. Tag
+    '[SIA]' no assunto pro Power Automate identificar e repassar pro Teams
+    (mesmo mecanismo já usado no FAROL: e-mail -> flow -> canal). Reset em
+    si continua manual, em Configurações > Redefinir senha de usuário."""
+    quem = f"{nome_completo} ({usuario_sigo})" if nome_completo else usuario_sigo
+    corpo = (
+        f"Pedido de redefinição de senha no SIA:\n\n"
+        f"Usuário SIGO: {usuario_sigo}\n"
+        + (f"Nome: {nome_completo}\n" if nome_completo else "Nome: (usuário não encontrado na base)\n")
+        + f"Data/hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n"
+        f"Redefina em Configurações > Redefinir senha de usuário."
+    )
+    return _enviar_email(f"[SIA] Esqueci a senha - {quem}", corpo, erro_key="_erro_envio_esqueci_senha")
+
+
 def notificar_novo_cadastro(nome_completo: str, usuario_sigo: str, equipe: str) -> bool:
     """Avisa por e-mail que um novo usuário se cadastrou e está aguardando
     aprovação. Falha de envio não deve travar o cadastro em si — quem chama

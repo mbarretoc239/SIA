@@ -628,6 +628,16 @@ class DatabaseManager:
         return self._hash_sha256_legado(senha_plain) == senha_hash
 
     # --- Autenticação e Usuários (SISTEMA DE LOGIN SIGO) ---
+    def buscar_usuario_por_sigo(self, usuario_sigo):
+        """Usado pelo fluxo 'Esqueci a senha' pra enriquecer o aviso com o
+        nome completo, se o usuário existir. Não expõe senha/hash."""
+        url = f"{self.supabase_url}/rest/v1/usuarios?usuario_sigo=eq.{usuario_sigo}&select=id,nome_completo,equipe,status"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code != 200:
+            return None
+        usuarios = response.json()
+        return usuarios[0] if usuarios else None
+
     def criar_usuario(self, usuario_sigo, nome_completo, senha, equipe):
         url = f"{self.supabase_url}/rest/v1/usuarios"
         
