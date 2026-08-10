@@ -80,13 +80,73 @@ def _salvar_historico_glosas_silenciosamente(glosas: list, meta: dict) -> None:
         pass
 
 
+def _carregar_versao_5302_no_estado(achado: dict) -> None:
+    """Popula o session_state com uma versão vinda do cache (analises_5302_cache)
+    como se fosse o resultado de um upload/processamento normal."""
+    nome_sintetico = f"cache:{achado['processo']}:{achado['dados_hash'][:8]}"
+    st.session_state["dados_pdf"] = achado["dados_glosas"]
+    st.session_state["meta_pdf"] = achado["meta"]
+    st.session_state["pdf_name"] = nome_sintetico
+    st.session_state["df_glosas_state"] = pd.DataFrame(achado["dados_glosas"])
+    st.session_state["origem_glosas"] = nome_sintetico
+    st.session_state["editor_version"] = 0
+    st.session_state["_pendente_5302_cache_name"] = nome_sintetico
+    for _k in [k for k in st.session_state.keys() if k.startswith("texto_final_v_")]:
+        del st.session_state[_k]
+    st.session_state.pop("mostrar_texto", None)
+
+
+with st.expander("🔎 Já processei esse processo antes — buscar sem reenviar o arquivo"):
+    st.caption(
+        "Busca a tabela de glosas já editada (Incluir no Relatório / Justificativa) da última "
+        "vez que alguém gerou texto pra esse processo. O texto em si é regerado na hora. "
+        "Fica disponível só até o dia 10 do mês seguinte — depois disso, precisa reenviar o arquivo."
+    )
+    col_busca_proc, col_busca_btn = st.columns([3, 1])
+    with col_busca_proc:
+        processo_busca = st.text_input("Número do processo", key="busca_5302_processo", label_visibility="collapsed", placeholder="Número do processo")
+    with col_busca_btn:
+        if st.button("Buscar", key="btn_busca_5302", use_container_width=True):
+            versoes = st.session_state.db.buscar_analises_5302_cache(processo_busca.strip())
+            if not versoes:
+                st.session_state["_versoes_5302_encontradas"] = None
+                st.warning("Processo não encontrado (pode já ter sido purgado, ou ninguém gerou texto pra ele ainda).")
+            elif len(versoes) == 1:
+                _carregar_versao_5302_no_estado(versoes[0])
+                st.session_state["_versoes_5302_encontradas"] = None
+                st.rerun()
+            else:
+                # Conteúdo divergiu entre envios (não é reprocessamento do
+                # mesmo arquivo) -- guarda pra mostrar o seletor abaixo em
+                # vez de escolher uma versão sozinho.
+                st.session_state["_versoes_5302_encontradas"] = versoes
+
+    versoes_pendentes = st.session_state.get("_versoes_5302_encontradas")
+    if versoes_pendentes:
+        st.warning(
+            f"Encontradas {len(versoes_pendentes)} versões diferentes pra esse processo "
+            "(o conteúdo divergiu entre envios). Escolha qual abrir:"
+        )
+        opcoes = {
+            f"{pd.to_datetime(v['updated_at']).strftime('%d/%m/%Y %H:%M')} — "
+            f"{v.get('atualizado_por') or 'desconhecido'} ({len(v['dados_glosas'])} glosa(s))": v
+            for v in versoes_pendentes
+        }
+        escolha = st.radio("Versões disponíveis:", list(opcoes.keys()), key="escolha_versao_5302")
+        if st.button("Carregar esta versão", key="btn_carregar_versao_5302"):
+            _carregar_versao_5302_no_estado(opcoes[escolha])
+            st.session_state["_versoes_5302_encontradas"] = None
+            st.rerun()
+
 pdf_file = st.file_uploader("Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"])
 
 if pdf_file is not None:
     # Um upload de verdade no widget nativo sempre tem prioridade sobre
-    # qualquer arquivo pendente vindo do botão flutuante da Amostragem.
+    # qualquer arquivo/análise pendente vindo do botão flutuante da
+    # Amostragem ou da busca por processo acima.
     st.session_state.pop("_pendente_5302_bytes", None)
     st.session_state.pop("_pendente_5302_name", None)
+    st.session_state.pop("_pendente_5302_cache_name", None)
 elif st.session_state.get("_pendente_5302_bytes") is not None:
     # Veio do botão flutuante "Subir 5302" na Amostragem (ver
     # views/7_Amostragem_Beta.py) -- reconstrói um arquivo em memória com
@@ -95,6 +155,13 @@ elif st.session_state.get("_pendente_5302_bytes") is not None:
     # nativo continua vazio nos reruns seguintes desta página.
     pdf_file = io.BytesIO(st.session_state["_pendente_5302_bytes"])
     pdf_file.name = st.session_state["_pendente_5302_name"]
+elif st.session_state.get("_pendente_5302_cache_name") is not None:
+    # Veio da busca por processo acima -- dados_pdf/meta_pdf/df_glosas_state
+    # já foram populados direto do cache, então só precisamos de um
+    # "arquivo" com o mesmo .name pra pular o reprocessamento abaixo
+    # (a checagem de pdf_name == dados_pdf já bate).
+    pdf_file = io.BytesIO()
+    pdf_file.name = st.session_state["_pendente_5302_cache_name"]
 
 if pdf_file is not None:
     if "dados_pdf" not in st.session_state or st.session_state.get("pdf_name") != pdf_file.name:
@@ -221,7 +288,20 @@ if pdf_file is not None:
         with col2:
             if btn_gerar:
                 st.session_state["mostrar_texto"] = True
-                
+                processo_atual = meta.get("processo", "Desconhecido")
+                if processo_atual and processo_atual != "Desconhecido":
+                    try:
+                        st.session_state.db.salvar_analise_5302_cache(
+                            processo=processo_atual,
+                            prestador=meta.get("prestador", ""),
+                            mes_referencia=_mes_referencia_de_producao(meta.get("producao", "")),
+                            dados_glosas=st.session_state.df_glosas_state.to_dict(orient="records"),
+                            meta=meta,
+                            usuario_nome=st.session_state.get("auditor_nome", ""),
+                        )
+                    except Exception:
+                        pass
+
             if st.session_state.get("mostrar_texto", False):
                 # O tipo de geracao passado dita a regra interna
                 tipo = opcao_agrupamento

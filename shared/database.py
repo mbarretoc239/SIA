@@ -407,6 +407,47 @@ class DatabaseManager:
         r = requests.post(url, headers=headers_insert, json=data)
         return r.ok
 
+    # --- Cache de análises do 5302 (busca por processo, purgado todo dia 10) ---
+    def salvar_analise_5302_cache(self, processo, prestador, mes_referencia, dados_glosas, meta, usuario_nome="") -> bool:
+        """Upsert por (processo, hash do conteúdo) -- guarda a tabela de
+        glosas já editada (Incluir no Relatório / Justificativa), não o
+        texto final (regerado na hora ao reabrir). Reenviar o MESMO conteúdo
+        pro mesmo processo não duplica (só atualiza updated_at); conteúdo
+        diferente pro mesmo processo vira uma versão nova, mantendo as duas
+        (a busca mostra as opções pra escolher). Purgado automaticamente
+        todo dia 10 via pg_cron (job 'purga_analises_5302_cache' no
+        Supabase). Não afeta o histórico de glosas permanente
+        (historico_glosas_prestador), que é outra tabela."""
+        dados_hash = hashlib.md5(
+            json.dumps(dados_glosas, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        url = f"{self.supabase_url}/rest/v1/analises_5302_cache?on_conflict=processo,dados_hash"
+        headers_upsert = {**self.headers, "Prefer": "resolution=merge-duplicates,return=minimal"}
+        data = {
+            "processo": str(processo),
+            "prestador": prestador or "",
+            "mes_referencia": mes_referencia or "",
+            "dados_glosas": dados_glosas,
+            "dados_hash": dados_hash,
+            "meta": meta,
+            "atualizado_por": usuario_nome or "",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        r = requests.post(url, headers=headers_upsert, json=data)
+        return r.ok
+
+    def buscar_analises_5302_cache(self, processo):
+        """Retorna todas as versões salvas pra esse processo (pode ser mais
+        de uma, se o conteúdo divergiu entre envios), mais recente primeiro."""
+        url = (
+            f"{self.supabase_url}/rest/v1/analises_5302_cache"
+            f"?processo=eq.{processo}&select=*&order=updated_at.desc"
+        )
+        r = requests.get(url, headers=self.headers)
+        if r.status_code != 200:
+            return []
+        return r.json()
+
     # --- Histórico de glosas por prestador (risco/desvio na Amostragem) ---
     def salvar_historico_glosas(self, registros: list, lote: int = 500) -> int:
         """Insere ocorrências de glosa no histórico por prestador --
