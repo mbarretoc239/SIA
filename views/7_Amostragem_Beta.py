@@ -272,6 +272,10 @@ with aba_busca:
                     ),
                     hide_index=True,
                     use_container_width=True,
+                    column_config={
+                        "Mês": st.column_config.Column(width="small"),
+                        "Glosas": st.column_config.Column(width="small"),
+                    },
                 )
 
             if por_glosa:
@@ -282,6 +286,11 @@ with aba_busca:
                     }),
                     hide_index=True,
                     use_container_width=True,
+                    column_config={
+                        "Glosa": st.column_config.Column(width="small"),
+                        "Justificativa": st.column_config.Column(width="large"),
+                        "Ocorrências": st.column_config.Column(width="small"),
+                    },
                 )
 
             if por_procedimento:
@@ -303,6 +312,11 @@ with aba_busca:
                     ],
                     hide_index=True,
                     use_container_width=True,
+                    column_config={
+                        "Procedimento": st.column_config.Column(width="small"),
+                        "Descrição": st.column_config.Column(width="large"),
+                        "Ocorrências": st.column_config.Column(width="small"),
+                    },
                 )
 
             if not por_glosa and not por_procedimento and not por_mes:
