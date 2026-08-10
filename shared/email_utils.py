@@ -1,3 +1,4 @@
+import html
 import smtplib
 import streamlit as st
 from datetime import datetime
@@ -32,7 +33,11 @@ def _enviar_email(assunto: str, corpo: str, anexos: list = None, erro_key: str =
     msg["Subject"] = assunto
     msg["From"] = usuario
     msg["To"] = ", ".join(_DESTINATARIOS)
-    msg.attach(MIMEText(corpo, "plain", "utf-8"))
+    # HTML em vez de plain: o flow do Power Automate que repassa pro Teams
+    # ignora quebra de linha simples (\n) e colapsa tudo numa linha só --
+    # mesmo problema (e mesma correção) já usada no FAROL.
+    corpo_html = html.escape(corpo).replace("\n", "<br>")
+    msg.attach(MIMEText(corpo_html, "html", "utf-8"))
 
     for anexo in anexos or []:
         try:
@@ -65,10 +70,8 @@ def enviar_reporte_bug(titulo: str, texto: str, autor: str, anexos: list) -> boo
 
 
 def notificar_esqueci_senha(usuario_sigo: str, nome_completo: str = "") -> bool:
-    """Avisa que alguém clicou em 'Esqueci a senha' na tela de login. Vai
-    pros _DESTINATARIOS, incluindo o e-mail do canal do Teams (post direto,
-    sem Power Automate). Reset em si continua manual, em Configurações >
-    Redefinir senha de usuário."""
+    """Avisa que alguém clicou em 'Esqueci a senha' na tela de login. Reset
+    em si continua manual, em Configurações > Redefinir senha de usuário."""
     quem = f"{nome_completo} ({usuario_sigo})" if nome_completo else usuario_sigo
     corpo = (
         f"Pedido de redefinição de senha no SIA:\n\n"
