@@ -61,12 +61,17 @@ def _botao_flutuante_upload_5302():
         """
         <style>
         div[data-testid="stPopover"] {
-            position: fixed;
+            position: fixed !important;
             bottom: 20px;
             left: 20px;
             z-index: 9999;
+            width: fit-content !important;
+        }
+        div[data-testid="stPopover"] > div {
+            width: fit-content !important;
         }
         div[data-testid="stPopover"] > div > button {
+            width: fit-content !important;
             border-radius: 999px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.4);
             padding: 2px 12px;
