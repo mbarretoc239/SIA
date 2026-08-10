@@ -157,6 +157,46 @@ def pluralizar_descricao(desc):
     return ' '.join(palavras)
 
 
+def _mesclar_clausulas_mesma_guia(clausulas: list, padrao: 're.Pattern', sufixo_dupla: str = None) -> list:
+    """Quando 2+ cláusulas de um mesmo grupo de prioridade (ex: só as
+    Críticas, ou só as demais) terminam citando a MESMA guia isolada, junta
+    numa frase só em vez de repetir a guia em frases separadas. Nunca mescla
+    entre grupos de prioridade diferentes -- quem chama já passa cada grupo
+    (críticas, outras, automáticas) separadamente, preservando a ordem.
+
+    `padrao` tem 2 grupos: (1) o texto antes do trecho da guia, (2) a guia.
+    `sufixo_dupla`: se informado, o texto final vira "{juntas}, {sufixo}
+    na guia X" (modo Padrão/Detalhado); se None, vira "{juntas} (guia X)"
+    (modo Resumido, que já usa parênteses em vez de "na guia")."""
+    por_guia = collections.defaultdict(list)
+    for i, c in enumerate(clausulas):
+        m = padrao.match(c)
+        if m:
+            por_guia[m.group(2)].append(i)
+
+    usados = set()
+    for guia, indices in por_guia.items():
+        if len(indices) < 2:
+            continue
+        partes = [padrao.match(clausulas[i]).group(1) for i in indices]
+        if len(partes) == 2:
+            juntas = f"{partes[0]} e {partes[1]}"
+        else:
+            juntas = ", ".join(partes[:-1]) + " e " + partes[-1]
+        if sufixo_dupla is not None:
+            rotulo = sufixo_dupla if len(partes) == 2 else "todas"
+            clausulas[indices[0]] = f"{juntas}, {rotulo} na guia {guia}"
+        else:
+            clausulas[indices[0]] = f"{juntas} (guia {guia})"
+        usados.update(indices[1:])
+
+    return [c for i, c in enumerate(clausulas) if i not in usados]
+
+
+_PADRAO_NA_GUIA = re.compile(r'^(.*) na guia (\S+)$')
+_PADRAO_PARENTESE_GUIA = re.compile(r'^(.*) \(guia (\S+)\)$')
+
+
 def gerar_texto(df_glosas, tipo_geracao, meta=None):
     df = df_glosas[df_glosas['Incluir no Relatório'] == True].copy()
     
@@ -887,6 +927,12 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 
         destino.append(frase)
 
+    # Mescla clausulas que citam a mesma guia isolada, mas só dentro do
+    # mesmo grupo de prioridade -- críticas continuam sempre à frente.
+    clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_NA_GUIA, sufixo_dupla="ambas")
+    clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_NA_GUIA, sufixo_dupla="ambas")
+    clausulas_automaticas = _mesclar_clausulas_mesma_guia(clausulas_automaticas, _PADRAO_NA_GUIA, sufixo_dupla="ambas")
+
     # Críticas primeiro, depois demais, depois Automáticas; 480 fica no final do texto.
     clausulas = clausulas_criticas + clausulas_outras + clausulas_automaticas
 
@@ -974,6 +1020,11 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
         frase = f"{n} {'glosa' if n == 1 else 'glosas'} {rotulo_codigo} ({_formatar_guias_resumido_curto(guias_ordenadas)})"
         destino = clausulas_criticas if "Crítica" in tipos_por_codigo[codigo] else clausulas_outras
         destino.append(frase)
+
+    # Mesma mesclagem por guia isolada do modo Padrão, só que com o sufixo
+    # "(guia X)" que o Resumido usa em vez de "na guia X".
+    clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_PARENTESE_GUIA)
+    clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_PARENTESE_GUIA)
 
     clausulas = clausulas_criticas + clausulas_outras
     if len(clausulas) == 1:

@@ -199,7 +199,7 @@ if pdf_file is not None:
             opcao_agrupamento = st.radio(
                 "Nível de Detalhe:",
                 ["Padrão", "Detalhado", "Resumido"],
-                index=1
+                index=0
             )
             
             opcao_filtro = st.radio(
