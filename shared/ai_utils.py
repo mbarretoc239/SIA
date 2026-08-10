@@ -26,14 +26,25 @@ _SYSTEM_PROMPT = (
     "Se houver mais de um motivo, liste em tópicos curtos usando hífen (-), sem markdown "
     "(nada de **negrito**, #, ou outra marcação) e sem título/rótulo antes de cada tópico. "
     "NÃO altere os motivos técnicos das recusas, NÃO adicione informações e mantenha o tom "
-    "profissional estrito."
+    "profissional estrito. CRÍTICO: cada tópico do texto original descreve um motivo "
+    "ESPECÍFICO e FACTUAL (ex: 'excedeu o máximo de procedimento por usuário', 'imagem não "
+    "permite análise do procedimento') — você só pode reescrever a FORMA (deixar mais curto, "
+    "mais natural), NUNCA substituir o motivo por outro mais genérico ou parecido. Se não tiver "
+    "certeza de como encurtar um tópico sem perder o fato específico dele, mantenha esse tópico "
+    "como está no original."
 )
 
 
 def _chamar_gemini(texto: str, api_key: str, modelo: str) -> tuple[str, str]:
     """Uma tentativa de chamada a `modelo`. Retorna (texto_resultado, erro)."""
     url = _ENDPOINT.format(modelo=modelo)
-    payload = {"contents": [{"parts": [{"text": f"{_SYSTEM_PROMPT}\n\nTexto:\n{texto}"}]}]}
+    payload = {
+        "contents": [{"parts": [{"text": f"{_SYSTEM_PROMPT}\n\nTexto:\n{texto}"}]}],
+        # Temperatura baixa: essa tarefa é reescrita fiel, não criação de
+        # conteúdo -- o padrão do Gemini (~1.0) já trocou o motivo técnico
+        # de um tópico por outro genérico numa reescrita real.
+        "generationConfig": {"temperature": 0.2},
+    }
 
     try:
         resp = requests.post(f"{url}?key={api_key}", json=payload, timeout=30)
