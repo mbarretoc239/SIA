@@ -1100,20 +1100,53 @@ class DatabaseManager:
         response = requests.patch(url, headers=self.headers, json=data)
         return response.status_code in [200, 204]
 
-    def toggle_ativo_alinhamento(self, alinhamento_id, ativo, justificativa=None):
+    def toggle_ativo_alinhamento(self, alinhamento_id, ativo, justificativa=None, usuario_id=None, usuario_nome=None):
         url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
         data = {"ativo": ativo}
         if not ativo:
             data["justificativa_inativacao"] = justificativa
         else:
             data["justificativa_inativacao"] = None
-            
+
         response = requests.patch(url, headers=self.headers, json=data)
         if response.status_code in [200, 204]:
             if ativo:
                 requests.delete(f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?alinhamento_id=eq.{alinhamento_id}", headers=self.headers)
+            self._registrar_evento_status_alinhamento(
+                alinhamento_id,
+                "reativacao" if ativo else "inativacao",
+                justificativa if not ativo else None,
+                usuario_id,
+                usuario_nome,
+            )
             return True
         return False
+
+    def _registrar_evento_status_alinhamento(self, alinhamento_id, tipo, justificativa, usuario_id, usuario_nome):
+        """Loga um evento de inativação/reativação em tabela própria, sem
+        tocar na linha de alinhamentos — diferente de justificativa_inativacao
+        (que é zerada a cada reativação), este registro é permanente."""
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_historico_status"
+        data = {
+            "alinhamento_id": alinhamento_id,
+            "tipo": tipo,
+            "justificativa": justificativa,
+            "usuario_id": usuario_id,
+            "usuario_nome": usuario_nome,
+        }
+        requests.post(url, headers=self.headers, json=data)
+
+    def carregar_historico_status_alinhamentos(self):
+        """Todos os eventos de inativação/reativação, mais recentes primeiro,
+        agrupados por alinhamento_id para montar a linha do tempo de cada card."""
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_historico_status?select=*&order=created_at.desc"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code != 200:
+            return {}
+        por_alinhamento = {}
+        for evento in response.json():
+            por_alinhamento.setdefault(evento["alinhamento_id"], []).append(evento)
+        return por_alinhamento
 
     # --- Operações de Banco (Permissões de Módulos por Role) ---
     def carregar_permissoes_modulos(self):

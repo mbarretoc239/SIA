@@ -36,18 +36,6 @@ else:
     aba_historico, = st.tabs(["Histórico"])
 
 
-def _status_html(ativo):
-    if ativo:
-        return "🟢 Ativo"
-    return "🔴 Inativo"
-
-
-def _titulo_html(titulo, ativo):
-    if ativo:
-        return str(titulo)
-    return f"{titulo} (INATIVO)"
-
-
 def _conteudo_html(conteudo):
     texto = str(conteudo or "")
     m = re.match(r"^_(.*?)_\n\n(.*)$", texto, re.DOTALL)
@@ -77,8 +65,29 @@ def _obrigados_ciencia(alinhamento, usuarios_ativos):
     ]
 
 
+def _render_historico_status(aid, historico_por_alinhamento):
+    """Popover com a linha do tempo de inativações/reativações do item.
+    Não é um expander (Streamlit não permite expander dentro de expander) —
+    mesmo padrão já usado pelos botões Inativar/Excluir logo abaixo."""
+    eventos = historico_por_alinhamento.get(aid, [])
+    if not eventos:
+        return
+    with st.popover(f"Histórico de status ({len(eventos)})", use_container_width=True):
+        for i, ev in enumerate(eventos):
+            emoji = "🔴" if ev["tipo"] == "inativacao" else "🟢"
+            acao = "Inativou" if ev["tipo"] == "inativacao" else "Reativou"
+            quando = pd.to_datetime(ev["created_at"]).strftime("%d/%m/%Y %H:%M")
+            quem = ev.get("usuario_nome") or "—"
+            st.markdown(f"{emoji} **{acao}** · {quando} · {quem}")
+            if ev.get("justificativa"):
+                st.caption(ev["justificativa"])
+            if i < len(eventos) - 1:
+                st.divider()
+
+
 with aba_historico:
     alinhamentos = db.carregar_alinhamentos_visiveis(role)
+    historico_por_alinhamento = db.carregar_historico_status_alinhamentos()
 
     if not alinhamentos:
         st.info("Nenhum alinhamento disponível para o seu nível de acesso.")
@@ -110,10 +119,9 @@ with aba_historico:
         if not filtrados:
             st.info("Nenhum alinhamento encontrado com esses filtros.")
         else:
-            # Agrupa por público-alvo (nivel_minimo). A seção do próprio nível
-            # do usuário vem aberta por padrão; as demais (níveis abaixo, que
-            # cargos mais altos também enxergam) ficam colapsadas para não
-            # poluir a visão de quem acumula vários níveis.
+            # Agrupa por público-alvo (nivel_minimo), mesmo card usado na aba
+            # Gerenciar (sem os botões de ação) — cada item expande sozinho
+            # com sua linha do tempo de status.
             por_nivel = {}
             for a in filtrados:
                 por_nivel.setdefault(a.get("nivel_minimo", "Auditor"), []).append(a)
@@ -122,33 +130,23 @@ with aba_historico:
 
             for nivel in niveis_presentes:
                 itens_nivel = por_nivel[nivel]
-                aberto_por_padrao = (nivel == role)
-                with st.expander(f"{nivel} ({len(itens_nivel)})", expanded=aberto_por_padrao):
-                    df_visual = pd.DataFrame([
-                        {
-                            "Status": _status_html(a.get("ativo", True)),
-                            "Criado em": pd.to_datetime(a["created_at"]).date(),
-                            "Título": _titulo_html(a.get("titulo", ""), a.get("ativo", True)),
-                            "Deliberação": _conteudo_html(a.get("conteudo", "")),
-                            "Categoria": a.get("categoria", "Geral"),
-                            "Anexo": a.get("anexo_url") or "",
-                        }
-                        for a in itens_nivel
-                    ])
-                    st.dataframe(
-                        df_visual,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_order=["Status", "Criado em", "Título", "Deliberação", "Anexo", "Categoria"],
-                        column_config={
-                            "Status": st.column_config.TextColumn("Status", width="small"),
-                            "Criado em": st.column_config.DateColumn("Criado em", format="DD/MM/YYYY", width="small"),
-                            "Categoria": st.column_config.TextColumn("Categoria", width="small"),
-                            "Título": st.column_config.TextColumn("Título", width="medium"),
-                            "Deliberação": st.column_config.TextColumn("Deliberação", width="large"),
-                            "Anexo": st.column_config.LinkColumn("Anexo", display_text="Abrir", width="small"),
-                        }
-                    )
+                st.markdown(f"**{nivel}** · {len(itens_nivel)} alinhamento(s)")
+                for a in itens_nivel:
+                    aid = a["id"]
+                    ativo = a.get("ativo", True)
+                    data_fmt = pd.to_datetime(a["created_at"]).strftime("%d/%m/%Y") if a.get("created_at") else "—"
+                    status_emoji = "🟢" if ativo else "🔴"
+                    label = f"{status_emoji} {a.get('titulo', '')} · {data_fmt} · {a.get('categoria', 'Geral')}"
+
+                    with st.expander(label):
+                        st.markdown(_conteudo_markdown(a.get("conteudo", "")))
+                        if a.get("anexo_url"):
+                            st.link_button("Abrir anexo", a["anexo_url"])
+                        st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
+                        if not ativo and a.get("justificativa_inativacao"):
+                            st.warning(f"**Motivo da inativação atual:** {a['justificativa_inativacao']}")
+                        _render_historico_status(aid, historico_por_alinhamento)
+                st.divider()
 
 
 if pode_gerenciar:
@@ -181,6 +179,7 @@ if pode_gerenciar:
         leituras_por_alinhamento = {}
         for l in leituras:
             leituras_por_alinhamento.setdefault(l["alinhamento_id"], {})[l["usuario_id"]] = l["lido_em"]
+        historico_por_alinhamento = db.carregar_historico_status_alinhamentos()
 
         def _form_edicao(a_alvo, em_edicao):
             """Campos + Salvar/Cancelar + status de ciência. Reaproveitado
@@ -329,6 +328,7 @@ if pode_gerenciar:
                 if a.get("anexo_url"):
                     st.link_button("Abrir anexo", a["anexo_url"])
                 st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
+                _render_historico_status(aid, historico_por_alinhamento)
 
                 col_edit, col_status, col_del = st.columns([1, 1.4, 1])
                 with col_edit:
@@ -343,13 +343,13 @@ if pode_gerenciar:
                             if st.button("Confirmar inativação", key=f"conf_inativ_{aid}", type="primary", use_container_width=True):
                                 if not motivo_inativ.strip():
                                     st.warning("Justificativa obrigatória.")
-                                elif db.toggle_ativo_alinhamento(aid, False, justificativa=motivo_inativ.strip()):
+                                elif db.toggle_ativo_alinhamento(aid, False, justificativa=motivo_inativ.strip(), usuario_id=usuario_id, usuario_nome=nome):
                                     st.rerun()
                                 else:
                                     st.error("Erro ao inativar.")
                     else:
                         if st.button("Reativar", key=f"reativ_{aid}", use_container_width=True):
-                            if db.toggle_ativo_alinhamento(aid, True):
+                            if db.toggle_ativo_alinhamento(aid, True, usuario_id=usuario_id, usuario_nome=nome):
                                 st.rerun()
                             else:
                                 st.error("Erro ao reativar.")
