@@ -23,7 +23,7 @@ nome = st.session_state.get("auditor_nome", "Usuário")
 usuario_id = st.session_state.get("usuario_id")
 
 CATEGORIAS = ["Geral", "Técnico", "Administrativo", "CAP"]
-NIVEIS = ["Contas", "Auditor", "CISO", "Gestor"]
+NIVEIS = ["Contas", "Auditor", "CISO"]
 
 st.title("Alinhamentos")
 st.caption("Histórico de alinhamentos internos.")
@@ -96,10 +96,12 @@ with aba_historico:
             pd.to_datetime(a["created_at"]).year for a in alinhamentos if a.get("created_at")
         }, reverse=True)
 
-        # Equipe: por padrão filtrado pelo nível do próprio usuário (Admin
-        # cai em "Gestor", mesma hierarquia). "Todas" mostra tudo sem
-        # agrupar por nível — só com a tag da equipe em cada card.
-        default_equipe = role if role in NIVEIS else ("Gestor" if role == "Admin" else "Todas")
+        # Equipe: por padrão filtrado pelo nível do próprio usuário. Gestor/
+        # Admin não têm equipe própria na lista (não existe alinhamento só
+        # pra gestor — eles já veem tudo por hierarquia), então caem em
+        # "Todas". "Todas" mostra tudo sem agrupar por nível — só com a tag
+        # da equipe em cada card.
+        default_equipe = role if role in NIVEIS else "Todas"
         if "alinh_hist_equipe" not in st.session_state:
             st.session_state["alinh_hist_equipe"] = default_equipe
 
