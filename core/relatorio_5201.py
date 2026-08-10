@@ -33,7 +33,7 @@ COLUNAS_OPCIONAIS = {
 CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
 STATUS_LABELS = {
-    "CONSISTIDO": "Consistido (em aberto)",
+    "CONSISTIDO": "Consistido",
     "FECHADO": "Fechado",
     "GLOSADO": "Glosado",
     "CALCULADO": "Calculado",
