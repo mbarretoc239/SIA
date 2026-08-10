@@ -5,13 +5,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
-_DESTINATARIOS = [
-    "matheus.cardoso@hapvida.com.br",
-    "matheusb239@gmail.com",
-    # Canal "Notificações do SIA - Auditoria Odonto" no Teams: qualquer
-    # e-mail mandado aqui vira post automático no canal (sem Power Automate).
-    "1b732a3f.hapvida.com.br@amer.teams.ms",
-]
+_DESTINATARIOS = ["matheus.cardoso@hapvida.com.br", "matheusb239@gmail.com"]
+# O canal do Teams ("Notificações do SIA - Auditoria Odonto") rejeita e-mail
+# vindo do Gmail (remetente fora da organização Hapvida) -- não dá pra
+# mandar direto pro endereço do canal. Todo assunto aqui já sai com a tag
+# "[SIA]"; roteamento pro Teams é via Power Automate (mesmo mecanismo do
+# FAROL): um flow lê a caixa matheus.cardoso@hapvida.com.br, filtra por essa
+# tag e posta no canal como usuário da organização.
 
 
 def _enviar_email(assunto: str, corpo: str, anexos: list = None, erro_key: str = "_erro_envio_email") -> bool:
