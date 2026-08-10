@@ -62,7 +62,7 @@ def _botao_flutuante_upload_5302():
         <style>
         div[data-testid="stPopover"] {
             position: fixed !important;
-            bottom: 20px;
+            bottom: 6px;
             left: 20px;
             z-index: 9999;
             width: fit-content !important;
