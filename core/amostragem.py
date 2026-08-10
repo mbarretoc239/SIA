@@ -724,12 +724,6 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
 
     html_tabela = f"""
     <style>
-        /* scrolling="no" no <iframe> é atributo legado que navegadores modernos
-           ignoram -- se o conteúdo real passar da altura calculada (ex: linha
-           de Procedimentos quebrando em 2), o iframe volta a rolar por dentro
-           e prende a roda do mouse. overflow:hidden garante que nunca role
-           internamente, mesmo se a estimativa de altura ficar curta. */
-        html, body {{ overflow: hidden !important; }}
         body {{ color: #1f2937; background: transparent; margin: 0; }}
         .pbi-wrap {{ font-family: 'Source Sans Pro', sans-serif; color: inherit; }}
         .pbi-table {{ width: 100%; border-collapse: collapse; font-size: 14px; color: inherit; }}
@@ -877,10 +871,5 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         }});
     </script>
     """
-    # Sem cap de altura nem scroll interno: com scrolling=True e altura fixa,
-    # o iframe virava uma área com scroll PRÓPRIA -- com o mouse em cima da
-    # tabela, a rolagem ficava presa nela em vez de rolar a página normal.
-    # Deixando a altura acompanhar o conteúdo, o iframe nunca precisa de
-    # scroll interno e a rolagem do mouse continua controlando a página.
-    altura = 100 + 48 * max(1, len(df_guias))
-    components.html(html_tabela, height=altura, scrolling=False)
+    altura = 82 + 36 * max(1, len(df_guias))
+    components.html(html_tabela, height=min(altura, 540), scrolling=True)
