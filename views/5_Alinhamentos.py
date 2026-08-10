@@ -96,9 +96,18 @@ with aba_historico:
             pd.to_datetime(a["created_at"]).year for a in alinhamentos if a.get("created_at")
         }, reverse=True)
 
-        col_cat, col_ano, col_busca = st.columns([1, 1, 2])
+        # Equipe: por padrão filtrado pelo nível do próprio usuário (Admin
+        # cai em "Gestor", mesma hierarquia). "Todas" mostra tudo sem
+        # agrupar por nível — só com a tag da equipe em cada card.
+        default_equipe = role if role in NIVEIS else ("Gestor" if role == "Admin" else "Todas")
+        if "alinh_hist_equipe" not in st.session_state:
+            st.session_state["alinh_hist_equipe"] = default_equipe
+
+        col_cat, col_equipe, col_ano, col_busca = st.columns([1, 1, 1, 2])
         with col_cat:
             categoria_filtro = st.selectbox("Categoria", ["Todas"] + CATEGORIAS, width=300)
+        with col_equipe:
+            equipe_filtro = st.selectbox("Equipe", ["Todas"] + NIVEIS, key="alinh_hist_equipe", width=300)
         with col_ano:
             ano_filtro = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis], width=300)
         with col_busca:
@@ -107,6 +116,8 @@ with aba_historico:
         filtrados = alinhamentos
         if categoria_filtro != "Todas":
             filtrados = [a for a in filtrados if a.get("categoria") == categoria_filtro]
+        if equipe_filtro != "Todas":
+            filtrados = [a for a in filtrados if a.get("nivel_minimo", "Auditor") == equipe_filtro]
         if ano_filtro != "Todos":
             filtrados = [a for a in filtrados if str(pd.to_datetime(a["created_at"]).year) == ano_filtro]
         if busca:
@@ -119,34 +130,23 @@ with aba_historico:
         if not filtrados:
             st.info("Nenhum alinhamento encontrado com esses filtros.")
         else:
-            # Agrupa por público-alvo (nivel_minimo), mesmo card usado na aba
-            # Gerenciar (sem os botões de ação) — cada item expande sozinho
-            # com sua linha do tempo de status.
-            por_nivel = {}
+            st.caption(f"{len(filtrados)} alinhamento(s)")
             for a in filtrados:
-                por_nivel.setdefault(a.get("nivel_minimo", "Auditor"), []).append(a)
+                aid = a["id"]
+                ativo = a.get("ativo", True)
+                data_fmt = pd.to_datetime(a["created_at"]).strftime("%d/%m/%Y") if a.get("created_at") else "—"
+                status_emoji = "🟢" if ativo else "🔴"
+                equipe_tag = f" · {a.get('nivel_minimo', 'Auditor')}" if equipe_filtro == "Todas" else ""
+                label = f"{status_emoji} {a.get('titulo', '')} · {data_fmt} · {a.get('categoria', 'Geral')}{equipe_tag}"
 
-            niveis_presentes = [n for n in NIVEIS if n in por_nivel]
-
-            for nivel in niveis_presentes:
-                itens_nivel = por_nivel[nivel]
-                st.markdown(f"**{nivel}** · {len(itens_nivel)} alinhamento(s)")
-                for a in itens_nivel:
-                    aid = a["id"]
-                    ativo = a.get("ativo", True)
-                    data_fmt = pd.to_datetime(a["created_at"]).strftime("%d/%m/%Y") if a.get("created_at") else "—"
-                    status_emoji = "🟢" if ativo else "🔴"
-                    label = f"{status_emoji} {a.get('titulo', '')} · {data_fmt} · {a.get('categoria', 'Geral')}"
-
-                    with st.expander(label):
-                        st.markdown(_conteudo_markdown(a.get("conteudo", "")))
-                        if a.get("anexo_url"):
-                            st.link_button("Abrir anexo", a["anexo_url"])
-                        st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
-                        if not ativo and a.get("justificativa_inativacao"):
-                            st.warning(f"**Motivo da inativação atual:** {a['justificativa_inativacao']}")
-                        _render_historico_status(aid, historico_por_alinhamento)
-                st.divider()
+                with st.expander(label):
+                    st.markdown(_conteudo_markdown(a.get("conteudo", "")))
+                    if a.get("anexo_url"):
+                        st.link_button("Abrir anexo", a["anexo_url"])
+                    st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
+                    if not ativo and a.get("justificativa_inativacao"):
+                        st.warning(f"**Motivo da inativação atual:** {a['justificativa_inativacao']}")
+                    _render_historico_status(aid, historico_por_alinhamento)
 
 
 if pode_gerenciar:
