@@ -34,6 +34,58 @@ st.caption(
     "prestador solicitou restauração para um dente ausente\"."
 )
 
+
+def _botao_flutuante_voltar_amostragem():
+    """FAB fixo no canto da tela: caminho inverso do botão "Gerar Relatório
+    5302" da Amostragem -- cola o número do processo aqui e já volta pra lá
+    com ele buscado. Pré-preenche com o processo do relatório atual, se
+    houver um carregado (ver views/7_Amostragem_Beta.py p/ o botão espelho)."""
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stPopover"] {
+            position: fixed !important;
+            bottom: 20px;
+            left: 20px;
+            z-index: 9999;
+            width: fit-content !important;
+        }
+        div[data-testid="stPopover"] > div {
+            width: fit-content !important;
+        }
+        div[data-testid="stPopover"] > div > button {
+            width: fit-content !important;
+            border-radius: 999px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+            padding: 8px 20px;
+            font-size: 0.95rem;
+            min-height: 0;
+        }
+        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div[data-testid="stPopover"] {
+            left: 22rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    processo_atual = (st.session_state.get("meta_pdf") or {}).get("processo", "")
+    if processo_atual == "Desconhecido":
+        processo_atual = ""
+    with st.popover("🔎 Amostragem"):
+        st.caption("Cola o número do processo e já busca lá.")
+        processo_volta = st.text_input(
+            "Número do processo", value=processo_atual, key="fab_volta_amostragem_processo",
+        )
+        if st.button("Buscar", key="btn_volta_amostragem", use_container_width=True):
+            if processo_volta.strip():
+                st.session_state["_amostragem_beta_processo"] = processo_volta.strip()
+                st.switch_page("views/7_Amostragem_Beta.py")
+            else:
+                st.warning("Informe o número do processo.")
+
+
+_botao_flutuante_voltar_amostragem()
+
 def _mes_referencia_de_producao(producao: str) -> str:
     """Converte 'MM/YYYY' (formato do parser do 5302) para 'YYYY-MM'."""
     try:
