@@ -64,7 +64,12 @@ def _botao_flutuante_upload_5302():
     st.markdown(
         """
         <style>
-        div[data-testid="stPopover"] {
+        /* Alvo via st.container(key=...) -- vira a classe .st-key-<nome> de
+           verdade no DOM (Streamlit 1.3x+). Mais confiável que nth-of-type:
+           cada popover fica isolado no próprio container, não é "irmão" de
+           verdade dos outros popovers da página, então nth-of-type nunca
+           funciona pra diferenciar dois FABs na mesma tela. */
+        div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] {
             position: fixed !important;
             bottom: 6px;
             left: 20px;
@@ -72,10 +77,10 @@ def _botao_flutuante_upload_5302():
             width: fit-content !important;
             transition: left 0.2s ease;
         }
-        div[data-testid="stPopover"] > div {
+        div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] > div {
             width: fit-content !important;
         }
-        div[data-testid="stPopover"] > div > button {
+        div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] > div > button {
             width: fit-content !important;
             border-radius: 999px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.4);
@@ -85,22 +90,23 @@ def _botao_flutuante_upload_5302():
         }
         /* Sidebar aberta cobre o canto esquerdo -- desloca o botão pra depois
            dela (Streamlit expõe o estado via aria-expanded no <section>). */
-        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div[data-testid="stPopover"] {
+        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] {
             left: 22rem;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
-    with st.popover("📤 Gerar Relatório 5302"):
-        st.caption("Envia o relatório 5302 e já abre a tela dele com o arquivo carregado.")
-        arquivo_fab = st.file_uploader(
-            "Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"], key="fab_upload_5302",
-        )
-        if arquivo_fab is not None:
-            st.session_state["_pendente_5302_bytes"] = arquivo_fab.getvalue()
-            st.session_state["_pendente_5302_name"] = arquivo_fab.name
-            st.switch_page("views/2_Relatorio_5302.py")
+    with st.container(key="fab_container_upload_5302"):
+        with st.popover("📤 Gerar Relatório 5302"):
+            st.caption("Envia o relatório 5302 e já abre a tela dele com o arquivo carregado.")
+            arquivo_fab = st.file_uploader(
+                "Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"], key="fab_upload_5302",
+            )
+            if arquivo_fab is not None:
+                st.session_state["_pendente_5302_bytes"] = arquivo_fab.getvalue()
+                st.session_state["_pendente_5302_name"] = arquivo_fab.name
+                st.switch_page("views/2_Relatorio_5302.py")
 
 
 def _botao_flutuante_atalhos_copia():
@@ -113,10 +119,30 @@ def _botao_flutuante_atalhos_copia():
     st.markdown(
         """
         <style>
-        /* :nth-of-type empilha esse popover acima do "Gerar Relatório
-           5302" (que é o 1º da página) -- mesma posição base, só sobe. */
-        div[data-testid="stPopover"]:nth-of-type(2) {
-            bottom: 62px !important;
+        /* Mesma técnica do FAB de upload -- container com key vira uma
+           classe .st-key-<nome> real no DOM, evita colisão de posição
+           entre os dois botões flutuantes da página. */
+        div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
+            position: fixed !important;
+            bottom: 62px;
+            left: 20px;
+            z-index: 9999;
+            width: fit-content !important;
+            transition: left 0.2s ease;
+        }
+        div.st-key-fab_container_atalhos div[data-testid="stPopover"] > div {
+            width: fit-content !important;
+        }
+        div.st-key-fab_container_atalhos div[data-testid="stPopover"] > div > button {
+            width: fit-content !important;
+            border-radius: 999px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+            padding: 8px 20px;
+            font-size: 0.95rem;
+            min-height: 0;
+        }
+        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
+            left: 22rem;
         }
         </style>
         """,
@@ -134,9 +160,10 @@ def _botao_flutuante_atalhos_copia():
         for rotulo, valor in itens
     )
 
-    with st.popover("📋 Atalhos"):
-        st.caption("Clique pra copiar.")
-        components.html(
+    with st.container(key="fab_container_atalhos"):
+        with st.popover("📋 Atalhos"):
+            st.caption("Clique pra copiar.")
+            components.html(
             f"""
             <style>
                 body {{ margin: 0; }}
