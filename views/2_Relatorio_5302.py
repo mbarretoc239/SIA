@@ -1,3 +1,4 @@
+import hashlib
 import io
 
 import streamlit as st
@@ -73,15 +74,20 @@ def _botao_flutuante_voltar_amostragem():
         processo_atual = ""
     with st.popover("🔎 Amostragem"):
         st.caption("Cola o número do processo e já busca lá.")
-        processo_volta = st.text_input(
-            "Número do processo", value=processo_atual, key="fab_volta_amostragem_processo",
-        )
-        if st.button("Buscar", key="btn_volta_amostragem", use_container_width=True):
-            if processo_volta.strip():
-                st.session_state["_amostragem_beta_processo"] = processo_volta.strip()
-                st.switch_page("views/7_Amostragem_Beta.py")
-            else:
-                st.warning("Informe o número do processo.")
+        # Form em vez de text_input + button soltos: sem isso, o valor
+        # digitado só "commita" no blur (Enter/Tab/clicar fora), que dentro
+        # de um popover às vezes não acontece a tempo do clique no botão
+        # pegar o texto novo -- precisava de um Enter extra antes de Buscar.
+        with st.form("form_volta_amostragem", clear_on_submit=False):
+            processo_volta = st.text_input(
+                "Número do processo", value=processo_atual, key="fab_volta_amostragem_processo",
+            )
+            if st.form_submit_button("Buscar", use_container_width=True):
+                if processo_volta.strip():
+                    st.session_state["_amostragem_beta_processo"] = processo_volta.strip()
+                    st.switch_page("views/7_Amostragem_Beta.py")
+                else:
+                    st.warning("Informe o número do processo.")
 
 
 _botao_flutuante_voltar_amostragem()
@@ -139,6 +145,11 @@ def _carregar_versao_5302_no_estado(achado: dict) -> None:
     st.session_state["dados_pdf"] = achado["dados_glosas"]
     st.session_state["meta_pdf"] = achado["meta"]
     st.session_state["pdf_name"] = nome_sintetico
+    # Hash "vazio": o pdf_file reconstruído pra esse caminho é um BytesIO()
+    # sem conteúdo (ver fallback "_pendente_5302_cache_name" abaixo) -- tem
+    # que bater com o hash calculado ali, senão o reprocessamento dispara
+    # à toa por cima do que acabamos de carregar do cache.
+    st.session_state["pdf_hash"] = hashlib.md5(b"").hexdigest()
     st.session_state["df_glosas_state"] = pd.DataFrame(achado["dados_glosas"])
     st.session_state["origem_glosas"] = nome_sintetico
     st.session_state["editor_version"] = 0
@@ -216,7 +227,16 @@ elif st.session_state.get("_pendente_5302_cache_name") is not None:
     pdf_file.name = st.session_state["_pendente_5302_cache_name"]
 
 if pdf_file is not None:
-    if "dados_pdf" not in st.session_state or st.session_state.get("pdf_name") != pdf_file.name:
+    # Compara pelo CONTEÚDO (hash), não só pelo nome -- um relatório
+    # corrigido reenviado com o mesmo nome de arquivo antes só era detectado
+    # se o nome também mudasse, então o app continuava mostrando os dados
+    # antigos já carregados no session_state.
+    pdf_hash_atual = hashlib.md5(pdf_file.getvalue()).hexdigest()
+    if (
+        "dados_pdf" not in st.session_state
+        or st.session_state.get("pdf_name") != pdf_file.name
+        or st.session_state.get("pdf_hash") != pdf_hash_atual
+    ):
         with st.spinner("Analisando arquivo em memória..."):
             if pdf_file.name.lower().endswith(".csv"):
                 glosas, meta = processar_csv(pdf_file)
@@ -225,6 +245,7 @@ if pdf_file is not None:
             st.session_state["dados_pdf"] = glosas
             st.session_state["meta_pdf"] = meta
             st.session_state["pdf_name"] = pdf_file.name
+            st.session_state["pdf_hash"] = pdf_hash_atual
             _salvar_historico_glosas_silenciosamente(glosas, meta)
 
     dados = st.session_state.get("dados_pdf", [])
