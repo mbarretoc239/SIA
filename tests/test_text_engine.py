@@ -251,8 +251,9 @@ def test_resumido_funde_420_e_430():
         _row("G1", "2015", "endodontia", "430", "Técnica"),
     ]
     txt = _gerar_resumido(rows)
-    assert "420 e 430" in txt
-    assert "glosas 420 e 430 (guia G1)" in txt or "glosa 420 e 430 (guia G1)" in txt
+    # Continuam na mesma frase/guia, mas cada código com sua própria
+    # contagem (não somadas numa só) -- ver commit da correção.
+    assert "1 glosa 420 e 1 glosa 430 (guia G1)" in txt
 
 
 def test_resumido_480_sem_frase_especial():

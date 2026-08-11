@@ -1018,11 +1018,14 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
     clausulas_criticas, clausulas_outras = [], []
     for codigo, guias in guias_por_codigo.items():
         guias_ordenadas = sorted(guias)
-        # 420+430 contam como 2 glosas por guia na contagem (são duas
-        # glosas de verdade), mesmo agrupadas na mesma frase/guia.
-        n = len(guias_ordenadas) * 2 if codigo == "430_420" else len(guias_ordenadas)
-        rotulo_codigo = "420 e 430" if codigo == "430_420" else codigo
-        frase = f"{n} {'glosa' if n == 1 else 'glosas'} {rotulo_codigo} ({_formatar_guias_resumido_curto(guias_ordenadas)})"
+        n = len(guias_ordenadas)
+        if codigo == "430_420":
+            # Continuam na mesma frase/guia, mas cada código com sua própria
+            # contagem ("N glosas 420 e N glosas 430"), não somadas numa só.
+            rotulo_codigo = f"{n} {'glosa' if n == 1 else 'glosas'} 420 e {n} {'glosa' if n == 1 else 'glosas'} 430"
+        else:
+            rotulo_codigo = f"{n} {'glosa' if n == 1 else 'glosas'} {codigo}"
+        frase = f"{rotulo_codigo} ({_formatar_guias_resumido_curto(guias_ordenadas)})"
         destino = clausulas_criticas if "Crítica" in tipos_por_codigo[codigo] else clausulas_outras
         destino.append(frase)
 
@@ -1087,11 +1090,13 @@ def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
     for chave, guias in guias_por_chave.items():
         codigo, sub, justificativa = chave
         guias_ordenadas = sorted(guias)
-        # 420+430 contam como 2 glosas por guia na contagem (são duas
-        # glosas de verdade), mesmo agrupadas na mesma frase/guia.
-        n = len(guias_ordenadas) * 2 if codigo == "430_420" else len(guias_ordenadas)
-        rotulo_codigo = "420 e 430" if codigo == "430_420" else codigo
-        frase = f"{n} {'glosa' if n == 1 else 'glosas'} {rotulo_codigo}"
+        n = len(guias_ordenadas)
+        if codigo == "430_420":
+            # Continuam na mesma frase/guia, mas cada código com sua própria
+            # contagem ("N glosas 420 e N glosas 430"), não somadas numa só.
+            frase = f"{n} {'glosa' if n == 1 else 'glosas'} 420 e {n} {'glosa' if n == 1 else 'glosas'} 430"
+        else:
+            frase = f"{n} {'glosa' if n == 1 else 'glosas'} {codigo}"
         if justificativa:
             frase += f", {justificativa}"
         frase += f" ({_formatar_guias_resumido_curto(guias_ordenadas)})"
