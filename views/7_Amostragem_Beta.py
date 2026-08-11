@@ -87,6 +87,13 @@ def _botao_flutuante_upload_5302():
             padding: 8px 20px;
             font-size: 0.95rem;
             min-height: 0;
+            background-color: #f0f2f6 !important;
+            opacity: 1 !important;
+        }
+        @media (prefers-color-scheme: dark) {
+            div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] > div > button {
+                background-color: #13233A !important;
+            }
         }
         /* Sidebar aberta cobre o canto esquerdo -- desloca o botão pra depois
            dela (Streamlit expõe o estado via aria-expanded no <section>). */
@@ -141,6 +148,13 @@ def _botao_flutuante_atalhos_copia():
             padding: 8px 20px;
             font-size: 0.95rem;
             min-height: 0;
+            background-color: #f0f2f6 !important;
+            opacity: 1 !important;
+        }
+        @media (prefers-color-scheme: dark) {
+            div.st-key-fab_container_atalhos div[data-testid="stPopover"] > div > button {
+                background-color: #13233A !important;
+            }
         }
         body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
             left: 22rem;
