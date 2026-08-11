@@ -626,6 +626,9 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
     if tipo_geracao == "Resumido":
         return _gerar_texto_resumido_curto(df, meta, prefixo)
 
+    if tipo_geracao == "Resumido com Justificativa":
+        return _gerar_texto_resumido_com_justificativa(df, meta, prefixo)
+
     # --- NOVO MOTOR MISTO COM FATORAÇÃO DE GUIAS ---
     def categorizar_procedimento(cod, desc):
         desc_lower = str(desc).lower()
@@ -1015,7 +1018,9 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
     clausulas_criticas, clausulas_outras = [], []
     for codigo, guias in guias_por_codigo.items():
         guias_ordenadas = sorted(guias)
-        n = len(guias_ordenadas)
+        # 420+430 contam como 2 glosas por guia na contagem (são duas
+        # glosas de verdade), mesmo agrupadas na mesma frase/guia.
+        n = len(guias_ordenadas) * 2 if codigo == "430_420" else len(guias_ordenadas)
         rotulo_codigo = "420 e 430" if codigo == "430_420" else codigo
         frase = f"{n} {'glosa' if n == 1 else 'glosas'} {rotulo_codigo} ({_formatar_guias_resumido_curto(guias_ordenadas)})"
         destino = clausulas_criticas if "Crítica" in tipos_por_codigo[codigo] else clausulas_outras
@@ -1044,6 +1049,84 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
             resumo_financeiro = f", totalizando um percentual de glosa de {pct:.1f}% do valor cobrado no processo"
 
     return prefixo + texto_final + resumo_financeiro + "."
+
+
+def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
+    """Modo Resumido com Justificativa: mesmo formato compacto do Resumido
+    (código + guias), mas mantém a justificativa/subglosa de cada motivo --
+    agrupa por (código, subglosa, justificativa) em vez de só o código, então
+    a mesma glosa com motivos diferentes vira cláusulas separadas. Críticas
+    sempre na frente, igual aos outros níveis de detalhe."""
+    por_guia = collections.defaultdict(list)
+    for _, row in df.iterrows():
+        por_guia[str(row['Guia'])].append({
+            "glosa": str(row['Glosa']),
+            "sub": str(row.get('Cód. Sub-Glosa', '') or '').strip(),
+            "justificativa": str(row.get('Justificativa', '') or '').strip(),
+            "tipo": str(row.get('Tipo', '') or ''),
+        })
+
+    guias_por_chave = collections.defaultdict(set)
+    tipos_por_chave = collections.defaultdict(set)
+    for guia, itens_guia in por_guia.items():
+        codigos_guia = {i["glosa"] for i in itens_guia}
+        # Mesma fusão 420+430 (falta de RX inicial e final) usada nos outros níveis.
+        if "420" in codigos_guia and "430" in codigos_guia:
+            itens_guia = [i for i in itens_guia if i["glosa"] not in ("420", "430")]
+            itens_guia.append({"glosa": "430_420", "sub": "", "justificativa": "", "tipo": ""})
+        for item in itens_guia:
+            chave = (item["glosa"], item["sub"], item["justificativa"])
+            guias_por_chave[chave].add(guia)
+            if item["tipo"]:
+                tipos_por_chave[chave].add(item["tipo"])
+
+    if not guias_por_chave:
+        return prefixo + "Nenhuma glosa selecionada."
+
+    clausulas_criticas, clausulas_outras = [], []
+    for chave, guias in guias_por_chave.items():
+        codigo, sub, justificativa = chave
+        guias_ordenadas = sorted(guias)
+        # 420+430 contam como 2 glosas por guia na contagem (são duas
+        # glosas de verdade), mesmo agrupadas na mesma frase/guia.
+        n = len(guias_ordenadas) * 2 if codigo == "430_420" else len(guias_ordenadas)
+        if codigo == "430_420":
+            rotulo_codigo = "420 e 430"
+        elif sub:
+            rotulo_codigo = f"{codigo}.{sub}"
+        else:
+            rotulo_codigo = codigo
+        frase = f"{n} {'glosa' if n == 1 else 'glosas'} {rotulo_codigo}"
+        if justificativa:
+            frase += f", {justificativa}"
+        frase += f" ({_formatar_guias_resumido_curto(guias_ordenadas)})"
+        destino = clausulas_criticas if "Crítica" in tipos_por_chave[chave] else clausulas_outras
+        destino.append(frase)
+
+    # Mesma mesclagem por guia isolada dos outros níveis -- código+motivo
+    # diferentes na mesma guia viram uma frase só, guia no final.
+    clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_PARENTESE_GUIA)
+    clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_PARENTESE_GUIA)
+
+    clausulas = clausulas_criticas + clausulas_outras
+    if len(clausulas) == 1:
+        texto_final = "Prestador apresentou " + clausulas[0]
+    else:
+        texto_final = "Prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1]
+
+    resumo_financeiro = ""
+    if meta and meta.get("valor_cobrado", 0) > 0:
+        cobrado = meta.get("valor_cobrado", 0)
+        calculado = meta.get("valor_calculado", 0)
+        glosa = meta.get("valor_glosa", 0)
+        diferenca = cobrado - calculado
+        glosa_real = diferenca if diferenca > 0 else glosa
+        if glosa_real > 0:
+            pct = (glosa_real / cobrado) * 100
+            resumo_financeiro = f", totalizando um percentual de glosa de {pct:.1f}% do valor cobrado no processo"
+
+    return prefixo + texto_final + resumo_financeiro + "."
+
 
 def mixar_textos_inteligente(textos):
     if not textos: return ""
