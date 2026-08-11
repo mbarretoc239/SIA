@@ -61,6 +61,13 @@ def _botao_flutuante_voltar_amostragem():
             padding: 8px 20px;
             font-size: 0.95rem;
             min-height: 0;
+            background-color: #f0f2f6 !important;
+            opacity: 1 !important;
+        }
+        @media (prefers-color-scheme: dark) {
+            div[data-testid="stPopover"] > div > button {
+                background-color: #13233A !important;
+            }
         }
         body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div[data-testid="stPopover"] {
             left: 22rem;
