@@ -111,11 +111,12 @@ def _botao_flutuante_upload_5302():
 
 def _botao_flutuante_atalhos_copia():
     """Segundo FAB, empilhado acima do de upload -- atalhos pra copiar
-    rapidinho os 2 cabeçalhos padrão do 5302 (com/sem especialidades
-    críticas, mesmo texto fixo usado em views/2_Relatorio_5302.py) e a
-    data do dia 1 do mês/ano atual, sem precisar abrir a tela do 5302 só
-    pra isso. Usa components.html (não st.markdown) porque o clique
-    precisa rodar JS de verdade (navigator.clipboard)."""
+    rapidinho os 2 cabeçalhos padrão (com/sem especialidades críticas,
+    mesmo texto da seção "Cópia Rápida" da sidebar em app.py -- sem o
+    separador "///" usado só internamente na geração do texto do 5302)
+    e a data do dia 1 do mês/ano atual. Usa components.html (não
+    st.markdown) porque o clique precisa rodar JS de verdade
+    (navigator.clipboard)."""
     st.markdown(
         """
         <style>
@@ -151,8 +152,8 @@ def _botao_flutuante_atalhos_copia():
     hoje = date.today()
     data_dia_1 = f"01/{hoje.month:02d}/{hoje.year}"
     itens = [
-        ("C/ Especialidades Críticas", "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// "),
-        ("S/ Especialidades Críticas", "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// "),
+        ("C/ Especialidades Críticas", "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS"),
+        ("S/ Especialidades Críticas", "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS"),
         (f"Data de hoje ({data_dia_1})", data_dia_1),
     ]
     botoes_html = "\n".join(
