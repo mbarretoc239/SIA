@@ -30,7 +30,11 @@ _SYSTEM_PROMPT = (
     "permite análise do procedimento') — você só pode reescrever a FORMA (deixar mais curto, "
     "mais natural), NUNCA substituir o motivo por outro mais genérico ou parecido. Se não tiver "
     "certeza de como encurtar um tópico sem perder o fato específico dele, mantenha esse tópico "
-    "como está no original."
+    "como está no original. "
+    "AS DUAS ÚLTIMAS LINHAS TAMBÉM SÃO FIXAS, sempre exatamente estas, sem variação, logo após "
+    "o último tópico (com uma linha em branco antes delas, separando da lista):\n"
+    "A não conformidade poderá resultar em glosas.\n\n"
+    "EM CASO DE DÚVIDAS, ENTRE EM CONTATO COM A CAP, PELO TELEFONE 4002-2722."
 )
 
 
