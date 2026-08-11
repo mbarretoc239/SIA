@@ -152,9 +152,9 @@ def _botao_flutuante_atalhos_copia():
     hoje = date.today()
     data_dia_1 = f"01/{hoje.month:02d}/{hoje.year}"
     itens = [
+        (f"Data ({data_dia_1})", data_dia_1),
         ("C/ Especialidades Críticas", "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS"),
         ("S/ Especialidades Críticas", "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS"),
-        (f"Data de hoje ({data_dia_1})", data_dia_1),
     ]
     botoes_html = "\n".join(
         f'<button class="atalho-btn" data-val="{html.escape(valor)}">{html.escape(rotulo)}</button>'
