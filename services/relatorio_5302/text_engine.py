@@ -1090,12 +1090,7 @@ def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
         # 420+430 contam como 2 glosas por guia na contagem (são duas
         # glosas de verdade), mesmo agrupadas na mesma frase/guia.
         n = len(guias_ordenadas) * 2 if codigo == "430_420" else len(guias_ordenadas)
-        if codigo == "430_420":
-            rotulo_codigo = "420 e 430"
-        elif sub:
-            rotulo_codigo = f"{codigo}.{sub}"
-        else:
-            rotulo_codigo = codigo
+        rotulo_codigo = "420 e 430" if codigo == "430_420" else codigo
         frase = f"{n} {'glosa' if n == 1 else 'glosas'} {rotulo_codigo}"
         if justificativa:
             frase += f", {justificativa}"
