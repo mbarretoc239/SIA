@@ -1,5 +1,9 @@
+import html
+from datetime import date
+
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 
 from core.amostragem import (
     ORDEM_CRITICAS,
@@ -99,7 +103,85 @@ def _botao_flutuante_upload_5302():
             st.switch_page("views/2_Relatorio_5302.py")
 
 
+def _botao_flutuante_atalhos_copia():
+    """Segundo FAB, empilhado acima do de upload -- atalhos pra copiar
+    rapidinho os 2 cabeçalhos padrão do 5302 (com/sem especialidades
+    críticas, mesmo texto fixo usado em views/2_Relatorio_5302.py) e a
+    data do dia 1 do mês/ano atual, sem precisar abrir a tela do 5302 só
+    pra isso. Usa components.html (não st.markdown) porque o clique
+    precisa rodar JS de verdade (navigator.clipboard)."""
+    st.markdown(
+        """
+        <style>
+        /* :nth-of-type empilha esse popover acima do "Gerar Relatório
+           5302" (que é o 1º da página) -- mesma posição base, só sobe. */
+        div[data-testid="stPopover"]:nth-of-type(2) {
+            bottom: 62px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    hoje = date.today()
+    data_dia_1 = f"01/{hoje.month:02d}/{hoje.year}"
+    itens = [
+        ("C/ Especialidades Críticas", "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// "),
+        ("S/ Especialidades Críticas", "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// "),
+        (f"Data de hoje ({data_dia_1})", data_dia_1),
+    ]
+    botoes_html = "\n".join(
+        f'<button class="atalho-btn" data-val="{html.escape(valor)}">{html.escape(rotulo)}</button>'
+        for rotulo, valor in itens
+    )
+
+    with st.popover("📋 Atalhos"):
+        st.caption("Clique pra copiar.")
+        components.html(
+            f"""
+            <style>
+                body {{ margin: 0; }}
+                .atalho-wrap {{ display: flex; flex-direction: column; gap: 6px; font-family: 'Source Sans Pro', sans-serif; }}
+                .atalho-btn {{
+                    background: transparent;
+                    border: 1px solid rgba(125,125,125,0.5);
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    cursor: pointer;
+                    font-size: 13px;
+                    text-align: left;
+                    color: #1f2937;
+                }}
+                .atalho-btn:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
+                .atalho-btn.copiado {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
+                @media (prefers-color-scheme: dark) {{
+                    .atalho-btn {{ color: #e6ecf5; border-color: rgba(255,255,255,0.25); }}
+                    .atalho-btn:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
+                }}
+            </style>
+            <div class="atalho-wrap">{botoes_html}</div>
+            <script>
+                document.querySelectorAll('.atalho-btn').forEach(btn => {{
+                    btn.addEventListener('click', () => {{
+                        const val = btn.getAttribute('data-val');
+                        navigator.clipboard.writeText(val).then(() => {{
+                            const orig = btn.innerText;
+                            btn.innerText = '✓ Copiado!';
+                            btn.classList.add('copiado');
+                            setTimeout(() => {{
+                                btn.innerText = orig;
+                                btn.classList.remove('copiado');
+                            }}, 1100);
+                        }});
+                    }});
+                }});
+            </script>
+            """,
+            height=32 * len(itens) + 16 * (len(itens) - 1) + 8,
+        )
+
+
 _botao_flutuante_upload_5302()
+_botao_flutuante_atalhos_copia()
 
 
 def _guias_para_df(guias: list) -> pd.DataFrame:
