@@ -193,6 +193,26 @@ def _mesclar_clausulas_mesma_guia(clausulas: list, padrao: 're.Pattern', sufixo_
     return [c for i, c in enumerate(clausulas) if i not in usados]
 
 
+_MARCADORES_438_PRIORITARIA = ("sugere manipulação", "sugere ser advinda da internet")
+
+
+def _priorizar_manipulacao(clausulas: list) -> list:
+    """Glosa 438 subglosas 32 ('@', imagem da internet) e 33 ('*',
+    manipulação) são as mais graves -- sempre viram a(s) primeira(s)
+    cláusula(s) do texto, à frente até de outras críticas. Detecta pelas
+    frases fixas que formatar_conectivo_subglosa gera só pra essas duas
+    subglosas específicas (não existe outro jeito de vir esse texto).
+    Só reordena dentro da própria lista recebida -- quem chama já separou
+    críticas/outras/automáticas, então isso nunca fura a prioridade entre
+    grupos, só a ordem dentro do grupo das críticas."""
+    prioritarias = [c for c in clausulas if any(m in c for m in _MARCADORES_438_PRIORITARIA)]
+    if not prioritarias:
+        return clausulas
+    ids_prioritarias = {id(c) for c in prioritarias}
+    restantes = [c for c in clausulas if id(c) not in ids_prioritarias]
+    return prioritarias + restantes
+
+
 _PADRAO_NA_GUIA = re.compile(r'^(.*) na guia (\S+)$')
 _PADRAO_PARENTESE_GUIA = re.compile(r'^(.*) \(guia (\S+)\)$')
 
@@ -496,7 +516,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
                     if justificativa:
                         sub += f", {justificativa}"
                     subclausulas.append(sub)
-                texto = "; ".join(subclausulas[:-1]) + "; e " + subclausulas[-1]
+                texto = ", ".join(subclausulas[:-1]) + " e " + subclausulas[-1]
                 clausulas_globais.append((ordering_key, f"{base}: {texto}", prio_merged))
 
         # Ordem das cláusulas: Críticas (prio=0), demais (prio=1), Automáticas (prio=2).
@@ -523,7 +543,13 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 
         itens_ordenados.sort(key=lambda x: (x[0], x[1], x[2]))
 
-        clausulas = [texto for _, _, _, texto in itens_ordenados]
+        # prio=0 (Críticas) sempre vem primeiro no sort acima -- reordena só
+        # esse prefixo pra trazer a 438.32/438.33 (manipulação/internet) à
+        # frente das outras críticas, sem furar a prioridade entre grupos.
+        n_criticas = sum(1 for item in itens_ordenados if item[0] == 0)
+        textos_criticas = _priorizar_manipulacao([texto for _, _, _, texto in itens_ordenados[:n_criticas]])
+        textos_resto = [texto for _, _, _, texto in itens_ordenados[n_criticas:]]
+        clausulas = textos_criticas + textos_resto
 
         # Na segunda menção de um mesmo procedimento, omite a descrição e
         # mantém só o código, evitando repetir "cód - descrição" várias vezes
@@ -593,7 +619,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
         if len(clausulas) == 1:
             texto_complementar = "O prestador apresentou " + clausulas[0] + "."
         elif len(clausulas) > 1:
-            texto_complementar = "O prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1] + "."
+            texto_complementar = "O prestador apresentou " + ", ".join(clausulas[:-1]) + " e " + clausulas[-1] + "."
 
         texto_final = texto_complementar
         if clausula_480:
@@ -935,6 +961,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
     clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_NA_GUIA, sufixo_dupla="ambas")
     clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_NA_GUIA, sufixo_dupla="ambas")
     clausulas_automaticas = _mesclar_clausulas_mesma_guia(clausulas_automaticas, _PADRAO_NA_GUIA, sufixo_dupla="ambas")
+    clausulas_criticas = _priorizar_manipulacao(clausulas_criticas)
 
     # Críticas primeiro, depois demais, depois Automáticas; 480 fica no final do texto.
     clausulas = clausulas_criticas + clausulas_outras + clausulas_automaticas
@@ -943,7 +970,7 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
     if len(clausulas) == 1:
         texto_complementar = "O prestador apresentou " + clausulas[0] + "."
     elif len(clausulas) > 1:
-        texto_complementar = "O prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1] + "."
+        texto_complementar = "O prestador apresentou " + ", ".join(clausulas[:-1]) + " e " + clausulas[-1] + "."
 
     texto_final = texto_complementar
     if clausula_480:
@@ -997,25 +1024,37 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
     Críticas sempre na frente, igual ao modo Padrão."""
     por_guia = collections.defaultdict(list)
     for _, row in df.iterrows():
-        por_guia[str(row['Guia'])].append({"glosa": str(row['Glosa']), "tipo": str(row.get('Tipo', '') or '')})
+        por_guia[str(row['Guia'])].append({
+            "glosa": str(row['Glosa']),
+            "sub": str(row.get('Cód. Sub-Glosa', '') or '').strip(),
+            "tipo": str(row.get('Tipo', '') or ''),
+        })
 
     guias_por_codigo = collections.defaultdict(set)
     tipos_por_codigo = collections.defaultdict(set)
+    # Esse modo não guarda subglosa na cláusula (só código + guias) -- não
+    # dá pra detectar a 438.32/438.33 pelo texto final como nos outros
+    # modos, então marca aqui, no nível do código, se alguma ocorrência é
+    # subglosa 32/33 (manipulação/imagem da internet).
+    codigo_tem_prioridade_maxima = set()
     for guia, itens_guia in por_guia.items():
         codigos_guia = {i["glosa"] for i in itens_guia}
         # Mesma fusão 420+430 (falta de RX inicial e final) usada nos outros níveis.
         if "420" in codigos_guia and "430" in codigos_guia:
             itens_guia = [i for i in itens_guia if i["glosa"] not in ("420", "430")]
-            itens_guia.append({"glosa": "430_420", "tipo": ""})
+            itens_guia.append({"glosa": "430_420", "sub": "", "tipo": ""})
         for item in itens_guia:
             guias_por_codigo[item["glosa"]].add(guia)
             if item["tipo"]:
                 tipos_por_codigo[item["glosa"]].add(item["tipo"])
+            if item["glosa"] == "438" and item["sub"] in ("32", "33"):
+                codigo_tem_prioridade_maxima.add(item["glosa"])
 
     if not guias_por_codigo:
         return prefixo + "Nenhuma glosa selecionada."
 
     clausulas_criticas, clausulas_outras = [], []
+    clausulas_prioritarias = []
     for codigo, guias in guias_por_codigo.items():
         guias_ordenadas = sorted(guias)
         n = len(guias_ordenadas)
@@ -1026,19 +1065,22 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
         else:
             rotulo_codigo = f"{n} {'glosa' if n == 1 else 'glosas'} {codigo}"
         frase = f"{rotulo_codigo} ({_formatar_guias_resumido_curto(guias_ordenadas)})"
-        destino = clausulas_criticas if "Crítica" in tipos_por_codigo[codigo] else clausulas_outras
-        destino.append(frase)
+        if codigo in codigo_tem_prioridade_maxima:
+            clausulas_prioritarias.append(frase)
+        else:
+            destino = clausulas_criticas if "Crítica" in tipos_por_codigo[codigo] else clausulas_outras
+            destino.append(frase)
 
     # Mesma mesclagem por guia isolada do modo Padrão, só que com o sufixo
     # "(guia X)" que o Resumido usa em vez de "na guia X".
     clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_PARENTESE_GUIA)
     clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_PARENTESE_GUIA)
 
-    clausulas = clausulas_criticas + clausulas_outras
+    clausulas = clausulas_prioritarias + clausulas_criticas + clausulas_outras
     if len(clausulas) == 1:
         texto_final = "Prestador apresentou " + clausulas[0]
     else:
-        texto_final = "Prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1]
+        texto_final = "Prestador apresentou " + ", ".join(clausulas[:-1]) + " e " + clausulas[-1]
 
     resumo_financeiro = ""
     if meta and meta.get("valor_cobrado", 0) > 0:
@@ -1107,12 +1149,13 @@ def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
     # diferentes na mesma guia viram uma frase só, guia no final.
     clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_PARENTESE_GUIA)
     clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_PARENTESE_GUIA)
+    clausulas_criticas = _priorizar_manipulacao(clausulas_criticas)
 
     clausulas = clausulas_criticas + clausulas_outras
     if len(clausulas) == 1:
         texto_final = "Prestador apresentou " + clausulas[0]
     else:
-        texto_final = "Prestador apresentou " + "; ".join(clausulas[:-1]) + "; e " + clausulas[-1]
+        texto_final = "Prestador apresentou " + ", ".join(clausulas[:-1]) + " e " + clausulas[-1]
 
     resumo_financeiro = ""
     if meta and meta.get("valor_cobrado", 0) > 0:
