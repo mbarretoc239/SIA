@@ -7,6 +7,7 @@ from shared.database import DatabaseManager
 
 from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
+from core.settings import carregar_excecoes_modulos_cache, carregar_permissoes_modulos_cache
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 from shared.ui import estilizar_botoes_exclusao
 
@@ -795,6 +796,7 @@ if "permissoes" in abas_por_id:
                         if not db.atualizar_permissao_modulo(modulo, r, habilitado):
                             erros += 1
                 if erros == 0:
+                    carregar_permissoes_modulos_cache.clear()
                     st.success("Permissões atualizadas!")
                     st.rerun()
                 else:
@@ -851,6 +853,7 @@ if "permissoes" in abas_por_id:
                                 if not db.atualizar_excecao_modulo(usuario_id_excecao, modulo, novo_habilitado):
                                     erros_excecao += 1
                     if erros_excecao == 0:
+                        carregar_excecoes_modulos_cache.clear()
                         st.success("Exceções atualizadas!")
                         st.rerun()
                     else:

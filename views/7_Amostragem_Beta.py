@@ -27,7 +27,11 @@ from core.relatorio_5201 import (
     obter_risco_prestador_cacheado,
     status_processo,
 )
-from core.settings import tem_acesso_modulo
+from core.settings import (
+    carregar_excecoes_modulos_cache,
+    carregar_permissoes_modulos_cache,
+    tem_acesso_modulo,
+)
 from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 from shared.database import DatabaseManager
 from shared.ui import aplicar_filtro_numerico, filtro_numerico, pilula
@@ -55,8 +59,11 @@ def _botao_flutuante_atalhos():
     depender de CSS frágil pra não colidir um com o outro."""
     role_fab = st.session_state.get("role_interno", "Contas")
     usuario_id_fab = st.session_state.get("usuario_id")
-    permissoes_fab = st.session_state.db.carregar_permissoes_modulos()
-    excecoes_fab = st.session_state.db.carregar_excecoes_modulos()
+    # Versões cacheadas (60s) -- isso roda a cada rerun da página (buscar
+    # processo, trocar de aba, etc.), não só uma vez, então sem cache virava
+    # 2 consultas extra ao banco em toda interação da Amostragem.
+    permissoes_fab = carregar_permissoes_modulos_cache()
+    excecoes_fab = carregar_excecoes_modulos_cache()
     tem_acesso_5302 = tem_acesso_modulo(permissoes_fab, role_fab, "relatorio_5302", usuario_id_fab, excecoes_fab)
 
     st.markdown(

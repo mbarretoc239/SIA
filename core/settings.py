@@ -1,3 +1,5 @@
+import streamlit as st
+
 # ==========================================
 # CONSTANTES DE DADOS EMBUTIDOS
 # ==========================================
@@ -86,3 +88,20 @@ def tem_acesso_modulo(permissoes, role, modulo, usuario_id=None, excecoes=None):
         if p.get("modulo") == modulo and p.get("role") == role:
             return bool(p.get("habilitado"))
     return False
+
+
+@st.cache_data(ttl=60)
+def carregar_permissoes_modulos_cache():
+    """Versão cacheada (60s) de DatabaseManager.carregar_permissoes_modulos()
+    -- pra checagens de acesso que rodam a cada rerun da página (ex: FAB da
+    Amostragem), não só uma vez no carregamento (onde a versão sem cache é
+    aceitável)."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_permissoes_modulos()
+
+
+@st.cache_data(ttl=60)
+def carregar_excecoes_modulos_cache():
+    """Mesma ideia de carregar_permissoes_modulos_cache(), pra exceções."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_excecoes_modulos()

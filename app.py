@@ -299,8 +299,12 @@ elif st.session_state.get("senha_temporaria", False):
 else:
     role = st.session_state.get("role_interno", "Contas")
     usuario_id_atual = st.session_state.get("usuario_id")
-    permissoes = db.carregar_permissoes_modulos()
-    excecoes_acesso = db.carregar_excecoes_modulos()
+    # Cacheadas (60s): isso roda em TODA navegação/interação do app inteiro
+    # (app.py é o entrypoint), não só uma vez -- sem cache era 2 consultas
+    # extra ao banco em cada clique, em qualquer tela.
+    from core.settings import carregar_excecoes_modulos_cache, carregar_permissoes_modulos_cache
+    permissoes = carregar_permissoes_modulos_cache()
+    excecoes_acesso = carregar_excecoes_modulos_cache()
 
     # --- ALINHAMENTOS PENDENTES (pop-up obrigatório "Estou Ciente", com checagem ao vivo) ---
     from core.settings import ROLES_CIENCIA_OBRIGATORIA
