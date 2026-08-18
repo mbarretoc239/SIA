@@ -230,16 +230,16 @@ def test_resumido_agrega_por_codigo_contando_guias_distintas():
     assert "5 glosas 410" in txt
 
 
-def test_resumido_trunca_guias_em_duas_no_parenteses():
+def test_resumido_trunca_guias_em_uma_no_parenteses():
     rows = [_row(f"G{i}", "210", "radiografia", "410", "Administrativa") for i in range(1, 6)]
     txt = _gerar_resumido(rows)
-    assert "G1, G2 e mais 3 guias" in txt
-    # não deve citar a 3a guia (G3) fora do "e mais N guias"
-    assert "G3" not in txt
+    assert "guia G1 e mais 4 guias" in txt
+    # não deve citar a 2a guia (G2) fora do "e mais N guias"
+    assert "G2" not in txt
 
 
 def test_resumido_singular_guia_no_e_mais():
-    rows = [_row(f"G{i}", "210", "radiografia", "410", "Administrativa") for i in range(1, 4)]
+    rows = [_row(f"G{i}", "210", "radiografia", "410", "Administrativa") for i in range(1, 3)]
     txt = _gerar_resumido(rows)
     assert "e mais 1 guia)" in txt
     assert "e mais 1 guias" not in txt

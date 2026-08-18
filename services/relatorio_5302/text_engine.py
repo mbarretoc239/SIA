@@ -1004,17 +1004,15 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
 
 
 def _formatar_guias_resumido_curto(lista: list) -> str:
-    """Lista de guias pro modo Resumido: no máximo 2 guias citadas
-    explicitamente entre parênteses — a partir da 3ª, vira "e mais N guias"
+    """Lista de guias pro modo Resumido: só 1 guia citada explicitamente
+    entre parênteses como exemplo -- a partir da 2ª, vira "e mais N guias"
     (mais apertado que os outros níveis de detalhe, de propósito)."""
     if not lista or lista[0] == "Desconhecida":
         return ""
     if len(lista) == 1:
         return f"guia {lista[0]}"
-    if len(lista) == 2:
-        return f"guias {lista[0]} e {lista[1]}"
-    resto = len(lista) - 2
-    return f"guias {lista[0]}, {lista[1]} e mais {resto} {'guia' if resto == 1 else 'guias'}"
+    resto = len(lista) - 1
+    return f"guia {lista[0]} e mais {resto} {'guia' if resto == 1 else 'guias'}"
 
 
 def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
