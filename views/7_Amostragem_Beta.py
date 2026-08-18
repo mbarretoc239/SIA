@@ -48,91 +48,26 @@ OPERADOR_BIOMETRIA = "CONN_APPOD_NEW"
 SEED_PADRAO = 42
 
 
-def _botao_flutuante_upload_5302():
-    """FAB fixo no canto da tela: sobe o relatório 5302 sem sair da
-    Amostragem pra clicar na sidebar + upload separado. O arquivo vai pro
-    session_state e a navegação usa switch_page -- o Relatório 5302 lê esse
-    'pendente' como fallback quando o file_uploader nativo dele tá vazio
-    (ver views/2_Relatorio_5302.py)."""
+def _botao_flutuante_atalhos():
+    """FAB único fixo no canto da tela: reúne o upload do 5302 e os atalhos
+    de cópia num só popover -- dois FABs empilhados (versão anterior)
+    atrapalhavam a visão da lista de especialidades atrás deles, além de
+    depender de CSS frágil pra não colidir um com o outro."""
     role_fab = st.session_state.get("role_interno", "Contas")
     usuario_id_fab = st.session_state.get("usuario_id")
     permissoes_fab = st.session_state.db.carregar_permissoes_modulos()
     excecoes_fab = st.session_state.db.carregar_excecoes_modulos()
-    if not tem_acesso_modulo(permissoes_fab, role_fab, "relatorio_5302", usuario_id_fab, excecoes_fab):
-        return
+    tem_acesso_5302 = tem_acesso_modulo(permissoes_fab, role_fab, "relatorio_5302", usuario_id_fab, excecoes_fab)
 
     st.markdown(
         """
         <style>
         /* Alvo via st.container(key=...) -- vira a classe .st-key-<nome> de
-           verdade no DOM (Streamlit 1.3x+). Mais confiável que nth-of-type:
-           cada popover fica isolado no próprio container, não é "irmão" de
-           verdade dos outros popovers da página, então nth-of-type nunca
-           funciona pra diferenciar dois FABs na mesma tela. */
-        div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] {
-            position: fixed !important;
-            bottom: 6px;
-            left: 20px;
-            z-index: 9999;
-            width: fit-content !important;
-            transition: left 0.2s ease;
-        }
-        div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] > div {
-            width: fit-content !important;
-        }
-        div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] > div > button {
-            width: fit-content !important;
-            border-radius: 999px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-            padding: 8px 20px;
-            font-size: 0.95rem;
-            min-height: 0;
-            background-color: #f0f2f6 !important;
-            opacity: 1 !important;
-        }
-        @media (prefers-color-scheme: dark) {
-            div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] > div > button {
-                background-color: #13233A !important;
-            }
-        }
-        /* Sidebar aberta cobre o canto esquerdo -- desloca o botão pra depois
-           dela (Streamlit expõe o estado via aria-expanded no <section>). */
-        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_upload_5302 div[data-testid="stPopover"] {
-            left: 22rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    with st.container(key="fab_container_upload_5302"):
-        with st.popover("📤 Gerar Relatório 5302"):
-            st.caption("Envia o relatório 5302 e já abre a tela dele com o arquivo carregado.")
-            arquivo_fab = st.file_uploader(
-                "Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"], key="fab_upload_5302",
-            )
-            if arquivo_fab is not None:
-                st.session_state["_pendente_5302_bytes"] = arquivo_fab.getvalue()
-                st.session_state["_pendente_5302_name"] = arquivo_fab.name
-                st.switch_page("views/2_Relatorio_5302.py")
-
-
-def _botao_flutuante_atalhos_copia():
-    """Segundo FAB, empilhado acima do de upload -- atalhos pra copiar
-    rapidinho os 2 cabeçalhos padrão (com/sem especialidades críticas,
-    mesmo texto da seção "Cópia Rápida" da sidebar em app.py -- sem o
-    separador "///" usado só internamente na geração do texto do 5302)
-    e a data do dia 1 do mês/ano atual. Usa components.html (não
-    st.markdown) porque o clique precisa rodar JS de verdade
-    (navigator.clipboard)."""
-    st.markdown(
-        """
-        <style>
-        /* Mesma técnica do FAB de upload -- container com key vira uma
-           classe .st-key-<nome> real no DOM, evita colisão de posição
-           entre os dois botões flutuantes da página. */
+           verdade no DOM (Streamlit 1.3x+), mais confiável que tentar
+           diferenciar popovers por ordem no DOM. */
         div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
             position: fixed !important;
-            bottom: 62px;
+            bottom: 6px;
             left: 20px;
             z-index: 9999;
             width: fit-content !important;
@@ -156,6 +91,8 @@ def _botao_flutuante_atalhos_copia():
                 background-color: #13233A !important;
             }
         }
+        /* Sidebar aberta cobre o canto esquerdo -- desloca o botão pra depois
+           dela (Streamlit expõe o estado via aria-expanded no <section>). */
         body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
             left: 22rem;
         }
@@ -163,6 +100,7 @@ def _botao_flutuante_atalhos_copia():
         """,
         unsafe_allow_html=True,
     )
+
     hoje = date.today()
     data_dia_1 = f"01/{hoje.month:02d}/{hoje.year}"
     itens = [
@@ -176,54 +114,64 @@ def _botao_flutuante_atalhos_copia():
     )
 
     with st.container(key="fab_container_atalhos"):
-        with st.popover("📋 Atalhos"):
+        with st.popover("⚡ Atalhos"):
+            if tem_acesso_5302:
+                st.caption("Envia o relatório 5302 e já abre a tela dele com o arquivo carregado.")
+                arquivo_fab = st.file_uploader(
+                    "Relatório 5302 (.pdf ou .csv)", type=["pdf", "csv"], key="fab_upload_5302",
+                )
+                if arquivo_fab is not None:
+                    st.session_state["_pendente_5302_bytes"] = arquivo_fab.getvalue()
+                    st.session_state["_pendente_5302_name"] = arquivo_fab.name
+                    st.switch_page("views/2_Relatorio_5302.py")
+                st.divider()
+
             st.caption("Clique pra copiar.")
             components.html(
-            f"""
-            <style>
-                body {{ margin: 0; }}
-                .atalho-wrap {{ display: flex; flex-direction: column; gap: 6px; font-family: 'Source Sans Pro', sans-serif; }}
-                .atalho-btn {{
-                    background: transparent;
-                    border: 1px solid rgba(125,125,125,0.5);
-                    border-radius: 6px;
-                    padding: 8px 12px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    text-align: left;
-                    color: #1f2937;
-                }}
-                .atalho-btn:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
-                .atalho-btn.copiado {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
-                @media (prefers-color-scheme: dark) {{
-                    .atalho-btn {{ color: #e6ecf5; border-color: rgba(255,255,255,0.25); }}
-                    .atalho-btn:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
-                }}
-            </style>
-            <div class="atalho-wrap">{botoes_html}</div>
-            <script>
-                document.querySelectorAll('.atalho-btn').forEach(btn => {{
-                    btn.addEventListener('click', () => {{
-                        const val = btn.getAttribute('data-val');
-                        navigator.clipboard.writeText(val).then(() => {{
-                            const orig = btn.innerText;
-                            btn.innerText = '✓ Copiado!';
-                            btn.classList.add('copiado');
-                            setTimeout(() => {{
-                                btn.innerText = orig;
-                                btn.classList.remove('copiado');
-                            }}, 1100);
+                f"""
+                <style>
+                    body {{ margin: 0; }}
+                    .atalho-wrap {{ display: flex; flex-direction: column; gap: 6px; font-family: 'Source Sans Pro', sans-serif; }}
+                    .atalho-btn {{
+                        background: transparent;
+                        border: 1px solid rgba(125,125,125,0.5);
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                        cursor: pointer;
+                        font-size: 13px;
+                        text-align: left;
+                        color: #1f2937;
+                    }}
+                    .atalho-btn:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
+                    .atalho-btn.copiado {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
+                    @media (prefers-color-scheme: dark) {{
+                        .atalho-btn {{ color: #e6ecf5; border-color: rgba(255,255,255,0.25); }}
+                        .atalho-btn:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
+                    }}
+                </style>
+                <div class="atalho-wrap">{botoes_html}</div>
+                <script>
+                    document.querySelectorAll('.atalho-btn').forEach(btn => {{
+                        btn.addEventListener('click', () => {{
+                            const val = btn.getAttribute('data-val');
+                            navigator.clipboard.writeText(val).then(() => {{
+                                const orig = btn.innerText;
+                                btn.innerText = '✓ Copiado!';
+                                btn.classList.add('copiado');
+                                setTimeout(() => {{
+                                    btn.innerText = orig;
+                                    btn.classList.remove('copiado');
+                                }}, 1100);
+                            }});
                         }});
                     }});
-                }});
-            </script>
-            """,
-            height=32 * len(itens) + 16 * (len(itens) - 1) + 8,
-        )
+                </script>
+                """,
+                height=32 * len(itens) + 16 * (len(itens) - 1) + 8,
+            )
 
 
-_botao_flutuante_upload_5302()
-_botao_flutuante_atalhos_copia()
+_botao_flutuante_atalhos()
 
 
 def _guias_para_df(guias: list) -> pd.DataFrame:
