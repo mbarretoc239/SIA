@@ -797,11 +797,28 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
     for (guia, cod_proc, cat_s, cat_p), lista_glosas in temp_itens.items():
         codigos = [g['glosa'] for g in lista_glosas]
         if '420' in codigos and '430' in codigos:
+            # O tipo da cláusula fundida tem que sobreviver -- sem isso, "tipo"
+            # ficava ausente no dict sintético, o que o resto do código lia
+            # como "" (vazio), e "" satisfaz a mesma regra de compactação de
+            # "Automática" (tipos_clausula <= {"Automática", ""}). Resultado:
+            # QUALQUER fusão 420+430 caía nas automáticas, mesmo sendo
+            # Administrativa/Técnica/Crítica de verdade -- sempre iam pro
+            # fim (ou pior, se misturavam com as automáticas de verdade,
+            # fora de ordem). Usa o tipo mais conservador entre os dois
+            # originais, mesmo critério já usado alguns parágrafos acima
+            # ("mais conservador prevalece").
+            _ordem_tipo = {"Crítica": 0, "Técnica": 1, "Administrativa": 2, "Automática": 3, "": 4}
+            tipo_420_430 = min(
+                (g.get("tipo", "") for g in lista_glosas if g["glosa"] in ("420", "430")),
+                key=lambda t: _ordem_tipo.get(t, 4),
+                default="",
+            )
             lista_glosas = [g for g in lista_glosas if g['glosa'] not in ('420', '430')]
             lista_glosas.append({
                 "glosa": "430_420",
                 "desc": "falta de rx inicial e final",
-                "justificativa": ""
+                "justificativa": "",
+                "tipo": tipo_420_430,
             })
             
         glosas_nao_480 = [g for g in lista_glosas if g["glosa"] != "480"]
