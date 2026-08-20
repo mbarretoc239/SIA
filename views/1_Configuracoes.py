@@ -1042,7 +1042,9 @@ if "importar_planilhas" in abas_por_id:
             with st.expander("Planilha mensal da base IA (Amostragem)", expanded=False):
                 st.caption(
                     "Sobe a planilha do mês (mesma que alimenta o PowerBI). Substitui "
-                    "os dados do mês detectado e mantém só os 2 meses mais recentes na base."
+                    "os dados do mês detectado e mantém só os 2 meses mais recentes na base. "
+                    "Traz todas as linhas (liberadas e não liberadas pela IA) -- pode demorar "
+                    "bem mais que antes."
                 )
                 arquivo_ia = st.file_uploader("Planilha mensal (.xlsx)", type=["xlsx"], key="upload_base_ia")
                 retomar_ia = st.checkbox(
@@ -1055,7 +1057,7 @@ if "importar_planilhas" in abas_por_id:
                         with st.spinner("Lendo planilha..."):
                             registros_ia, mes_referencia_ia, total_bruto_ia = preparar_registros_base_ia(arquivo_ia)
                         if not registros_ia:
-                            st.warning("Nenhuma linha com LIBERAÇÃO = N encontrada nesta planilha.")
+                            st.warning("Nenhuma linha válida encontrada nesta planilha.")
                         else:
                             barra_ia = st.progress(0.0, text=f"Importando 0/{len(registros_ia)}...")
 
@@ -1068,7 +1070,7 @@ if "importar_planilhas" in abas_por_id:
                             barra_ia.empty()
                             st.success(
                                 f"Mês {mes_referencia_ia}: {total_inserido_ia} de {total_bruto_ia} linha(s) "
-                                f"(LIBERAÇÃO = N) importadas com sucesso."
+                                f"importadas com sucesso."
                             )
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")

@@ -97,7 +97,13 @@ def preparar_registros_base_ia(arquivo) -> tuple[list, str, int]:
     DataFrame de uma vez consome memória demais (gerou MemoryError em
     máquina com pouca RAM livre).
 
-    Só mantém linhas com LIBERACAO == 'N' (é só isso que a amostragem usa).
+    Traz TODAS as linhas (liberadas e não liberadas) -- antes só trazia
+    LIBERACAO == 'N', mas o "% Biometria" da lista de processos (Amostragem)
+    precisa da base inteira do processo, não só das guias pendentes de
+    revisão. As telas que só devem enxergar o pendente (tabela de guias da
+    Amostragem, contagem de especialidades/críticas) filtram
+    `liberacao = 'N'` explicitamente do lado do SQL agora -- não dependem
+    mais implicitamente de "só existe N na tabela".
     `mes_referencia` é derivado de DT_PRODUCAO (constante por arquivo,
     ex: planilha 'IA 07 2026' tem DT_PRODUCAO = 2026-07-01).
     """
@@ -137,15 +143,13 @@ def preparar_registros_base_ia(arquivo) -> tuple[list, str, int]:
         guias_por_processo.setdefault(nu_ordem, set()).add(nu_guia)
 
         liberacao = str(linha[i_lib] or "").strip().upper()
-        if liberacao != "N":
-            continue
 
         registros.append({
             "nu_ordem": nu_ordem,
             "nu_guia": nu_guia,
             "cd_procedimento": str(linha[i_cd]).strip(),
             "ds_grupo": str(linha[i_grupo]).strip(),
-            "liberacao": "N",
+            "liberacao": liberacao,
             "mes_referencia": None,
             "total_guias_processo": None,
             "cd_operador_atend": str(linha[i_operador] or "").strip(),

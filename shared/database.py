@@ -233,46 +233,75 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return {item["nu_guia"] for item in r.json()} if r.ok else set()
 
-    # --- Base IA (Amostragem BETA): guias LIBERACAO=N importadas mensalmente ---
-    # Tabela vive no Turso (dado bruto, sem informação sensível) -- ver
-    # TURSO_CAMPOS_BASE_IA no topo do arquivo.
+    # --- Base IA (Amostragem BETA): guias importadas mensalmente (todas as
+    # linhas da planilha, liberadas e não liberadas -- ver
+    # preparar_registros_base_ia). Tabela vive no Turso (dado bruto, sem
+    # informação sensível) -- ver TURSO_CAMPOS_BASE_IA no topo do arquivo. ---
     def buscar_guias_ia_por_processo(self, nu_ordem: str) -> list:
-        """Guias com LIBERACAO=N da base IA para um número de processo (NU_ORDEM)."""
+        """Guias com LIBERACAO=N da base IA para um número de processo
+        (NU_ORDEM) -- é só isso que a tela de Amostragem audita, mesmo a
+        tabela guardando liberadas também (pro cálculo de % Biometria da
+        lista de processos)."""
         resultado = self._turso_pipeline([{
             "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, total_guias_processo, cd_operador_atend "
-                   "FROM base_ia_guias WHERE nu_ordem = ?",
+                   "FROM base_ia_guias WHERE nu_ordem = ? AND liberacao = 'N'",
             "args": [self._turso_arg(str(nu_ordem))],
         }], self._turso_token_leitura)[0]
         return self._turso_linhas(resultado)
 
     def listar_processos_agregado(self) -> list:
         """Um registro por NU_ORDEM (processo) do mês mais recente em
-        base_ia_guias, com as especialidades e procedimentos distintos entre
-        as guias sem liberação desse processo -- agregado em SQL (uma query
-        só), não puxa as centenas de milhares de linhas cruas pro Python.
+        base_ia_guias -- agregado em SQL (2 queries numa única chamada ao
+        Turso), não puxa as centenas de milhares de linhas cruas pro Python.
 
-        Usado pela lista de processos do mês (Amostragem). Guia individual
-        e contagens oficiais (total de guias, procedimentos) vêm de outro
-        lugar -- aqui é só o que dá pra saber a partir da base IA: quais
-        especialidades/procedimentos aparecem em cada processo, pra decidir
-        se tem crítica.
+        Usado pela lista de processos do mês (Amostragem). Duas consultas
+        com escopo DIFERENTE, por propósito:
 
-        `itens_biometria`/`itens_com_operador` alimentam o % de biometria da
-        lista (mesma lógica de _biometria_guia): % = biometria/total, mas só
-        quando `itens_com_operador > 0` -- coluna sem nenhum operador
-        gravado (import antigo) fica em branco em vez de aparentar 0%."""
-        resultado = self._turso_pipeline([{
-            "sql": "SELECT nu_ordem, "
-                   "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
-                   "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos, "
-                   "COUNT(*) AS total_itens, "
-                   "SUM(CASE WHEN cd_operador_atend = 'CONN_APPOD_NEW' THEN 1 ELSE 0 END) AS itens_biometria, "
-                   "SUM(CASE WHEN cd_operador_atend IS NOT NULL AND cd_operador_atend != '' THEN 1 ELSE 0 END) AS itens_com_operador "
-                   "FROM base_ia_guias "
-                   "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
-                   "GROUP BY nu_ordem",
-        }], self._turso_token_leitura)[0]
-        return self._turso_linhas(resultado)
+        1) Especialidades/procedimentos distintos -- só entre as guias SEM
+           liberação (liberacao='N'), porque é isso que decide se o processo
+           tem crítica pendente de revisão. Guia já liberada pela IA não
+           entra nessa conta.
+        2) total_itens/itens_biometria/itens_com_operador -- sobre TODAS as
+           guias do processo (liberadas + não liberadas), porque o % de
+           Biometria da lista precisa refletir o processo inteiro (mesma
+           métrica que aparece no PowerBI), não só a fatia pendente de
+           revisão. % = biometria/total, mas só quando `itens_com_operador
+           > 0` -- processo sem nenhum operador gravado (import antigo)
+           fica em branco em vez de aparentar 0%."""
+        resultado_critica, resultado_biometria = self._turso_pipeline([
+            {
+                "sql": "SELECT nu_ordem, "
+                       "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
+                       "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos "
+                       "FROM base_ia_guias "
+                       "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
+                       "AND liberacao = 'N' "
+                       "GROUP BY nu_ordem",
+            },
+            {
+                "sql": "SELECT nu_ordem, "
+                       "COUNT(*) AS total_itens, "
+                       "SUM(CASE WHEN cd_operador_atend = 'CONN_APPOD_NEW' THEN 1 ELSE 0 END) AS itens_biometria, "
+                       "SUM(CASE WHEN cd_operador_atend IS NOT NULL AND cd_operador_atend != '' THEN 1 ELSE 0 END) AS itens_com_operador "
+                       "FROM base_ia_guias "
+                       "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
+                       "GROUP BY nu_ordem",
+            },
+        ], self._turso_token_leitura)
+
+        linhas_critica = self._turso_linhas(resultado_critica)
+        linhas_biometria = {l["nu_ordem"]: l for l in self._turso_linhas(resultado_biometria)}
+
+        # Uma linha por nu_ordem que TEM guia pendente de revisão (é isso
+        # que a lista de processos mostra) -- os campos de biometria vêm do
+        # dict auxiliar (processo inteiro), com fallback pra 0 se por algum
+        # motivo faltar (não deveria acontecer, mesma tabela/mês).
+        for linha in linhas_critica:
+            aux = linhas_biometria.get(linha["nu_ordem"], {})
+            linha["total_itens"] = aux.get("total_itens", 0)
+            linha["itens_biometria"] = aux.get("itens_biometria", 0)
+            linha["itens_com_operador"] = aux.get("itens_com_operador", 0)
+        return linhas_critica
 
     def _importar_por_mes(
         self, tabela: str, registros: list, mes_referencia: str, lote: int = 2000, manter_meses: int = 2
