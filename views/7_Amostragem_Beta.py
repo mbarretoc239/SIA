@@ -498,6 +498,27 @@ with aba_busca:
             n_ok += 1
         imagem_por_guia[reg["nu_guia"]] = (n_ok, n_total)
 
+    # Nenhuma guia do processo tem registro de imagem -- sinal forte de que
+    # a planilha de imagem (4016R) do mês não foi importada ainda, não que
+    # o processo inteiro realmente não tem imagem nenhuma. Avisa antes de
+    # qualquer filtro/aba "Sem Imagem" poder confundir as duas coisas.
+    if df["NU_GUIA"].nunique() > 0 and not imagem_por_guia:
+        st.warning(
+            "⚠️ Nenhuma guia deste processo tem dado de imagem registrado. Pode ser que a "
+            "planilha de imagem (4016R) do mês ainda não tenha sido importada em "
+            "Configurações — confira antes de considerar que faltam imagens de verdade."
+        )
+
+    def _guia_confirmada_sem_imagem(nu_guia) -> bool:
+        """True só quando HÁ dado de imagem pra essa guia e ele confirma que
+        falta pelo menos uma -- nunca quando não há dado nenhum (info
+        ausente do dict), que é justamente o caso "4016R não importada"."""
+        info = imagem_por_guia.get(str(nu_guia))
+        if not info:
+            return False
+        n_ok, n_total = info
+        return n_total > 0 and n_ok < n_total
+
     # --- Filtros: procedimentos ignorados + Biometria/Imagem, agrupados num
     # único painel recolhido por padrão (não competem com o resultado abaixo).
     with st.expander("Filtros", expanded=False):
@@ -647,9 +668,9 @@ with aba_busca:
         total_procs = int(df_esp_total["Qtde"].sum())
         total_guias = len(df_esp_guias)
 
-        def _tabela_completa():
+        def _renderizar(df_alvo):
             renderizar_tabela_guias(
-                df_esp_guias, esp, objetivo=total_guias,
+                df_alvo, esp, objetivo=len(df_alvo),
                 guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
                 imagem_por_guia=imagem_por_guia,
             )
@@ -676,6 +697,12 @@ with aba_busca:
         # aba de "Sugestão de amostra" (hoje mostraria 100% das guias, igual
         # à Tabela completa, sem utilidade nenhuma).
 
+        # "Sem Imagem": só guias com dado de imagem CONFIRMANDO falta (nunca
+        # guia sem dado nenhum -- ver _guia_confirmada_sem_imagem e o aviso
+        # de 4016R não importada logo acima). Só ganha aba própria se houver
+        # pelo menos 1 guia nessa condição.
+        df_sem_imagem = df_esp_guias[df_esp_guias["NU_GUIA"].apply(_guia_confirmada_sem_imagem)]
+
         # Cabeçalho do expander pintado de amarelo se a especialidade já é
         # crítica por definição (ORDEM_CRITICAS) OU tem procedimento crítico
         # presente — sinal visível sem precisar abrir pra ver a aba de amostra.
@@ -684,15 +711,16 @@ with aba_busca:
             titulo_expander = f":orange[{titulo_expander}]"
 
         with st.expander(titulo_expander, expanded=False):
+            abas = [(f"Tabela completa ({total_guias})", df_esp_guias)]
             if df_amostra_especial is not None:
-                tab_completa, tab_amostra = st.tabs([f"Tabela completa ({total_guias})", titulo_amostra])
-                with tab_completa:
-                    _tabela_completa()
-                with tab_amostra:
-                    renderizar_tabela_guias(
-                        df_amostra_especial, esp, objetivo=len(df_amostra_especial),
-                        guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
-                        imagem_por_guia=imagem_por_guia,
-                    )
+                abas.append((titulo_amostra, df_amostra_especial))
+            if len(df_sem_imagem) > 0:
+                abas.append((f"Sem Imagem ({len(df_sem_imagem)})", df_sem_imagem))
+
+            if len(abas) == 1:
+                _renderizar(df_esp_guias)
             else:
-                _tabela_completa()
+                tabs_esp = st.tabs([titulo for titulo, _ in abas])
+                for tab_esp, (_, df_aba) in zip(tabs_esp, abas):
+                    with tab_esp:
+                        _renderizar(df_aba)
