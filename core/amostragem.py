@@ -29,6 +29,43 @@ _DECODIFICA_SIGLA_REQUISITO = {
     "-": "Nenhum requisito específico",
 }
 
+# Quantidade de imagens/documentos esperada por sigla de requisito -- usado
+# pra corrigir o denominador do badge IMAGEM na Amostragem, que antes vinha
+# só de quantas linhas a planilha 4016R trouxe pra guia (podendo faltar
+# linha pro que o requisito realmente pede). *IF (inicial+final) conta 2;
+# DOC fica de fora (quantidade variável, às vezes mais de 2 documentos,
+# não dá pra fixar um número) -- ver conversa 2026-08-20.
+_QTD_IMAGEM_POR_SIGLA = {
+    "-": 0, "DOC": 0,
+    "P": 1, "RX": 1, "RXF": 1, "RXI": 1, "TC": 1, "E": 1, "L": 1,
+    "FF": 1, "FI": 1, "F": 1,
+    "RXIF": 2, "FIF": 2,
+}
+
+
+def _qtd_imagens_esperada(requisito: str) -> int:
+    """Quantidade de imagens/documentos esperada pra um requisito (pode ter
+    '+' = precisa dos dois, soma; '/' = precisa de só um dos dois, usa o
+    menor valor entre as alternativas, que é o mínimo que já satisfaz)."""
+    grupos_ou = requisito.split("/")
+    valores = []
+    for grupo in grupos_ou:
+        siglas = grupo.split("+")
+        valores.append(sum(_QTD_IMAGEM_POR_SIGLA.get(s.strip(), 0) for s in siglas))
+    return min(valores) if valores else 0
+
+
+def calcular_imagens_esperadas_guia(procedimentos_str) -> int:
+    """Soma a quantidade de imagens/documentos esperada pra guia, por
+    procedimento (cada procedimento pede as suas, não compartilha com os
+    outros da mesma guia). Procedimento sem requisito mapeado não soma
+    nada -- não inventa exigência pro que não temos dado."""
+    codigos = [c.strip() for c in str(procedimentos_str).split(",") if c.strip()]
+    return sum(
+        _qtd_imagens_esperada(REQUISITOS_POR_PROCEDIMENTO[cod])
+        for cod in codigos if cod in REQUISITOS_POR_PROCEDIMENTO
+    )
+
 
 # Colunas mínimas esperadas na planilha mensal da base IA (mesma que alimenta
 # o PowerBI). Nomes normalizados via _norm (maiúsculo, sem acento).

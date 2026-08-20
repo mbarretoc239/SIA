@@ -9,6 +9,7 @@ from core.amostragem import (
     ORDEM_CRITICAS,
     REGRAS_AMOSTRAGEM,
     _norm,
+    calcular_imagens_esperadas_guia,
     carregar_procedimentos_criticos,
     carregar_processos_turso,
     consolidar_por_guia,
@@ -562,6 +563,24 @@ with aba_busca:
         vazia_protese = (df_guias["Especialidade"].apply(_norm) == "PROTESE") & (df_guias["Qtde_procs"] == 0)
         df_guias = df_guias[~vazia_protese]
         df_guias = df_guias.sort_values(["Especialidade", "Procedimentos", "NU_GUIA"]).reset_index(drop=True)
+
+    # Corrige o denominador do badge IMAGEM: a planilha 4016R às vezes traz
+    # menos linhas do que o requisito do procedimento realmente pede (ex.:
+    # RXIF pede 2 imagens, mas só veio 1 linha na planilha) -- nesse caso o
+    # esperado pelo requisito passa a valer. Nunca diminui o total (se vieram
+    # mais linhas reais que o esperado, o real prevalece) e nunca mexe no
+    # numerador (n_ok continua sendo só o que realmente tem imagem anexada).
+    # Só ajusta guia que já TEM algum registro de imagem -- guia ausente do
+    # dict continua em branco (célula "—"), mesmo caso de sempre de "4016R
+    # ainda não importada" pra essa guia, não vira "0/N confirmado".
+    for _, _row_guia in df_guias.iterrows():
+        _chave = str(_row_guia["NU_GUIA"])
+        if _chave not in imagem_por_guia:
+            continue
+        _esperado = calcular_imagens_esperadas_guia(_row_guia["Procedimentos"])
+        if _esperado > 0:
+            _n_ok, _n_total = imagem_por_guia[_chave]
+            imagem_por_guia[_chave] = (_n_ok, max(_n_total, _esperado))
 
     # --- Filtros de Biometria e Imagem ---
     # "Sem dado" (guia ainda não aparece na base de biometria/imagem) conta
