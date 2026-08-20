@@ -9,6 +9,26 @@ import streamlit.components.v1 as components
 
 from core.requisitos_procedimentos import REQUISITOS_POR_PROCEDIMENTO
 
+# Tradução das siglas curtas de core/requisitos_procedimentos.py -- usado só
+# no tooltip (hover) da coluna REQUISITOS da Amostragem, ver
+# renderizar_tabela_guias._decodificar_sigla_requisito.
+_DECODIFICA_SIGLA_REQUISITO = {
+    "P": "Película",
+    "RX": "Radiografia",
+    "RXF": "Radiografia Final",
+    "RXI": "Radiografia Inicial",
+    "RXIF": "Radiografia Inicial e Final",
+    "TC": "Termo de Consentimento e Ciência",
+    "DOC": "Documentação",
+    "E": "Encaminhamento do CD assistente",
+    "FF": "Fotografia Final",
+    "FI": "Fotografia Inicial",
+    "FIF": "Fotografia Inicial e Final",
+    "F": "Fotografia",
+    "L": "Laudo Técnico",
+    "-": "Nenhum requisito específico",
+}
+
 
 # Colunas mínimas esperadas na planilha mensal da base IA (mesma que alimenta
 # o PowerBI). Nomes normalizados via _norm (maiúsculo, sem acento).
@@ -704,7 +724,22 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     supabase_url = st.secrets["supabase"]["url"].rstrip("/")
     supabase_key = st.secrets["supabase"]["key"]
 
-    def _requisitos_guia(procedimentos_str: str) -> str:
+    def _decodificar_sigla_requisito(req: str) -> str:
+        """'RXIF' -> 'Radiografia Inicial e Final', preservando conectores
+        '+' (precisa dos dois) e '/' (precisa de um dos dois) -- usado só
+        pro tooltip (hover), a célula em si mostra a sigla curta."""
+        partes = re.split(r"([+/])", req)
+        saida = []
+        for p in partes:
+            if p == "+":
+                saida.append(" + ")
+            elif p == "/":
+                saida.append(" ou ")
+            else:
+                saida.append(_DECODIFICA_SIGLA_REQUISITO.get(p, p))
+        return "".join(saida)
+
+    def _requisitos_guia(procedimentos_str: str) -> tuple[str, str]:
         """Requisito de documentação por guia, a partir do(s) código(s) de
         procedimento -- ver core/requisitos_procedimentos.py (297 códigos
         mapeados, fonte ainda não validada oficialmente). Se todos os
@@ -712,15 +747,18 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         se pedem requisitos diferentes, mostra cada um com o código entre
         parênteses pra desambiguar (ex: "RXIF(5010), L(438)"). Procedimento
         sem requisito mapeado simplesmente não entra na lista -- não inventa
-        nada pro que não temos dado."""
+        nada pro que não temos dado. Retorna (texto_curto, tooltip_decodificado)."""
         codigos = [c.strip() for c in str(procedimentos_str).split(",") if c.strip()]
         pares = [(cod, REQUISITOS_POR_PROCEDIMENTO[cod]) for cod in codigos if cod in REQUISITOS_POR_PROCEDIMENTO]
         if not pares:
-            return ""
+            return "", ""
         requisitos_unicos = {req for _, req in pares}
         if len(requisitos_unicos) == 1:
-            return next(iter(requisitos_unicos))
-        return ", ".join(f"{req}({cod})" for cod, req in pares)
+            req = next(iter(requisitos_unicos))
+            return req, _decodificar_sigla_requisito(req)
+        texto = ", ".join(f"{req}({cod})" for cod, req in pares)
+        tooltip = "; ".join(f"{cod}: {_decodificar_sigla_requisito(req)}" for cod, req in pares)
+        return texto, tooltip
 
     def _fracao_html(info):
         if info and info[1] > 0 and (len(info) < 3 or info[2] > 0):
@@ -735,8 +773,12 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     for _, row in df_guias.iterrows():
         guia = html.escape(str(row["NU_GUIA"]))
         procs = html.escape(str(row["Procedimentos"]))
-        requisitos = html.escape(_requisitos_guia(row["Procedimentos"]))
-        requisitos_html = f"<td style='text-align:center'>{requisitos}</td>" if requisitos else "<td style='text-align:center'><span class='badge badge-vazio'>—</span></td>"
+        requisitos_txt, requisitos_tooltip = _requisitos_guia(row["Procedimentos"])
+        requisitos = html.escape(requisitos_txt)
+        requisitos_html = (
+            f"<td style='text-align:center'><span title='{html.escape(requisitos_tooltip)}'>{requisitos}</span></td>"
+            if requisitos else "<td style='text-align:center'><span class='badge badge-vazio'>—</span></td>"
+        )
         classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
         biometria_html = _fracao_html(biometria_por_guia.get(str(row["NU_GUIA"])))
         imagem_html = _fracao_html(imagem_por_guia.get(str(row["NU_GUIA"])))
