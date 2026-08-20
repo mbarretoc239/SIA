@@ -481,7 +481,7 @@ def montar_lista_processos_mes(
     from core.relatorio_5201 import STATUS_LABELS
 
     colunas_finais = [
-        "Processo", "Status", "Execução", "% Liberação IA", "Total de Guias",
+        "Processo", "Status", "Execução", "% Liberação IA", "% Biometria", "Total de Guias",
         "Procedimentos", "Especialidades", "Crítica",
     ]
     if not processos_turso:
@@ -502,6 +502,15 @@ def montar_lista_processos_mes(
     )
     df_turso["Crítica"] = tem_especialidade_critica | tem_procedimento_critico
     df_turso["Especialidades"] = especialidades_lista.apply(lambda l: ", ".join(l))
+
+    # % de procedimentos com biometria (mesma conta do card por-guia:
+    # com-biometria / total, arredondado) -- em branco quando nenhum item do
+    # processo tem operador gravado ainda (import antigo, sem essa coluna).
+    itens_biometria = pd.to_numeric(df_turso.get("itens_biometria"), errors="coerce")
+    itens_com_operador = pd.to_numeric(df_turso.get("itens_com_operador"), errors="coerce")
+    total_itens = pd.to_numeric(df_turso.get("total_itens"), errors="coerce")
+    pct_biometria = (itens_biometria / total_itens * 100).where(itens_com_operador > 0)
+    df_turso["% Biometria"] = pct_biometria.round(1)
 
     campos_rel5201 = [
         "ORDEM", "STATUS", "EXECUCAO", "QT_GUIAS", "QT_PROCEDIMENTO",

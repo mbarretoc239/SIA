@@ -817,7 +817,14 @@ def gerar_texto(df_glosas, tipo_geracao, meta=None):
             lista_glosas.append({
                 "glosa": "430_420",
                 "desc": "falta de rx inicial e final",
-                "justificativa": "",
+                # Justificativa fixa em vez de vazia -- "desc" acima nunca é
+                # lido em lugar nenhum (campo morto), então sem isso a
+                # cláusula ficava sem NENHUM texto explicando o motivo,
+                # diferente de toda glosa individual (que sempre carrega a
+                # própria justificativa). Não usa a justificativa original de
+                # 420/430 porque pode divergir entre as duas linhas -- essa
+                # frase já descreve o motivo real da fusão.
+                "justificativa": "por falta de rx inicial e final",
                 "tipo": tipo_420_430,
             })
             

@@ -255,11 +255,19 @@ class DatabaseManager:
         e contagens oficiais (total de guias, procedimentos) vêm de outro
         lugar -- aqui é só o que dá pra saber a partir da base IA: quais
         especialidades/procedimentos aparecem em cada processo, pra decidir
-        se tem crítica."""
+        se tem crítica.
+
+        `itens_biometria`/`itens_com_operador` alimentam o % de biometria da
+        lista (mesma lógica de _biometria_guia): % = biometria/total, mas só
+        quando `itens_com_operador > 0` -- coluna sem nenhum operador
+        gravado (import antigo) fica em branco em vez de aparentar 0%."""
         resultado = self._turso_pipeline([{
             "sql": "SELECT nu_ordem, "
                    "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
-                   "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos "
+                   "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos, "
+                   "COUNT(*) AS total_itens, "
+                   "SUM(CASE WHEN cd_operador_atend = 'CONN_APPOD_NEW' THEN 1 ELSE 0 END) AS itens_biometria, "
+                   "SUM(CASE WHEN cd_operador_atend IS NOT NULL AND cd_operador_atend != '' THEN 1 ELSE 0 END) AS itens_com_operador "
                    "FROM base_ia_guias "
                    "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
                    "GROUP BY nu_ordem",

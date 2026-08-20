@@ -253,9 +253,11 @@ with aba_busca:
                     "Especialidade", todas_especialidades, key="lista_proc_filtro_esp",
                 )
 
-                col_filtro_pct, col_filtro_guias, col_filtro_proc = st.columns(3)
+                col_filtro_pct, col_filtro_bio, col_filtro_guias, col_filtro_proc = st.columns(4)
                 with col_filtro_pct:
                     filtro_pct = filtro_numerico("% Liberação IA", "lista_proc_filtro_pct")
+                with col_filtro_bio:
+                    filtro_bio = filtro_numerico("% Biometria", "lista_proc_filtro_bio")
                 with col_filtro_guias:
                     filtro_guias = filtro_numerico("Total de Guias", "lista_proc_filtro_guias")
                 with col_filtro_proc:
@@ -278,6 +280,7 @@ with aba_busca:
                         )
                     ]
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "% Liberação IA", filtro_pct)
+                df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "% Biometria", filtro_bio)
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "Total de Guias", filtro_guias)
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "Procedimentos", filtro_proc)
 

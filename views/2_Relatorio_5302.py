@@ -12,7 +12,7 @@ from core.settings import (
 from shared.database import DatabaseManager
 from services.relatorio_5302.parser_strategy import processar_csv, processar_pdf
 from services.relatorio_5302.text_engine import gerar_texto, mixar_textos_inteligente
-from shared.ai_utils import melhorar_texto_com_ia
+from shared.ai_utils import gerar_texto_ocorrencia_com_ia, melhorar_texto_com_ia
 
 st.set_page_config(page_title="Relatório 5302", page_icon="🦷", layout="wide")
 
@@ -469,6 +469,67 @@ if pdf_file is not None:
                     </script>
                     <button id="btn_copiar" onclick="copyText()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Texto</button>
                     """, height=65)
+
+                st.markdown("### Texto de Ocorrência (resumo narrativo)")
+                st.caption(
+                    "Reescreve o Texto Final acima como um relato corrido, agrupado por padrão de "
+                    "comportamento do prestador — uso interno, não é a comunicação oficial (essa é "
+                    "\"Texto de orientação ao Prestador\", logo abaixo). Confira contra o Texto Final "
+                    "antes de usar."
+                )
+                key_texto_ocorrencia = f"texto_ocorrencia_v_{pdf_file.name}_{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}"
+                key_ocorrencia_pendente = f"{key_texto_ocorrencia}_pendente"
+                # Mesmo padrão do texto_mix logo abaixo: Streamlit não deixa escrever
+                # no key de um widget já instanciado no mesmo run, então o botão
+                # grava num key "_pendente" e força rerun; só no próximo run (aqui,
+                # antes do text_area existir) o valor pendente vira o valor real.
+                if key_ocorrencia_pendente in st.session_state:
+                    st.session_state[key_texto_ocorrencia] = st.session_state.pop(key_ocorrencia_pendente)
+
+                if st.button("📝 Gerar texto de ocorrência (IA)", key="btn_gerar_ocorrencia"):
+                    with st.spinner("Gerando relato..."):
+                        texto_ocorrencia, erro_ocorrencia = gerar_texto_ocorrencia_com_ia(texto_gerado)
+                    if erro_ocorrencia:
+                        st.error(f"Não foi possível gerar agora: {erro_ocorrencia}")
+                    else:
+                        st.session_state[key_ocorrencia_pendente] = texto_ocorrencia
+                        st.rerun()
+
+                if key_texto_ocorrencia in st.session_state:
+                    LABEL_TEXTO_OCORRENCIA = "Texto de Ocorrência:"
+                    st.text_area(LABEL_TEXTO_OCORRENCIA, height=120, key=key_texto_ocorrencia)
+
+                    col_btn_copy_ocorrencia, _ = st.columns([2, 8])
+                    with col_btn_copy_ocorrencia:
+                        label_js_ocorrencia = LABEL_TEXTO_OCORRENCIA.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                        components.html(f"""
+                        <script>
+                        function copyTextOcorrencia() {{
+                            let texto = '';
+                            try {{
+                                const doc = window.parent.document;
+                                const textareas = doc.querySelectorAll('textarea');
+                                for (const ta of textareas) {{
+                                    if ((ta.getAttribute('aria-label') || '') === `{label_js_ocorrencia}`) {{
+                                        texto = ta.value;
+                                        break;
+                                    }}
+                                }}
+                            }} catch (e) {{ texto = ''; }}
+                            if (!texto) {{
+                                document.getElementById('btn_copiar_ocorrencia').innerText = ' Erro ao copiar';
+                                return;
+                            }}
+                            navigator.clipboard.writeText(texto).then(function() {{
+                                document.getElementById('btn_copiar_ocorrencia').innerText = ' Copiado!';
+                                setTimeout(function() {{
+                                    document.getElementById('btn_copiar_ocorrencia').innerText = ' Copiar Texto';
+                                }}, 2000);
+                            }});
+                        }}
+                        </script>
+                        <button id="btn_copiar_ocorrencia" onclick="copyTextOcorrencia()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Texto</button>
+                        """, height=65)
 
                 st.markdown("### Texto de orientação ao Prestador")
                 if "Nenhuma glosa" not in texto_gerado:
