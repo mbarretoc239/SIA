@@ -7,6 +7,8 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+from core.requisitos_procedimentos import REQUISITOS_POR_PROCEDIMENTO
+
 
 # Colunas mínimas esperadas na planilha mensal da base IA (mesma que alimenta
 # o PowerBI). Nomes normalizados via _norm (maiúsculo, sem acento).
@@ -702,6 +704,24 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     supabase_url = st.secrets["supabase"]["url"].rstrip("/")
     supabase_key = st.secrets["supabase"]["key"]
 
+    def _requisitos_guia(procedimentos_str: str) -> str:
+        """Requisito de documentação por guia, a partir do(s) código(s) de
+        procedimento -- ver core/requisitos_procedimentos.py (297 códigos
+        mapeados, fonte ainda não validada oficialmente). Se todos os
+        procedimentos da guia pedem o MESMO requisito, mostra uma vez só;
+        se pedem requisitos diferentes, mostra cada um com o código entre
+        parênteses pra desambiguar (ex: "RXIF(5010), L(438)"). Procedimento
+        sem requisito mapeado simplesmente não entra na lista -- não inventa
+        nada pro que não temos dado."""
+        codigos = [c.strip() for c in str(procedimentos_str).split(",") if c.strip()]
+        pares = [(cod, REQUISITOS_POR_PROCEDIMENTO[cod]) for cod in codigos if cod in REQUISITOS_POR_PROCEDIMENTO]
+        if not pares:
+            return ""
+        requisitos_unicos = {req for _, req in pares}
+        if len(requisitos_unicos) == 1:
+            return next(iter(requisitos_unicos))
+        return ", ".join(f"{req}({cod})" for cod, req in pares)
+
     def _fracao_html(info):
         if info and info[1] > 0 and (len(info) < 3 or info[2] > 0):
             n_ok, n_total = info[0], info[1]
@@ -715,6 +735,8 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     for _, row in df_guias.iterrows():
         guia = html.escape(str(row["NU_GUIA"]))
         procs = html.escape(str(row["Procedimentos"]))
+        requisitos = html.escape(_requisitos_guia(row["Procedimentos"]))
+        requisitos_html = f"<td style='text-align:center'>{requisitos}</td>" if requisitos else "<td style='text-align:center'><span class='badge badge-vazio'>—</span></td>"
         classe_vista = " vista" if str(row["NU_GUIA"]) in guias_vistas else ""
         biometria_html = _fracao_html(biometria_por_guia.get(str(row["NU_GUIA"])))
         imagem_html = _fracao_html(imagem_por_guia.get(str(row["NU_GUIA"])))
@@ -727,6 +749,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
             f"<tr>"
             f"<td><button class='copy-btn{classe_vista}' data-val='{guia}' title='Clique para copiar'>{guia}</button></td>"
             f"<td>{procs}</td>"
+            f"{requisitos_html}"
             f"{biometria_html}"
             f"{imagem_html}"
             f"{motivo_html}"
@@ -813,7 +836,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         <div class='pbi-counter'><strong>0</strong> de {objetivo} analisado(s)</div>
         <table class='pbi-table'>
             <thead>
-                <tr><th style='width: 30%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 10%; text-align:center'>BIOMETRIA</th><th style='width: 10%; text-align:center'>IMAGEM</th>{th_motivo}</tr>
+                <tr><th style='width: 25%'>NU_GUIA</th><th>Procedimentos</th><th style='width: 16%; text-align:center'>REQUISITOS</th><th style='width: 10%; text-align:center'>BIOMETRIA</th><th style='width: 10%; text-align:center'>IMAGEM</th>{th_motivo}</tr>
             </thead>
             <tbody>{rows}</tbody>
         </table>
