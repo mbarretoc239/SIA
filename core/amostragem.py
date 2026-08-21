@@ -999,7 +999,6 @@ def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
     o dataframe item-level (uma linha por procedimento, colunas Especialidade/
     CD_PROCEDIMENTO/Qtde) usado pra abrir a quebra por código."""
     linhas = []
-    total_linhas_codigo = 0
     for i, item in enumerate(resumo):
         esp = item["Especialidade"]
         grupo_id = f"esp{i}"
@@ -1016,7 +1015,6 @@ def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
             .sort_values(ascending=False)
         )
         for cod, qtd in por_codigo.items():
-            total_linhas_codigo += 1
             linhas.append(
                 f"<tr class='linha-codigo {grupo_id}' style='display:none'>"
                 f"<td class='codigo-cell'>{html.escape(str(cod))}</td>"
@@ -1085,5 +1083,9 @@ def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
         }}
     </script>
     """
-    altura = 46 + 36 * (len(resumo) + total_linhas_codigo)
-    components.html(html_arvore, height=min(altura, 560), scrolling=True)
+    # Altura reserva só as linhas visíveis de cara (especialidades fechadas)
+    # -- content extra ao expandir rola dentro do iframe (scrolling=True),
+    # em vez de reservar altura pra tudo aberto e sobrar espaço em branco
+    # quando nada tá expandido.
+    altura = 46 + 36 * len(resumo)
+    components.html(html_arvore, height=min(altura, 420), scrolling=True)
