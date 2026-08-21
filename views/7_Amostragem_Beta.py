@@ -676,7 +676,22 @@ with aba_busca:
         })
 
     st.markdown("### Resumo")
-    st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True)
+    st.caption("Clique numa linha pra ver a quantidade por código de procedimento.")
+    evento_resumo = st.dataframe(
+        pd.DataFrame(resumo), use_container_width=True, hide_index=True,
+        on_select="rerun", selection_mode="single-row", key="resumo_amostragem_tabela",
+    )
+    linhas_selecionadas = evento_resumo.selection.rows if evento_resumo else []
+    if linhas_selecionadas:
+        esp_selecionada = resumo[linhas_selecionadas[0]]["Especialidade"]
+        por_codigo = (
+            df[df["Especialidade"] == esp_selecionada].groupby("CD_PROCEDIMENTO")["Qtde"].sum()
+            .sort_values(ascending=False)
+            .reset_index()
+            .rename(columns={"CD_PROCEDIMENTO": "Código do procedimento", "Qtde": "Quantidade"})
+        )
+        st.markdown(f"**{esp_selecionada}** — procedimentos por código")
+        st.dataframe(por_codigo, use_container_width=True, hide_index=True)
 
     # --- Detalhamento ---
     st.markdown("### Detalhamento por especialidade")
