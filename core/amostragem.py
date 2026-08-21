@@ -995,7 +995,7 @@ def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
     especialidade expansível mostrando quantidade por código de procedimento)
     -- ajuda a perceber se o prestador está concentrando pedidos num código
     específico. `resumo` é a lista de dicts (Especialidade, Guias únicas,
-    Total de procs, Amostra sugerida) já calculada por especialidade; `df` é
+    Total de procs) já calculada por especialidade; `df` é
     o dataframe item-level (uma linha por procedimento, colunas Especialidade/
     CD_PROCEDIMENTO/Qtde) usado pra abrir a quebra por código."""
     linhas = []
@@ -1007,7 +1007,6 @@ def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
             f"<td><span class='toggle-icon' id='icon-{grupo_id}'>+</span> {html.escape(str(esp))}</td>"
             f"<td style='text-align:center'>{item['Guias únicas']}</td>"
             f"<td style='text-align:center'>{item['Total de procs']}</td>"
-            f"<td style='text-align:center'>{item['Amostra sugerida']}</td>"
             f"</tr>"
         )
         por_codigo = (
@@ -1020,7 +1019,6 @@ def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
                 f"<td class='codigo-cell'>{html.escape(str(cod))}</td>"
                 f"<td></td>"
                 f"<td style='text-align:center'>{int(qtd)}</td>"
-                f"<td></td>"
                 f"</tr>"
             )
     rows = "\n".join(linhas)
@@ -1066,7 +1064,6 @@ def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
                     <th>Especialidade</th>
                     <th style='text-align:center'>Guias únicas</th>
                     <th style='text-align:center'>Total de procs</th>
-                    <th style='text-align:center'>Amostra sugerida</th>
                 </tr>
             </thead>
             <tbody>{rows}</tbody>
