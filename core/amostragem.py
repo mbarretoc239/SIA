@@ -988,3 +988,102 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     """
     altura = 82 + 36 * max(1, len(df_guias))
     components.html(html_tabela, height=min(altura, 540), scrolling=True)
+
+
+def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
+    """Tabela do Resumo em árvore (igual ao pivot do PowerBI que o time já usa:
+    especialidade expansível mostrando quantidade por código de procedimento)
+    -- ajuda a perceber se o prestador está concentrando pedidos num código
+    específico. `resumo` é a lista de dicts (Especialidade, Guias únicas,
+    Total de procs, Amostra sugerida) já calculada por especialidade; `df` é
+    o dataframe item-level (uma linha por procedimento, colunas Especialidade/
+    CD_PROCEDIMENTO/Qtde) usado pra abrir a quebra por código."""
+    linhas = []
+    total_linhas_codigo = 0
+    for i, item in enumerate(resumo):
+        esp = item["Especialidade"]
+        grupo_id = f"esp{i}"
+        linhas.append(
+            f"<tr class='linha-esp' onclick=\"toggleGrupo('{grupo_id}')\">"
+            f"<td><span class='toggle-icon' id='icon-{grupo_id}'>+</span> {html.escape(str(esp))}</td>"
+            f"<td style='text-align:center'>{item['Guias únicas']}</td>"
+            f"<td style='text-align:center'>{item['Total de procs']}</td>"
+            f"<td style='text-align:center'>{item['Amostra sugerida']}</td>"
+            f"</tr>"
+        )
+        por_codigo = (
+            df[df["Especialidade"] == esp].groupby("CD_PROCEDIMENTO")["Qtde"].sum()
+            .sort_values(ascending=False)
+        )
+        for cod, qtd in por_codigo.items():
+            total_linhas_codigo += 1
+            linhas.append(
+                f"<tr class='linha-codigo {grupo_id}' style='display:none'>"
+                f"<td class='codigo-cell'>{html.escape(str(cod))}</td>"
+                f"<td></td>"
+                f"<td style='text-align:center'>{int(qtd)}</td>"
+                f"<td></td>"
+                f"</tr>"
+            )
+    rows = "\n".join(linhas)
+
+    html_arvore = f"""
+    <style>
+        body {{ color: #1f2937; background: transparent; margin: 0; }}
+        .pbi-wrap {{ font-family: 'Source Sans Pro', sans-serif; color: inherit; }}
+        .pbi-table {{ width: 100%; border-collapse: collapse; font-size: 14px; color: inherit; }}
+        .pbi-table th, .pbi-table td {{
+            padding: 7px 10px; text-align: left;
+            border-bottom: 1px solid rgba(125,125,125,0.25);
+            color: inherit;
+        }}
+        .pbi-table th {{
+            background: #f0f2f6; font-weight: 600;
+            position: sticky; top: 0; z-index: 1;
+            box-shadow: 0 1px 0 rgba(125,125,125,0.35);
+        }}
+        .linha-esp {{ cursor: pointer; font-weight: 600; }}
+        .linha-esp:hover {{ background: rgba(125,125,125,0.08); }}
+        .toggle-icon {{
+            display: inline-block; width: 14px; text-align: center;
+            color: rgba(120,120,120,0.9); font-weight: 700;
+        }}
+        .codigo-cell {{
+            padding-left: 32px !important;
+            color: rgba(120,120,120,0.95);
+            font-weight: 400;
+            font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+        }}
+        @media (prefers-color-scheme: dark) {{
+            body {{ color: #e6ecf5; }}
+            .pbi-table th {{ background: #1c2230; box-shadow: 0 1px 0 rgba(255,255,255,0.15); }}
+            .linha-esp:hover {{ background: rgba(255,255,255,0.06); }}
+            .codigo-cell {{ color: rgba(255,255,255,0.6); }}
+        }}
+    </style>
+    <div class='pbi-wrap'>
+        <table class='pbi-table'>
+            <thead>
+                <tr>
+                    <th>Especialidade</th>
+                    <th style='text-align:center'>Guias únicas</th>
+                    <th style='text-align:center'>Total de procs</th>
+                    <th style='text-align:center'>Amostra sugerida</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+        </table>
+    </div>
+    <script>
+        function toggleGrupo(id) {{
+            const icon = document.getElementById('icon-' + id);
+            const abrir = icon.textContent === '+';
+            document.querySelectorAll('.' + id).forEach(tr => {{
+                tr.style.display = abrir ? 'table-row' : 'none';
+            }});
+            icon.textContent = abrir ? '−' : '+';
+        }}
+    </script>
+    """
+    altura = 46 + 36 * (len(resumo) + total_linhas_codigo)
+    components.html(html_arvore, height=min(altura, 560), scrolling=True)

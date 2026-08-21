@@ -16,6 +16,7 @@ from core.amostragem import (
     guias_com_proc_critico,
     marcar_amostra,
     montar_lista_processos_mes,
+    renderizar_resumo_especialidades,
     renderizar_tabela_guias,
     selecionar_procedimentos_ignorados,
     gerenciar_procedimentos_ignorados,
@@ -676,21 +677,7 @@ with aba_busca:
         })
 
     st.markdown("### Resumo")
-    st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True)
-
-    esp_selecionada = st.selectbox(
-        "Ver quantidade por código de procedimento em:",
-        options=["Selecione uma especialidade..."] + especialidades,
-        key="resumo_amostragem_especialidade",
-    )
-    if esp_selecionada != "Selecione uma especialidade...":
-        por_codigo = (
-            df[df["Especialidade"] == esp_selecionada].groupby("CD_PROCEDIMENTO")["Qtde"].sum()
-            .sort_values(ascending=False)
-            .reset_index()
-            .rename(columns={"CD_PROCEDIMENTO": "Código do procedimento", "Qtde": "Quantidade"})
-        )
-        st.dataframe(por_codigo, use_container_width=True, hide_index=True)
+    renderizar_resumo_especialidades(resumo, df)
 
     # --- Detalhamento ---
     st.markdown("### Detalhamento por especialidade")
