@@ -476,7 +476,7 @@ with aba_busca:
                 # procedimento -- as outras mostram cada dimensão isolada,
                 # essa mostra a combinação (ex.: "480" pegou o procedimento X
                 # 5 vezes e o Y 2 vezes, não só "480 aconteceu 7 vezes").
-                st.markdown("**Glosas por procedimento** (qual glosa pegou cada procedimento):")
+                st.markdown("**Glosas por procedimento:**")
                 st.dataframe(
                     pd.DataFrame(por_procedimento_glosa).rename(columns={
                         "procedimento": "Procedimento", "descricao": "Descrição",
