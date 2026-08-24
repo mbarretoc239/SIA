@@ -283,7 +283,18 @@ if pode_gerenciar:
 
                     st.markdown("**Status de Ciência**")
                     st.progress(len(confirmaram) / len(obrigados))
-                    st.caption(f"{len(confirmaram)}/{len(obrigados)} confirmaram a ciência")
+                    col_prog, col_disparar = st.columns([3, 2])
+                    col_prog.caption(f"{len(confirmaram)}/{len(obrigados)} confirmaram a ciência")
+                    with col_disparar:
+                        if st.button(
+                            "Disparar popup novamente pra todos", key=f"btn_resetar_ciencia_{em_edicao}",
+                            help="Apaga as confirmações já dadas -- quem já confirmou volta a ver o popup 'Estou Ciente'.",
+                        ):
+                            if db.resetar_ciencia_alinhamento(em_edicao):
+                                st.success("Ciência resetada — o popup volta a aparecer pra todo mundo obrigado.")
+                                st.rerun()
+                            else:
+                                st.error("Erro ao resetar a ciência.")
 
                     with st.expander(f"Ver detalhes ({len(obrigados)} pessoas)"):
                         df_ciencia = pd.DataFrame([

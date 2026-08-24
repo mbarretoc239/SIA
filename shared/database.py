@@ -1380,6 +1380,22 @@ class DatabaseManager:
         response = requests.delete(url, headers=self.headers)
         return response.status_code in [200, 204]
 
+    def resetar_ciencia_alinhamento(self, alinhamento_id) -> bool:
+        """Apaga TODAS as confirmações de ciência (e de leitura de
+        inativação, se for o caso) de um alinhamento -- volta a aparecer
+        como pendente pro popup "Estou Ciente" pra quem já tinha confirmado.
+        Usado pra reforçar um alinhamento importante, forçando todo mundo a
+        ler de novo."""
+        ok1 = requests.delete(
+            f"{self.supabase_url}/rest/v1/alinhamentos_lidos?alinhamento_id=eq.{alinhamento_id}",
+            headers=self.headers,
+        ).status_code in [200, 204]
+        ok2 = requests.delete(
+            f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?alinhamento_id=eq.{alinhamento_id}",
+            headers=self.headers,
+        ).status_code in [200, 204]
+        return ok1 and ok2
+
     def excluir_alinhamento(self, alinhamento_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
         response = requests.delete(url, headers=self.headers)
