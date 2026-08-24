@@ -56,12 +56,17 @@ def _conteudo_markdown(conteudo):
 
 def _obrigados_ciencia(alinhamento, usuarios_ativos):
     """Usuários que precisam confirmar ciência deste alinhamento (role sujeito
-    a ciência obrigatória e hierarquia >= nível-alvo do alinhamento)."""
+    a ciência obrigatória e hierarquia >= nível-alvo do alinhamento).
+
+    Exclui contas de teste (nome "Teste <Role>", cadastradas em Configurações
+    > Debug/Testes pra validar o fluxo de notificação) -- elas nunca vão
+    confirmar de verdade e só inflavam a lista de pendentes."""
     nivel_min_valor = NIVEL_HIERARQUIA.get(alinhamento.get("nivel_minimo", "Auditor"), 1)
     return [
         u for u in usuarios_ativos
         if u.get("role_interno") in ROLES_CIENCIA_OBRIGATORIA
         and NIVEL_HIERARQUIA.get(u.get("role_interno"), 1) >= nivel_min_valor
+        and not str(u.get("nome_completo", "")).strip().upper().startswith("TESTE ")
     ]
 
 
