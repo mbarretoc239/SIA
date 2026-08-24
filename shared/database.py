@@ -63,10 +63,30 @@ class DatabaseManager:
             "Prefer": "return=representation",
         }
 
+    def _get_paginado(self, url: str, params: dict = None) -> list:
+        """GET com paginação via Range header, em blocos de 1000 -- o
+        PostgREST corta em 1000 linhas por padrão sem isso (já causou dado
+        real sumir da tela: alinhamentos_lidos tem 1454 linhas, e sem
+        paginar as confirmações que caíam depois da linha 1000 pareciam
+        "pendentes" mesmo já confirmadas). Usar sempre que a tabela puder
+        crescer além de 1000 linhas pra um único filtro/endpoint."""
+        todas = []
+        tamanho_pagina = 1000
+        inicio = 0
+        while True:
+            headers_paginado = {**self.headers, "Range-Unit": "items", "Range": f"{inicio}-{inicio + tamanho_pagina - 1}"}
+            r = requests.get(url, headers=headers_paginado, params=params)
+            if r.status_code not in (200, 206):
+                return todas
+            lote = r.json()
+            todas.extend(lote)
+            if len(lote) < tamanho_pagina:
+                break
+            inicio += tamanho_pagina
+        return todas
+
     def _get(self, endpoint: str) -> list:
-        url = f"{self.supabase_url}/rest/v1/{endpoint}"
-        r = requests.get(url, headers=self.headers)
-        return r.json() if r.ok else []
+        return self._get_paginado(f"{self.supabase_url}/rest/v1/{endpoint}")
 
     # --- Turso (API HTTP /v2/pipeline) -- só base_ia_guias/base_imagem_procedimentos ---
     @staticmethod
@@ -566,9 +586,12 @@ class DatabaseManager:
         r_proc_count = requests.get(url_proc, headers=headers_count, params=params_proc_count)
         total_processos = self._extrair_content_range(r_proc_count)
 
+        # Paginado: um prestador de alto volume pode ter mais de 1000
+        # processos no histórico (a tabela toda tem milhares de linhas) --
+        # sem paginar, a soma vinha subestimada e inflava o % de glosa.
         params_proc_soma = {"prestador": f"eq.{prestador}", "select": "qt_procedimento"}
-        r_proc_soma = requests.get(url_proc, headers=self.headers, params=params_proc_soma)
-        total_procedimentos = sum(row.get("qt_procedimento") or 0 for row in r_proc_soma.json()) if r_proc_soma.ok else 0
+        linhas_proc_soma = self._get_paginado(url_proc, params=params_proc_soma)
+        total_procedimentos = sum(row.get("qt_procedimento") or 0 for row in linhas_proc_soma)
 
         pct_glosa = round(total_glosas / total_procedimentos * 100, 1) if total_procedimentos > 0 else None
         media_glosas_por_processo = round(total_glosas / total_processos, 1) if total_processos > 0 else None
@@ -608,11 +631,9 @@ class DatabaseManager:
             "prestador": f"eq.{prestador}",
             "select": "glosa,justificativa,procedimento,descricao_procedimento,mes_referencia",
         }
-        r = requests.get(url, headers=self.headers, params=params)
-        if not r.ok:
-            return {"por_glosa": [], "por_procedimento": [], "por_mes": []}
-
-        linhas = r.json()
+        # Paginado: um prestador de alto volume pode passar de 1000
+        # ocorrências no histórico (a tabela toda tem 77 mil+ linhas).
+        linhas = self._get_paginado(url, params=params)
 
         contagem_glosa = {}
         contagem_procedimento = {}
@@ -1395,26 +1416,11 @@ class DatabaseManager:
         return []
 
     def carregar_todas_leituras(self):
-        """Todas as linhas de alinhamentos_lidos, paginado -- sem isso, o
-        PostgREST corta em 1000 linhas por padrão e confirmações reais
-        ficavam de fora da conta (ex.: alguém aparecia "Pendente" na tela
-        de Gerenciar mesmo já tendo confirmado, só porque a linha dele
-        estava além das primeiras 1000)."""
-        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?select=alinhamento_id,usuario_id,lido_em"
-        todas = []
-        pagina = 1000
-        inicio = 0
-        while True:
-            headers_paginado = {**self.headers, "Range-Unit": "items", "Range": f"{inicio}-{inicio + pagina - 1}"}
-            response = requests.get(url, headers=headers_paginado)
-            if response.status_code not in (200, 206):
-                break
-            lote = response.json()
-            todas.extend(lote)
-            if len(lote) < pagina:
-                break
-            inicio += pagina
-        return todas
+        """Todas as linhas de alinhamentos_lidos -- paginado via _get_paginado
+        (a tabela já passou de 1000 linhas; sem isso confirmações reais
+        ficavam de fora da conta, aparecendo como "Pendente" na tela de
+        Gerenciar mesmo já confirmadas)."""
+        return self._get_paginado(f"{self.supabase_url}/rest/v1/alinhamentos_lidos?select=alinhamento_id,usuario_id,lido_em")
 
     def remover_leitura_alinhamento(self, alinhamento_id, usuario_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?alinhamento_id=eq.{alinhamento_id}&usuario_id=eq.{usuario_id}"
