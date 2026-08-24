@@ -143,6 +143,12 @@ def pluralizar_descricao(desc):
     primeira = palavras[0]
     if primeira.endswith('ão'):
         nova = primeira[:-2] + 'ões'
+    elif primeira.endswith('cao'):
+        # Mesmo caso de 'ção', só sem o acento -- comum em descrição de
+        # procedimento vinda de relatório exportado sem acentuação (ex.:
+        # "aplicacao" em vez de "aplicação"). Sem isso caía no fallback
+        # genérico (+s) e virava "aplicacaos" em vez de "aplicacoes".
+        nova = primeira[:-3] + 'coes'
     elif primeira.endswith('m'):
         nova = primeira[:-1] + 'ns'
     elif primeira.endswith('il'):
