@@ -193,6 +193,18 @@ def montar_dados_processos_manual(lista_processos: list):
         ),
     }, None
 
+def _fmt_pct(pct: float) -> str:
+    return f"{pct:.1f}%".replace(".", ",")
+
+
+def _fmt_moeda(valor: float) -> str:
+    """R$ no padrão BR (vírgula decimal, ponto de milhar). Só formata o
+    número em si -- aplicar esse replace na frase inteira (como o código
+    fazia antes) também convertia pontos que não tinham nada a ver com
+    dinheiro, ex.: "1. 210" (posição do ranking + ponto) virava "1, 210"."""
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _renderizar_resultado(dados: dict, key_prefix: str):
     """Renderiza Visão Geral + Top 10 + Resumo Copiável + CSV -- mesmo
     formato pros dois modos de entrada (upload de PDF ou busca por
@@ -236,12 +248,12 @@ def _renderizar_resultado(dados: dict, key_prefix: str):
             pct = (qtd / dados["total_linhas"]) * 100
             valor = dados["valores"].get(procedimento, 0.0)
 
-            st.info(f"**{pos}. {procedimento}**\n\n{qtd} proc. ({pct:.1f}%) | {rotulo_valor}: R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            st.info(f"**{pos}. {procedimento}**\n\n{qtd} proc. ({_fmt_pct(pct)}) | {rotulo_valor}: {_fmt_moeda(valor)}")
 
     for pos, (procedimento, qtd) in enumerate(dados["ranking"], 1):
         pct = (qtd / dados["total_linhas"]) * 100
         valor = dados["valores"].get(procedimento, 0.0)
-        linhas_resumo.append(f"{pos}. {procedimento} - {qtd} proc(s) ({pct:.1f}%) | {rotulo_valor}: R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        linhas_resumo.append(f"{pos}. {procedimento} - {qtd} proc(s) ({_fmt_pct(pct)}) | {rotulo_valor}: {_fmt_moeda(valor)}")
         ranking_para_csv.append({
             "Posição": pos,
             "Procedimento": procedimento,
