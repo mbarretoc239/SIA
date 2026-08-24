@@ -663,6 +663,64 @@ class DatabaseManager:
             ok = ok and r.ok
         return ok
 
+    # --- Regras de amostragem por especialidade (configurável por Admin/Gestor) ---
+    def carregar_regras_amostragem(self) -> list:
+        """Todas as linhas de amostragem_regras_amostra, ordenadas por
+        'ordem'. Usado tanto pela tela de Configurações (edição) quanto pelo
+        loader com fallback em core/amostragem.py (que ignora linhas com
+        ativo=false)."""
+        url = f"{self.supabase_url}/rest/v1/amostragem_regras_amostra?select=*&order=ordem"
+        r = requests.get(url, headers=self.headers)
+        return r.json() if r.ok else []
+
+    def upsert_regra_amostragem(self, especialidade, tipo, pct, minimo_procs,
+                                 minimo_amostra, ordem, ativo, atuante_role, atuante_nome="") -> bool:
+        """Cria ou atualiza a regra de uma especialidade. Só Admin/Gestor —
+        checado aqui além de na tela, porque grava direto via API pública."""
+        if atuante_role not in ("Admin", "Gestor"):
+            return False
+        url = f"{self.supabase_url}/rest/v1/amostragem_regras_amostra?on_conflict=especialidade"
+        headers_upsert = {**self.headers, "Prefer": "resolution=merge-duplicates,return=minimal"}
+        data = {
+            "especialidade": especialidade.strip().upper(),
+            "tipo": tipo,
+            "pct": pct,
+            "minimo_procs": minimo_procs,
+            "minimo_amostra": minimo_amostra,
+            "ordem": ordem,
+            "ativo": ativo,
+            "atualizado_em": datetime.now(timezone.utc).isoformat(),
+            "atualizado_por": atuante_nome,
+        }
+        r = requests.post(url, headers=headers_upsert, json=data)
+        return r.ok
+
+    def excluir_regra_amostragem(self, especialidade, atuante_role) -> bool:
+        """Remove a regra por completo (a especialidade volta a ser tratada
+        como não-crítica/sem regra, exatamente como se nunca tivesse sido
+        configurada)."""
+        if atuante_role not in ("Admin", "Gestor"):
+            return False
+        url = f"{self.supabase_url}/rest/v1/amostragem_regras_amostra?especialidade=eq.{especialidade}"
+        r = requests.delete(url, headers=self.headers)
+        return r.ok
+
+    # --- Procedimento crítico (tabela_procedimentos.critico) ---
+    def buscar_procedimentos(self, busca: str = "", limit: int = 50) -> list:
+        """Pesquisa em tabela_procedimentos por código ou descrição (usado
+        na tela de Configurações pra marcar/desmarcar 'crítico')."""
+        url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?select=codigo_tuss,descricao,critico&order=codigo_tuss&limit={limit}"
+        if busca:
+            busca_escapada = busca.strip().replace(",", "")
+            url += f"&or=(codigo_tuss.ilike.*{busca_escapada}*,descricao.ilike.*{busca_escapada}*)"
+        r = requests.get(url, headers=self.headers)
+        return r.json() if r.ok else []
+
+    def atualizar_procedimento_critico(self, codigo_tuss: str, critico: bool) -> bool:
+        url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?codigo_tuss=eq.{codigo_tuss}"
+        r = requests.patch(url, headers=self.headers, json={"critico": critico})
+        return r.ok
+
     def carregar_dicionario_glosas(self) -> dict:
         """Carrega o dicionário de correção de textos de glosas do Supabase"""
         url = f"{self.supabase_url}/rest/v1/glosas_dicionario?select=texto_original,texto_corrigido"

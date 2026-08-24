@@ -41,6 +41,7 @@ if role == "Admin":
 
 if role in ["Admin", "Gestor"]:
     abas_definidas.append(("permissoes", "Permissões de Acesso"))
+    abas_definidas.append(("regras_amostragem", "Regras de Amostragem"))
     abas_definidas.append(("textos_prestadores", "Textos para Prestadores"))
     abas_definidas.append(("links_home", "Links Home"))
     abas_definidas.append(("tabelas_base", "Tabelas Base e Glosas"))
@@ -871,6 +872,156 @@ if "permissoes" in abas_por_id:
                         "Acesso": "Permitir" if e.get("habilitado") else "Bloquear",
                     })
                 st.dataframe(pd.DataFrame(linhas_excecao), use_container_width=True, hide_index=True)
+
+# ==========================================
+# ABA: REGRAS DE AMOSTRAGEM (ADMIN/GESTOR)
+# ==========================================
+if "regras_amostragem" in abas_por_id:
+    with abas_por_id["regras_amostragem"]:
+        from core.amostragem import carregar_regras_amostragem_cache
+
+        st.subheader("Especialidades críticas e regra de amostragem")
+        st.caption(
+            "Define quais especialidades são tratadas como críticas na Amostragem e qual % das "
+            "guias entra na amostra sugerida. 'Auditar todas' força 100% das guias; 'Percentual' "
+            "sorteia a % informada, com opção de mínimo de guias e de procedimentos abaixo dos "
+            "quais audita tudo. Desativar (sem excluir) tira a especialidade da lista de críticas "
+            "sem perder a configuração salva."
+        )
+
+        TIPOS_REGRA = {"Auditar todas": "todas", "Percentual": "percentual"}
+        TIPOS_REGRA_INV = {v: k for k, v in TIPOS_REGRA.items()}
+
+        regras_atuais = db.carregar_regras_amostragem()
+
+        for regra in regras_atuais:
+            esp = regra["especialidade"]
+            with st.container(border=True):
+                c1, c2, c3, c4, c5 = st.columns([2, 2, 1.4, 1.4, 1.4])
+                with c1:
+                    st.markdown(f"**{esp}**")
+                    r_ativo = st.checkbox("Ativa (crítica)", value=bool(regra.get("ativo", True)), key=f"ra_ativo_{esp}")
+                with c2:
+                    r_tipo_label = st.selectbox(
+                        "Regra", list(TIPOS_REGRA.keys()),
+                        index=list(TIPOS_REGRA.values()).index(regra["tipo"]),
+                        key=f"ra_tipo_{esp}", width=200,
+                    )
+                    r_tipo = TIPOS_REGRA[r_tipo_label]
+                with c3:
+                    r_pct = st.number_input(
+                        "% da amostra", min_value=1, max_value=100, step=5,
+                        value=int(round(float(regra["pct"]) * 100)) if regra.get("pct") else 30,
+                        key=f"ra_pct_{esp}", disabled=(r_tipo != "percentual"),
+                    )
+                with c4:
+                    r_min_procs = st.number_input(
+                        "Mín. procs (audita tudo abaixo)", min_value=0, step=1,
+                        value=int(regra.get("minimo_procs") or 0),
+                        key=f"ra_minprocs_{esp}", disabled=(r_tipo != "percentual"),
+                    )
+                with c5:
+                    r_min_amostra = st.number_input(
+                        "Mín. guias na amostra", min_value=0, step=1,
+                        value=int(regra.get("minimo_amostra") or 0),
+                        key=f"ra_minamostra_{esp}", disabled=(r_tipo != "percentual"),
+                        help="0 = sem mínimo, só os % calculados.",
+                    )
+
+                b1, b2, _ = st.columns([2, 2, 8])
+                if b1.button("Salvar", type="primary", use_container_width=True, key=f"ra_salvar_{esp}"):
+                    ok = db.upsert_regra_amostragem(
+                        especialidade=esp,
+                        tipo=r_tipo,
+                        pct=(r_pct / 100) if r_tipo == "percentual" else None,
+                        minimo_procs=r_min_procs if r_tipo == "percentual" else None,
+                        minimo_amostra=(r_min_amostra or None) if r_tipo == "percentual" else None,
+                        ordem=regra.get("ordem", 100),
+                        ativo=r_ativo,
+                        atuante_role=role,
+                        atuante_nome=nome,
+                    )
+                    if ok:
+                        carregar_regras_amostragem_cache.clear()
+                        st.success(f"Regra de {esp} salva!")
+                        st.rerun()
+                    else:
+                        st.error("Erro ao salvar a regra.")
+                if b2.button("Excluir", use_container_width=True, key=f"ra_excluir_{esp}"):
+                    if db.excluir_regra_amostragem(esp, atuante_role=role):
+                        carregar_regras_amostragem_cache.clear()
+                        st.success(f"Regra de {esp} excluída.")
+                        st.rerun()
+                    else:
+                        st.error("Erro ao excluir a regra.")
+
+        st.divider()
+        st.markdown("**Adicionar nova especialidade**")
+        with st.container(border=True):
+            n1, n2, n3 = st.columns([3, 2, 2])
+            with n1:
+                nova_esp = st.text_input("Nome da especialidade", key="ra_nova_esp", placeholder="Ex: PERIODONTIA")
+            with n2:
+                novo_tipo_label = st.selectbox("Regra", list(TIPOS_REGRA.keys()), key="ra_novo_tipo")
+            with n3:
+                nova_ordem = st.number_input("Ordem", min_value=1, value=100, step=10, key="ra_nova_ordem")
+            if st.button("Adicionar especialidade", type="primary", key="ra_btn_adicionar"):
+                nome_norm = nova_esp.strip().upper()
+                if not nome_norm:
+                    st.warning("Informe o nome da especialidade.")
+                elif any(_r["especialidade"] == nome_norm for _r in regras_atuais):
+                    st.warning(f"{nome_norm} já está configurada — edite a regra existente acima.")
+                else:
+                    novo_tipo = TIPOS_REGRA[novo_tipo_label]
+                    ok = db.upsert_regra_amostragem(
+                        especialidade=nome_norm,
+                        tipo=novo_tipo,
+                        pct=0.30 if novo_tipo == "percentual" else None,
+                        minimo_procs=10 if novo_tipo == "percentual" else None,
+                        minimo_amostra=None,
+                        ordem=nova_ordem,
+                        ativo=True,
+                        atuante_role=role,
+                        atuante_nome=nome,
+                    )
+                    if ok:
+                        carregar_regras_amostragem_cache.clear()
+                        st.success(f"{nome_norm} adicionada como crítica!")
+                        st.rerun()
+                    else:
+                        st.error("Erro ao adicionar.")
+
+        st.divider()
+        st.subheader("Procedimentos críticos")
+        st.caption(
+            "Procedimento marcado como crítico sobe a especialidade dele pro topo da lista de "
+            "'Detalhamento por especialidade' e força a guia na 'Sugestão de amostra', mesmo em "
+            "especialidades sem regra de amostragem acima (ex.: Periodontia, Odontopediatria)."
+        )
+        busca_proc_critico = st.text_input(
+            "Pesquisar procedimento (código ou descrição)", key="busca_proc_critico",
+            placeholder="Ex: 5010 ou exodontia",
+        )
+        if busca_proc_critico.strip():
+            procs_encontrados = db.buscar_procedimentos(busca_proc_critico.strip(), limit=50)
+            if not procs_encontrados:
+                st.info("Nenhum procedimento encontrado.")
+            else:
+                for p in procs_encontrados:
+                    pc1, pc2, pc3 = st.columns([1.5, 5, 1.5])
+                    pc1.markdown(f"**{p['codigo_tuss']}**")
+                    pc2.markdown(p.get("descricao", ""))
+                    novo_critico = pc3.checkbox(
+                        "Crítico", value=bool(p.get("critico", False)),
+                        key=f"proc_critico_{p['codigo_tuss']}",
+                    )
+                    if novo_critico != bool(p.get("critico", False)):
+                        if db.atualizar_procedimento_critico(p["codigo_tuss"], novo_critico):
+                            st.rerun()
+                        else:
+                            st.error(f"Erro ao atualizar {p['codigo_tuss']}.")
+        else:
+            st.caption("Digite algo para pesquisar — a lista completa (447 procedimentos) não é exibida de uma vez.")
 
 # ==========================================
 # ABA: LINKS PADRÃO (ADMIN/GESTOR)

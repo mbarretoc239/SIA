@@ -86,7 +86,12 @@ COLUNAS_NECESSARIAS_IMAGEM = {"NU_GUIA", "DENTE_INICIAL", "NOME_ARQUIVO"}
 # exigência de imagem). Periodontia NÃO está mais aqui — passou a ser tratada
 # como as demais especialidades "comuns", sujeita só à regra de procedimento
 # crítico abaixo (ver PROCEDIMENTOS_CRITICOS_ESPECIALIDADE_COMUM).
-REGRAS_AMOSTRAGEM = {
+#
+# Fallback usado só se a tabela amostragem_regras_amostra (Supabase) estiver
+# vazia ou inacessível -- a fonte de verdade normal é o banco, editável por
+# Admin/Gestor em Configurações > Regras de Amostragem (ver
+# carregar_regras_amostragem_cache abaixo e DatabaseManager.carregar_regras_amostragem).
+REGRAS_AMOSTRAGEM_PADRAO = {
     "IMPLANTE": {"tipo": "todas"},
     "PROTESE": {"tipo": "todas"},
     "PROTESE ESPECIAL": {"tipo": "todas"},
@@ -94,13 +99,41 @@ REGRAS_AMOSTRAGEM = {
     "ENDODONTIA": {"tipo": "percentual", "pct": 0.50, "minimo_procs": 10},
 }
 
-ORDEM_CRITICAS = [
+ORDEM_CRITICAS_PADRAO = [
     "IMPLANTE",
     "PROTESE",
     "PROTESE ESPECIAL",
     "CIRURGIA",
     "ENDODONTIA",
 ]
+
+
+@st.cache_data(ttl=60)
+def carregar_regras_amostragem_cache() -> tuple[dict, list]:
+    """(REGRAS_AMOSTRAGEM, ORDEM_CRITICAS) carregados de
+    amostragem_regras_amostra (Supabase), na mesma forma que os dicts/listas
+    hardcoded de antes -- só ignora linhas com ativo=false e ordena por
+    'ordem'. Cai pro fallback _PADRAO acima se a tabela vier vazia (nunca
+    configurada ainda) ou se a consulta falhar, pra nunca deixar a
+    Amostragem sem nenhuma regra por causa de um problema de rede."""
+    from shared.database import DatabaseManager
+    linhas = DatabaseManager().carregar_regras_amostragem()
+    ativas = [l for l in linhas if l.get("ativo", True)]
+    if not ativas:
+        return dict(REGRAS_AMOSTRAGEM_PADRAO), list(ORDEM_CRITICAS_PADRAO)
+
+    regras = {}
+    for l in sorted(ativas, key=lambda l: l.get("ordem", 100)):
+        esp = _norm(l["especialidade"])
+        if l["tipo"] == "todas":
+            regras[esp] = {"tipo": "todas"}
+        else:
+            regra = {"tipo": "percentual", "pct": float(l["pct"]), "minimo_procs": int(l["minimo_procs"] or 0)}
+            if l.get("minimo_amostra"):
+                regra["minimo_amostra"] = int(l["minimo_amostra"])
+            regras[esp] = regra
+    ordem_criticas = list(regras.keys())
+    return regras, ordem_criticas
 
 # Procedimentos de baixa prioridade pra amostra, por especialidade — os mais
 # recorrentes/baratos, que passam pelo sorteio normal. Guias que contêm
@@ -500,9 +533,11 @@ def consolidar_por_guia(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def calcular_amostra(especialidade: str, total_procs: int, total_guias: int):
+def calcular_amostra(especialidade: str, total_procs: int, total_guias: int, regras: dict = None):
     """Retorna (n_amostra, descricao_da_regra)."""
-    regra = REGRAS_AMOSTRAGEM.get(_norm(especialidade))
+    if regras is None:
+        regras, _ = carregar_regras_amostragem_cache()
+    regra = regras.get(_norm(especialidade))
     if not regra:
         return total_guias, "Não-crítica — sem regra de amostragem"
     if regra["tipo"] == "todas":
@@ -579,6 +614,7 @@ def montar_lista_processos_mes(
     if not processos_turso:
         return pd.DataFrame(columns=colunas_finais)
 
+    _, ordem_criticas = carregar_regras_amostragem_cache()
     df_turso = pd.DataFrame(processos_turso)
     especialidades_lista = df_turso["especialidades"].fillna("").apply(
         lambda s: sorted({e.strip() for e in s.split(",") if e.strip()})
@@ -587,7 +623,7 @@ def montar_lista_processos_mes(
         lambda s: {p.strip() for p in s.split(",") if p.strip()}
     )
     tem_especialidade_critica = especialidades_lista.apply(
-        lambda esps: any(_norm(e) in ORDEM_CRITICAS for e in esps)
+        lambda esps: any(_norm(e) in ordem_criticas for e in esps)
     )
     tem_procedimento_critico = procedimentos_lista.apply(
         lambda procs: bool(procs & procedimentos_criticos)
@@ -697,7 +733,8 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
     n_total_guias = len(df_esp_guias)
     total_procs_esp = int(df_esp_procs_brutos["Qtde"].sum())
     procs_prioridade_normal = PROCS_PRIORIDADE_NORMAL.get(_norm(especialidade))
-    regra = REGRAS_AMOSTRAGEM.get(_norm(especialidade), {})
+    regras, _ = carregar_regras_amostragem_cache()
+    regra = regras.get(_norm(especialidade), {})
 
     # Caminho 1: sem lista de prioridade normal OU regra que manda auditar tudo.
     def _todas(motivo=""):
@@ -706,7 +743,7 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
         return amostra
 
     if procs_prioridade_normal is None or not regra:
-        n, _ = calcular_amostra(especialidade, total_procs_esp, n_total_guias)
+        n, _ = calcular_amostra(especialidade, total_procs_esp, n_total_guias, regras=regras)
         amostra = sortear_amostra(df_esp_guias, n, seed=seed).copy()
         amostra["Motivo"] = ""
         return amostra

@@ -6,9 +6,8 @@ import pandas as pd
 import streamlit.components.v1 as components
 
 from core.amostragem import (
-    ORDEM_CRITICAS,
-    REGRAS_AMOSTRAGEM,
     _norm,
+    carregar_regras_amostragem_cache,
     calcular_imagens_esperadas_guia,
     carregar_procedimentos_criticos,
     carregar_processos_turso,
@@ -625,6 +624,11 @@ with aba_busca:
     df = df[df["NU_GUIA"].isin(df_guias["NU_GUIA"])]
 
     guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
+
+    # Regras de amostragem por especialidade, configuráveis por Admin/Gestor
+    # em Configurações > Regras de Amostragem (cai pro padrão hardcoded se a
+    # tabela estiver vazia -- ver carregar_regras_amostragem_cache).
+    REGRAS_AMOSTRAGEM, ORDEM_CRITICAS = carregar_regras_amostragem_cache()
 
     # Procedimentos cadastrados como críticos (tabela_procedimentos.critico) —
     # só importam pras especialidades fora de REGRAS_AMOSTRAGEM (Periodontia,
