@@ -616,20 +616,36 @@ class DatabaseManager:
 
         contagem_glosa = {}
         contagem_procedimento = {}
+        contagem_proc_glosa = {}
         descricao_por_procedimento = {}
         contagem_mes = {}
         for linha in linhas:
-            chave_glosa = (linha.get("glosa") or "—", linha.get("justificativa") or "—")
-            contagem_glosa[chave_glosa] = contagem_glosa.get(chave_glosa, 0) + 1
+            glosa_val = linha.get("glosa") or "—"
+            justificativa_val = linha.get("justificativa") or "—"
             cod_proc = linha.get("procedimento") or "—"
+
+            chave_glosa = (glosa_val, justificativa_val)
+            contagem_glosa[chave_glosa] = contagem_glosa.get(chave_glosa, 0) + 1
             contagem_procedimento[cod_proc] = contagem_procedimento.get(cod_proc, 0) + 1
             if linha.get("descricao_procedimento"):
                 descricao_por_procedimento[cod_proc] = linha["descricao_procedimento"]
             mes = linha.get("mes_referencia") or "—"
             contagem_mes[mes] = contagem_mes.get(mes, 0) + 1
 
+            chave_proc_glosa = (cod_proc, glosa_val, justificativa_val)
+            contagem_proc_glosa[chave_proc_glosa] = contagem_proc_glosa.get(chave_proc_glosa, 0) + 1
+
         ranking_glosa = sorted(contagem_glosa.items(), key=lambda item: item[1], reverse=True)[:limite]
         ranking_procedimento = sorted(contagem_procedimento.items(), key=lambda item: item[1], reverse=True)[:limite]
+        # Por procedimento+glosa é o cruzamento das duas listas acima (qual
+        # glosa pegou cada procedimento) -- ordena por procedimento (agrupa
+        # visualmente) e, dentro dele, pela glosa mais frequente primeiro.
+        # Sem limite pelo `limite` padrão (8): cortaria pares de procedimentos
+        # menos frequentes que ainda merecem aparecer agrupados com o resto.
+        ranking_proc_glosa = sorted(
+            contagem_proc_glosa.items(),
+            key=lambda item: (item[0][0], -item[1]),
+        )
         # Por mês é linha do tempo, não ranking -- ordena cronologicamente,
         # não por quantidade.
         serie_mes = sorted(contagem_mes.items(), key=lambda item: item[0])
@@ -646,6 +662,16 @@ class DatabaseManager:
                     "quantidade": qtd,
                 }
                 for cod, qtd in ranking_procedimento
+            ],
+            "por_procedimento_glosa": [
+                {
+                    "procedimento": cod,
+                    "descricao": descricao_por_procedimento.get(cod, ""),
+                    "glosa": glosa,
+                    "justificativa": justificativa,
+                    "quantidade": qtd,
+                }
+                for (cod, glosa, justificativa), qtd in ranking_proc_glosa
             ],
             "por_mes": [{"mes_referencia": mes, "quantidade": qtd} for mes, qtd in serie_mes],
         }

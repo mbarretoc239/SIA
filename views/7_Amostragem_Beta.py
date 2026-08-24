@@ -470,6 +470,29 @@ with aba_busca:
                     },
                 )
 
+            por_procedimento_glosa = detalhe.get("por_procedimento_glosa", [])
+            if por_procedimento_glosa:
+                # Cruzamento das duas tabelas acima: qual glosa pegou cada
+                # procedimento -- as outras mostram cada dimensão isolada,
+                # essa mostra a combinação (ex.: "480" pegou o procedimento X
+                # 5 vezes e o Y 2 vezes, não só "480 aconteceu 7 vezes").
+                st.markdown("**Glosas por procedimento** (qual glosa pegou cada procedimento):")
+                st.dataframe(
+                    pd.DataFrame(por_procedimento_glosa).rename(columns={
+                        "procedimento": "Procedimento", "descricao": "Descrição",
+                        "glosa": "Glosa", "justificativa": "Justificativa", "quantidade": "Ocorrências",
+                    })[["Procedimento", "Descrição", "Glosa", "Justificativa", "Ocorrências"]],
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "Procedimento": st.column_config.Column(width="small"),
+                        "Descrição": st.column_config.Column(width="medium"),
+                        "Glosa": st.column_config.Column(width="small"),
+                        "Justificativa": st.column_config.Column(width="medium"),
+                        "Ocorrências": st.column_config.Column(width="small"),
+                    },
+                )
+
             if not por_glosa and not por_procedimento and not por_mes:
                 st.caption("Sem detalhe disponível.")
 
