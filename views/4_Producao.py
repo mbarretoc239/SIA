@@ -152,17 +152,18 @@ def _fmt_moeda(valor: float) -> str:
 def _renderizar_resultado(dados: dict):
     st.success("Análise concluída com sucesso!")
 
-    # Métricas principais -- sem truncar manualmente o nome do prestador
-    # (cortar em 20 chars deixava nomes de empresa ilegíveis, tipo
-    # "COMPANHI..."); o `help` mostra o nome completo ao passar o mouse,
-    # e o próprio st.metric já trunca visualmente o que não couber.
+    # Prestador e Top 1 podem ter texto longo (nome de empresa, descrição de
+    # procedimento) -- st.metric trunca com CSS de largura fixa não importa
+    # o que se passe (o `help` só acrescenta tooltip, não evita o corte),
+    # então esses dois ficam como texto normal (quebra linha) em vez de
+    # metric; só os números curtos (PDFs/Procedimentos) usam metric.
     st.markdown("### Visão Geral")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Prestador", dados["prestador"], help=dados["prestador"])
+    st.markdown(f"**Prestador:** {dados['prestador']}")
+    c2, c3 = st.columns(2)
     c2.metric("Total de PDFs", fmt_num(dados["qtd_pdfs"]))
     c3.metric("Procedimentos Lidos", fmt_num(dados["total_linhas"]))
     top1 = dados["ranking"][0][0] if dados["ranking"] else "-"
-    c4.metric("Top 1", top1, help=top1)
+    st.markdown(f"**Top 1:** {top1}")
 
     st.divider()
 
