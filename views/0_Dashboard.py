@@ -42,9 +42,13 @@ else:
         st.caption(f"{ultimo.get('categoria', 'Geral')} · Direcionado a {ultimo.get('nivel_minimo', 'Auditor')} · {data_criacao}")
 
         if ultimo.get("anexo_url"):
-            st.link_button("Abrir anexo", ultimo["anexo_url"])
-
-        st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos", use_container_width=True)
+            col_anexo, col_ver_todos, _ = st.columns([1.2, 1.6, 3])
+            with col_anexo:
+                st.link_button("Abrir anexo", ultimo["anexo_url"])
+            with col_ver_todos:
+                st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
+        else:
+            st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
 
 # Links úteis (institucionais) - agrupados por categoria, filtrados pela
 # equipe do usuário logado (Gestor e Admin sempre veem todos)
