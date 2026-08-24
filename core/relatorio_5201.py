@@ -351,9 +351,13 @@ def _formatar_duracao(minutos: float) -> str:
     return " ".join(partes)
 
 
-def detalhe_processos_dia(df: pd.DataFrame, dia, auditor: str) -> pd.DataFrame:
-    """Uma linha por processo Fechado/Calculado do auditor, naquele dia —
-    número do processo, status, as duas datas e o tempo entre elas.
+def detalhe_processos_periodo(df: pd.DataFrame, auditor: str, dia=None) -> pd.DataFrame:
+    """Uma linha por processo Fechado/Calculado do auditor -- número do
+    processo, status, as duas datas e o tempo entre elas. `dia` (date)
+    restringe a um dia específico; sem ele, lista todo o período já
+    filtrado em `df` (normalmente o mês selecionado) -- é a lista completa
+    de processos que o auditor tocou, pra checagem tanto dele quanto do
+    Gestor.
 
     Tempo (Consistência -> Fechamento) só é calculado para Fechado com as
     duas datas presentes e em ordem (delta > 0, protege contra inconsistência
@@ -367,10 +371,10 @@ def detalhe_processos_dia(df: pd.DataFrame, dia, auditor: str) -> pd.DataFrame:
         return pd.DataFrame(columns=colunas)
 
     alvo = auditor.strip().upper()
-    filtrado = produtivos[
-        (produtivos["_data"].dt.date == dia)
-        & (produtivos["_auditor"].astype(str).str.strip().str.upper() == alvo)
-    ]
+    filtro = produtivos["_auditor"].astype(str).str.strip().str.upper() == alvo
+    if dia is not None:
+        filtro &= produtivos["_data"].dt.date == dia
+    filtrado = produtivos[filtro]
     if filtrado.empty:
         return pd.DataFrame(columns=colunas)
 

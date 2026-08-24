@@ -9,7 +9,7 @@ from core.relatorio_5201 import (
     STATUS_LABELS,
     agrupar_por_status,
     carregar_dados_atuais,
-    detalhe_processos_dia,
+    detalhe_processos_periodo,
     dias_disponiveis,
     meses_disponiveis,
     procedimentos_consistido_digitado_por_canal,
@@ -104,18 +104,21 @@ def _grafico_status(procedimentos_por_status: dict):
     return barras + rotulos
 
 
-def _secao_detalhe_dia(df: pd.DataFrame, dia, auditor: str):
-    """Detalhe de processos do auditor num dia específico: tempo médio até o
-    fechamento + lista processo a processo. Só faz sentido com um dia
-    específico escolhido (não em "Todos os dias", onde não há uma única
-    janela de tempo pra medir)."""
-    detalhe = detalhe_processos_dia(df, dia, auditor)
-    if detalhe.empty:
-        st.info("Nenhum processo Fechado/Calculado desse auditor nesse dia.")
-        return
-
-    st.metric("Tempo médio até o fechamento", tempo_medio_resolucao(detalhe) or "—")
-    st.dataframe(detalhe.drop(columns=["_minutos"]), use_container_width=True, hide_index=True)
+def _secao_lista_processos(df: pd.DataFrame, auditor: str, dia=None, expandido: bool = False):
+    """Lista processo a processo (Fechado/Calculado) do auditor -- tempo
+    médio até o fechamento + tabela completa. Com `dia` informado, restringe
+    a esse dia; sem ele, cobre todo o período já filtrado em `df`
+    (normalmente o mês selecionado) -- é a lista que tanto o auditor quanto
+    o Gestor usam pra conferir o que foi feito, não só as métricas
+    agregadas."""
+    detalhe = detalhe_processos_periodo(df, auditor, dia=dia)
+    titulo = f"Processos do dia ({len(detalhe)})" if dia is not None else f"Lista de processos do período ({len(detalhe)})"
+    with st.expander(titulo, expanded=expandido):
+        if detalhe.empty:
+            st.info("Nenhum processo Fechado/Calculado desse auditor" + (" nesse dia." if dia is not None else " nesse período."))
+            return
+        st.metric("Tempo médio até o fechamento", tempo_medio_resolucao(detalhe) or "—")
+        st.dataframe(detalhe.drop(columns=["_minutos"]), use_container_width=True, hide_index=True)
 
 
 def _secao_produtividade_individual(
@@ -143,9 +146,7 @@ def _secao_produtividade_individual(
         c2.metric("Calculados", _fmt_num(int(linha["Calculados"])))
         c3.metric("Total", _fmt_num(int(linha["Total"])))
 
-        if dia_filtro is not None:
-            st.markdown("#### Detalhe de Processos do Dia")
-            _secao_detalhe_dia(df, dia_filtro, auditor)
+        _secao_lista_processos(df, auditor, dia=dia_filtro)
 
     if not dias:
         return
