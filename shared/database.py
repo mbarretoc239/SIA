@@ -1395,11 +1395,26 @@ class DatabaseManager:
         return []
 
     def carregar_todas_leituras(self):
+        """Todas as linhas de alinhamentos_lidos, paginado -- sem isso, o
+        PostgREST corta em 1000 linhas por padrão e confirmações reais
+        ficavam de fora da conta (ex.: alguém aparecia "Pendente" na tela
+        de Gerenciar mesmo já tendo confirmado, só porque a linha dele
+        estava além das primeiras 1000)."""
         url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?select=alinhamento_id,usuario_id,lido_em"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        todas = []
+        pagina = 1000
+        inicio = 0
+        while True:
+            headers_paginado = {**self.headers, "Range-Unit": "items", "Range": f"{inicio}-{inicio + pagina - 1}"}
+            response = requests.get(url, headers=headers_paginado)
+            if response.status_code not in (200, 206):
+                break
+            lote = response.json()
+            todas.extend(lote)
+            if len(lote) < pagina:
+                break
+            inicio += pagina
+        return todas
 
     def remover_leitura_alinhamento(self, alinhamento_id, usuario_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?alinhamento_id=eq.{alinhamento_id}&usuario_id=eq.{usuario_id}"
