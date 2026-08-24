@@ -26,7 +26,7 @@ COLUNAS_NECESSARIAS = {
 # mais antigo, ou exportação diferente), a importação não falha, só fica
 # sem esse corte específico.
 COLUNAS_OPCIONAIS = {
-    "EXECUCAO", "DATA_RECEBIMENTO_PROCESSO_FISICO",
+    "EXECUCAO", "MODALIDADE", "DATA_RECEBIMENTO_PROCESSO_FISICO",
     "QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
     "PRESTADOR",
 }
@@ -135,6 +135,11 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
     else:
         df["EXECUCAO"] = ""
 
+    if "MODALIDADE" in df.columns:
+        df["MODALIDADE"] = df["MODALIDADE"].fillna("").apply(_norm)
+    else:
+        df["MODALIDADE"] = ""
+
     if "DATA_RECEBIMENTO_PROCESSO_FISICO" in df.columns:
         df["DATA_RECEBIMENTO_PROCESSO_FISICO"] = pd.to_datetime(
             df["DATA_RECEBIMENTO_PROCESSO_FISICO"], errors="coerce", dayfirst=True
@@ -240,6 +245,19 @@ def agrupar_por_status(contagens: dict) -> dict:
 # ("N_APP"), não espaço -- confirmado direto nos dados decifrados depois
 # que essa métrica deu 0 mesmo com dado importado (ver conversa 2026-08-05).
 EXECUCAO_COM_DATA_OBRIGATORIA = {"MISTO", "N_APP"}
+
+# Rótulos amigáveis pra exibição -- os valores crus (normalizados por _norm,
+# maiúsculo e sem acento) ficam feios direto na tabela ("N_APP", "FIXO").
+# Valor não mapeado (planilha antiga, ou variante nova) cai no fallback
+# _titulo_amigavel, não fica em branco.
+EXECUCAO_LABELS = {"APP": "App", "MISTO": "Misto", "N_APP": "Não App"}
+MODALIDADE_LABELS = {"FIXO": "Fixo", "PACOTE": "Pacote", "NORMAL": "Normal", "RECURSO": "Recurso"}
+
+
+def _titulo_amigavel(valor: str, mapa: dict) -> str:
+    if not valor:
+        return "—"
+    return mapa.get(valor, valor.replace("_", " ").title())
 
 
 def procedimentos_consistido_digitado_por_canal(df: pd.DataFrame) -> int:
@@ -365,7 +383,7 @@ def detalhe_processos_periodo(df: pd.DataFrame, auditor: str, dia=None) -> pd.Da
     `_minutos` fica na saída (float ou None) pra tempo_medio_resolucao usar;
     quem for exibir a tabela deve descartar essa coluna auxiliar.
     """
-    colunas = ["Processo", "Status", "Consistência", "Fechamento", "Tempo", "_minutos"]
+    colunas = ["Processo", "Status", "Execução", "Modalidade", "Consistência", "Fechamento", "Tempo", "_minutos"]
     produtivos = _produtivos_com_auditor_e_data(df)
     if produtivos.empty:
         return pd.DataFrame(columns=colunas)
@@ -390,6 +408,8 @@ def detalhe_processos_periodo(df: pd.DataFrame, auditor: str, dia=None) -> pd.Da
         linhas.append({
             "Processo": row["ORDEM"],
             "Status": STATUS_LABELS.get(row["STATUS"], row["STATUS"]),
+            "Execução": _titulo_amigavel(row.get("EXECUCAO", ""), EXECUCAO_LABELS),
+            "Modalidade": _titulo_amigavel(row.get("MODALIDADE", ""), MODALIDADE_LABELS),
             "Consistência": consistencia.strftime("%d/%m/%Y %H:%M") if pd.notna(consistencia) else "—",
             "Fechamento": fechamento.strftime("%d/%m/%Y %H:%M") if pd.notna(fechamento) else "—",
             "Tempo": _formatar_duracao(minutos) if minutos is not None else "—",
