@@ -143,12 +143,15 @@ def pluralizar_descricao(desc):
     primeira = palavras[0]
     if primeira.endswith('ão'):
         nova = primeira[:-2] + 'ões'
-    elif primeira.endswith('cao'):
-        # Mesmo caso de 'ção', só sem o acento -- comum em descrição de
-        # procedimento vinda de relatório exportado sem acentuação (ex.:
-        # "aplicacao" em vez de "aplicação"). Sem isso caía no fallback
-        # genérico (+s) e virava "aplicacaos" em vez de "aplicacoes".
-        nova = primeira[:-3] + 'coes'
+    elif primeira.endswith('ao'):
+        # Mesmo caso do 'ão' acima, só sem o acento -- comum em descrição
+        # de procedimento vinda de relatório exportado sem acentuação (ex.:
+        # "aplicacao"/"incisao"/"reversao" em vez de "aplicação"/"incisão"/
+        # "reversão"). Sem isso caía no fallback genérico (+s) e virava
+        # "aplicacaos" em vez de "aplicacoes". Não cobre os poucos plurais
+        # irregulares em "-ãos" (mão, irmão, cidadão, órgão...), mas nenhum
+        # é termo de procedimento odontológico.
+        nova = primeira[:-2] + 'oes'
     elif primeira.endswith('m'):
         nova = primeira[:-1] + 'ns'
     elif primeira.endswith('il'):
