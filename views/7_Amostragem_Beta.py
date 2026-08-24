@@ -15,6 +15,7 @@ from core.amostragem import (
     guias_com_proc_critico,
     marcar_amostra,
     montar_lista_processos_mes,
+    renderizar_botao_copiar_processo,
     renderizar_resumo_especialidades,
     renderizar_tabela_guias,
     selecionar_procedimentos_ignorados,
@@ -350,7 +351,7 @@ with aba_busca:
     prestador_ativo = None
 
     with st.container(border=True):
-        st.markdown(f"**Processo:** {processo_ativo}")
+        renderizar_botao_copiar_processo(processo_ativo)
         st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
 
         if info_status is None:

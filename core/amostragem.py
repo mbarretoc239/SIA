@@ -1115,6 +1115,52 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     components.html(html_tabela, height=min(altura, 540), scrolling=True)
 
 
+def renderizar_botao_copiar_processo(processo) -> None:
+    """Botão "Processo: X" que copia o número ao clicar -- mesmo padrão dos
+    botões de NU_GUIA em renderizar_tabela_guias, só que sem o rastreio de
+    "vista" (não se aplica ao processo em si). Existe porque é fácil perder
+    o número do processo ao trocar de tela/copiar outra coisa por cima."""
+    processo_esc = html.escape(str(processo))
+    html_botao = f"""
+    <style>
+        body {{ margin: 0; background: transparent; color: inherit; font-family: 'Source Sans Pro', sans-serif; }}
+        .copy-btn-processo {{
+            background: transparent;
+            border: 1px solid rgba(125,125,125,0.5);
+            border-radius: 4px;
+            padding: 5px 12px;
+            cursor: pointer;
+            font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: inherit;
+        }}
+        .copy-btn-processo:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
+        .copy-btn-processo.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
+        @media (prefers-color-scheme: dark) {{
+            .copy-btn-processo {{ border-color: rgba(255,255,255,0.25); }}
+            .copy-btn-processo:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
+        }}
+    </style>
+    <button class="copy-btn-processo" id="btn-processo" title="Clique para copiar">Processo: {processo_esc}</button>
+    <script>
+        document.getElementById('btn-processo').addEventListener('click', () => {{
+            navigator.clipboard.writeText('{processo_esc}').then(() => {{
+                const btn = document.getElementById('btn-processo');
+                const orig = btn.innerText;
+                btn.innerText = '✓ copiado';
+                btn.classList.add('copied');
+                setTimeout(() => {{
+                    btn.innerText = orig;
+                    btn.classList.remove('copied');
+                }}, 1100);
+            }});
+        }});
+    </script>
+    """
+    components.html(html_botao, height=42)
+
+
 def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
     """Tabela do Resumo em árvore (igual ao pivot do PowerBI que o time já usa:
     especialidade expansível mostrando quantidade por código de procedimento)
