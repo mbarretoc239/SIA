@@ -18,6 +18,7 @@ st.markdown("### Último alinhamento")
 alinhamentos_visiveis = db.carregar_alinhamentos_visiveis(role)
 if not alinhamentos_visiveis:
     st.info("Nenhum alinhamento disponível para o seu nível de acesso.")
+    st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
 else:
     ultimo = alinhamentos_visiveis[0]
     with st.container(border=True):
@@ -43,7 +44,7 @@ else:
         if ultimo.get("anexo_url"):
             st.link_button("Abrir anexo", ultimo["anexo_url"])
 
-    st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
+        st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos", use_container_width=True)
 
 # Links úteis (institucionais) - agrupados por categoria, filtrados pela
 # equipe do usuário logado (Gestor e Admin sempre veem todos)
