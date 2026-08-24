@@ -17,6 +17,11 @@ from core.relatorio_5201 import (
     resumo_geral,
     tempo_medio_resolucao,
 )
+from core.settings import (
+    carregar_excecoes_modulos_cache,
+    carregar_permissoes_modulos_cache,
+    tem_acesso_modulo,
+)
 from shared.database import DatabaseManager
 
 
@@ -222,6 +227,12 @@ _ROLES_GERAL = {"Gestor", "Admin"}
 _role = st.session_state.get("role_interno", "Contas")
 _ve_geral = _role in _ROLES_GERAL
 _usuario_sigo = st.session_state.get("usuario_sigo", "")
+
+_permissoes = carregar_permissoes_modulos_cache()
+_excecoes = carregar_excecoes_modulos_cache()
+if not tem_acesso_modulo(_permissoes, _role, "produtividade", st.session_state.get("usuario_id"), _excecoes):
+    st.error("Você não tem permissão para acessar este módulo.")
+    st.stop()
 
 st.title("Produtividade — Relatório 5201")
 

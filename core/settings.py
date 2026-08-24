@@ -65,6 +65,8 @@ MODULOS_CONTROLADOS = {
     "calculadora_glosa": "Calculadora de Glosa",
     "producao": "Análise de Produção",
     "copia_rapida": "Cópia Rápida (Cabeçalhos)",
+    "amostragem": "Amostragem",
+    "produtividade": "Produtividade",
 }
 
 # Roles cujo acesso aos módulos acima é configurável

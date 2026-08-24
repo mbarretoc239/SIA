@@ -46,6 +46,14 @@ if not st.session_state.get("logado", False):
 if "db" not in st.session_state:
     st.session_state.db = DatabaseManager()
 
+_role_pagina = st.session_state.get("role_interno", "Contas")
+_usuario_id_pagina = st.session_state.get("usuario_id")
+_permissoes_pagina = carregar_permissoes_modulos_cache()
+_excecoes_pagina = carregar_excecoes_modulos_cache()
+if not tem_acesso_modulo(_permissoes_pagina, _role_pagina, "amostragem", _usuario_id_pagina, _excecoes_pagina):
+    st.error("Você não tem permissão para acessar este módulo.")
+    st.stop()
+
 # Operador que indica biometria facial feita (fluxo automático via app);
 # qualquer outro operador = análise manual, sem biometria.
 OPERADOR_BIOMETRIA = "CONN_APPOD_NEW"
