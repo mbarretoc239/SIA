@@ -254,9 +254,12 @@ class DatabaseManager:
         if not nu_guias:
             return set()
         filtro = ",".join(str(g) for g in nu_guias)
+        # Paginado: já existe processo com mais de 1000 itens -- o limite de
+        # 1000 do PostgREST vale pra RESPOSTA, não pra quantos valores tem
+        # no IN(), então um processo grande com muitas guias já marcadas
+        # podia vir cortado (guia real "vista" aparecendo como não vista).
         url = f"{self.supabase_url}/rest/v1/amostragem_guias_vistas?nu_guia=in.({filtro})&select=nu_guia"
-        r = requests.get(url, headers=self.headers)
-        return {item["nu_guia"] for item in r.json()} if r.ok else set()
+        return {item["nu_guia"] for item in self._get_paginado(url)}
 
     # --- Base IA (Amostragem BETA): guias importadas mensalmente (todas as
     # linhas da planilha, liberadas e não liberadas -- ver
