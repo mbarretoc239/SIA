@@ -167,14 +167,14 @@ PROCS_PRIORIDADE_NORMAL = {
 # corre risco de não perceber se ficarem escondidos lá embaixo.
 @st.cache_data(ttl=300)
 def carregar_procedimentos_criticos() -> set:
+    # Reaproveita DatabaseManager.listar_procedimentos_criticos (já paginado
+    # -- ver scripts/checar_paginacao.py) em vez de bater no Supabase direto
+    # aqui. Bater direto por fora do DatabaseManager foi como esse bug de
+    # paginação passou despercebido: a checagem automática só olha
+    # shared/database.py.
     from shared.database import DatabaseManager
     db = DatabaseManager()
-    url = f"{db.supabase_url}/rest/v1/tabela_procedimentos?select=codigo_tuss&critico=eq.true"
-    import requests
-    r = requests.get(url, headers=db.headers)
-    if not r.ok:
-        return set()
-    return {str(row["codigo_tuss"]).strip() for row in r.json()}
+    return {str(row["codigo_tuss"]).strip() for row in db.listar_procedimentos_criticos()}
 
 
 def _norm(texto: str) -> str:

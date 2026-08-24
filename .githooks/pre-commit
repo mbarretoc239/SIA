@@ -1,19 +1,20 @@
 #!/bin/sh
-# Bloqueia o commit se shared/database.py estiver sendo alterado e tiver
-# algum requests.get() sem passar por _get_paginado (ver scripts/checar_paginacao.py
-# e a memória "feedback_paginacao_supabase" -- o PostgREST corta respostas
-# em 1000 linhas por padrão, silenciosamente, e isso já causou bug real em
-# produção mais de uma vez nesta sessão).
+# Bloqueia o commit se algum arquivo .py do projeto tiver uma leitura do
+# Supabase que pode vir cortada (ver scripts/checar_paginacao.py e a
+# memória "feedback_paginacao_supabase" -- o PostgREST corta respostas em
+# 1000 linhas por padrao, silenciosamente, e isso ja causou bug real em
+# producao mais de uma vez nesta sessao: confirmacao de ciencia "sumindo",
+# guia marcada como vista reaparecendo como pendente).
 #
-# Só roda a checagem se database.py estiver de fato no commit -- não
-# atrasa commits que não mexem nele.
+# Roda em QUALQUER commit que mude algum .py -- nao so shared/database.py,
+# porque o bug ja escapou por um arquivo diferente (core/amostragem.py
+# batendo no Supabase direto, por fora do DatabaseManager).
 
-if git diff --cached --name-only | grep -q "^shared/database.py$"; then
+if git diff --cached --name-only | grep -q '\.py$'; then
     python scripts/checar_paginacao.py
     if [ $? -ne 0 ]; then
         echo ""
-        echo "Commit bloqueado: shared/database.py tem requests.get() sem paginacao/justificativa."
-        echo "Corrija (use self._get_paginado) ou marque com '# nao-paginado: motivo' e tente de novo."
+        echo "Commit bloqueado: veja acima a(s) leitura(s) do Supabase sem protecao de paginacao."
         exit 1
     fi
 fi
