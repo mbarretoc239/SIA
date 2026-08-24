@@ -1124,7 +1124,7 @@ def renderizar_botao_copiar_processo(processo) -> None:
     html_botao = f"""
     <style>
         body {{
-            margin: 0; padding: 4px 0; background: transparent; color: inherit;
+            margin: 0; padding: 4px 0; background: transparent; color: #1f2937;
             font-family: 'Source Sans Pro', sans-serif;
             display: flex; align-items: center;
         }}
@@ -1142,6 +1142,7 @@ def renderizar_botao_copiar_processo(processo) -> None:
         .copy-btn-processo:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
         .copy-btn-processo.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
         @media (prefers-color-scheme: dark) {{
+            body {{ color: #e6ecf5; }}
             .copy-btn-processo {{ border-color: rgba(255,255,255,0.25); }}
             .copy-btn-processo:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
         }}
