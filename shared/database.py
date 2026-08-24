@@ -80,6 +80,7 @@ class DatabaseManager:
         inicio = 0
         while True:
             headers_paginado = {**base_headers, "Range-Unit": "items", "Range": f"{inicio}-{inicio + tamanho_pagina - 1}"}
+            # nao-paginado: e a propria implementacao de _get_paginado
             r = requests.get(url, headers=headers_paginado, params=params)
             if r.status_code not in (200, 206):
                 return todas
@@ -362,6 +363,7 @@ class DatabaseManager:
             # filtro) e cada lote rápido o bastante pra nunca chegar perto do
             # timeout.
             while True:
+                # nao-paginado: limit= explicito (paginacao de DELETE em lotes, nao e leitura)
                 r_pagina = requests.get(
                     f"{url}?{filtro_query}&select=id&order=id.asc&limit={lote_delete}",
                     headers=self.headers,
@@ -506,10 +508,7 @@ class DatabaseManager:
             f"{self.supabase_url}/rest/v1/analises_5302_cache"
             f"?processo=eq.{processo}&select=*&order=updated_at.desc"
         )
-        r = requests.get(url, headers=self.headers)
-        if r.status_code != 200:
-            return []
-        return r.json()
+        return self._get_paginado(url)
 
     # --- Histórico de glosas por prestador (risco/desvio na Amostragem) ---
     def salvar_historico_glosas(self, registros: list, lote: int = 500) -> int:
@@ -584,11 +583,13 @@ class DatabaseManager:
 
         url_glosas = f"{self.supabase_url}/rest/v1/historico_glosas_prestador"
         params_glosas = {"prestador": f"eq.{prestador}", "select": "id", "limit": "1"}
+        # nao-paginado: contagem via Content-Range (limit=1, nao le corpo)
         r_glosas = requests.get(url_glosas, headers=headers_count, params=params_glosas)
         total_glosas = self._extrair_content_range(r_glosas)
 
         url_proc = f"{self.supabase_url}/rest/v1/historico_procedimentos_prestador"
         params_proc_count = {"prestador": f"eq.{prestador}", "select": "id", "limit": "1"}
+        # nao-paginado: contagem via Content-Range (limit=1, nao le corpo)
         r_proc_count = requests.get(url_proc, headers=headers_count, params=params_proc_count)
         total_processos = self._extrair_content_range(r_proc_count)
 
@@ -765,6 +766,7 @@ class DatabaseManager:
         if busca:
             busca_escapada = busca.strip().replace(",", "")
             url += f"&or=(codigo_tuss.ilike.*{busca_escapada}*,descricao.ilike.*{busca_escapada}*)"
+        # nao-paginado: limit= explicito (paginacao de busca da UI)
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
@@ -824,10 +826,7 @@ class DatabaseManager:
         """Usado pelo fluxo 'Esqueci a senha' pra enriquecer o aviso com o
         nome completo, se o usuário existir. Não expõe senha/hash."""
         url = f"{self.supabase_url}/rest/v1/usuarios?usuario_sigo=eq.{usuario_sigo}&select=id,nome_completo,equipe,status"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code != 200:
-            return None
-        usuarios = response.json()
+        usuarios = self._get_paginado(url)
         return usuarios[0] if usuarios else None
 
     def criar_usuario(self, usuario_sigo, nome_completo, senha, equipe):
@@ -891,11 +890,7 @@ class DatabaseManager:
 
     def autenticar_usuario(self, usuario_sigo, senha):
         url = f"{self.supabase_url}/rest/v1/usuarios?usuario_sigo=eq.{usuario_sigo}&select=*"
-        response = requests.get(url, headers=self.headers)
-
-        if response.status_code != 200:
-            return None
-        usuarios = response.json()
+        usuarios = self._get_paginado(url)
         if not usuarios:
             return None
         user = usuarios[0]
@@ -1133,19 +1128,15 @@ class DatabaseManager:
     def carregar_meus_links(self, usuario_id):
         # O PostgREST suporta Joins através de foreign keys:
         url = f"{self.supabase_url}/rest/v1/usuario_links?usuario_id=eq.{usuario_id}&select=id,titulo,link_id,links(url)"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            dados = response.json()
-            resultados = []
-            for d in dados:
-                url_real = d.get('links', {}).get('url', '') if d.get('links') else ''
-                resultados.append({
-                    "id": d["id"],
-                    "titulo": d["titulo"],
-                    "url": url_real
-                })
-            return resultados
-        return []
+        resultados = []
+        for d in self._get_paginado(url):
+            url_real = d.get('links', {}).get('url', '') if d.get('links') else ''
+            resultados.append({
+                "id": d["id"],
+                "titulo": d["titulo"],
+                "url": url_real
+            })
+        return resultados
 
     def deletar_link_util(self, id_relacao):
         url = f"{self.supabase_url}/rest/v1/usuario_links?id=eq.{id_relacao}"
@@ -1444,6 +1435,7 @@ class DatabaseManager:
             "order": "mes_referencia.desc",
             "limit": "1",
         }
+        # nao-paginado: limit=1 explicito (status de 1 processo so)
         response = requests.get(url, headers=self.headers, params=params)
         if not response.ok:
             return None
@@ -1462,25 +1454,7 @@ class DatabaseManager:
         é o dict original (ORDEM, STATUS, LOGIN_FECHAMENTO etc.) gravado no
         último upload."""
         url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos?select=payload_cifrado,importado_em,importado_por,mes_referencia"
-
-        # PostgREST devolve no máximo 1000 linhas por padrão (db-max-rows) —
-        # sem paginar por Range, um relatório com mais de 1000 processos vinha
-        # cortado (o snapshot completo era gravado certo, só a leitura que
-        # ficava incompleta). Pagina até a última página vir menor que o
-        # tamanho pedido.
-        tamanho_pagina = 1000
-        offset = 0
-        linhas = []
-        while True:
-            headers_paginado = {**self.headers, "Range-Unit": "items", "Range": f"{offset}-{offset + tamanho_pagina - 1}"}
-            r = requests.get(url, headers=headers_paginado)
-            if not r.ok:
-                break
-            pagina = r.json()
-            linhas.extend(pagina)
-            if len(pagina) < tamanho_pagina:
-                break
-            offset += tamanho_pagina
+        linhas = self._get_paginado(url)
 
         registros = []
         for item in linhas:
