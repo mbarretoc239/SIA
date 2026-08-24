@@ -63,18 +63,23 @@ class DatabaseManager:
             "Prefer": "return=representation",
         }
 
-    def _get_paginado(self, url: str, params: dict = None) -> list:
+    def _get_paginado(self, url: str, params: dict = None, headers: dict = None) -> list:
         """GET com paginação via Range header, em blocos de 1000 -- o
         PostgREST corta em 1000 linhas por padrão sem isso (já causou dado
         real sumir da tela: alinhamentos_lidos tem 1454 linhas, e sem
         paginar as confirmações que caíam depois da linha 1000 pareciam
         "pendentes" mesmo já confirmadas). Usar sempre que a tabela puder
-        crescer além de 1000 linhas pra um único filtro/endpoint."""
+        crescer além de 1000 linhas pra um único filtro/endpoint.
+
+        `headers`: por padrão usa self.headers (chave anon); passe
+        self._admin_headers() pras tabelas que exigem service_role (RLS sem
+        policy pra anon, ex.: permissoes_modulos)."""
+        base_headers = headers if headers is not None else self.headers
         todas = []
         tamanho_pagina = 1000
         inicio = 0
         while True:
-            headers_paginado = {**self.headers, "Range-Unit": "items", "Range": f"{inicio}-{inicio + tamanho_pagina - 1}"}
+            headers_paginado = {**base_headers, "Range-Unit": "items", "Range": f"{inicio}-{inicio + tamanho_pagina - 1}"}
             r = requests.get(url, headers=headers_paginado, params=params)
             if r.status_code not in (200, 206):
                 return todas
@@ -377,9 +382,9 @@ class DatabaseManager:
             _garantir_ok(r_insert, f"inserir lote {i}-{i + len(pedaco)} do mês {mes_referencia} em {tabela}")
             total += len(pedaco)
 
-        r_meses = requests.get(f"{url}?select=mes_referencia", headers=self.headers)
-        if r_meses.ok:
-            meses = sorted({item["mes_referencia"] for item in r_meses.json()}, reverse=True)
+        linhas_meses = self._get_paginado(f"{url}?select=mes_referencia")
+        if linhas_meses:
+            meses = sorted({item["mes_referencia"] for item in linhas_meses}, reverse=True)
             antigos = meses[manter_meses:]
             if antigos:
                 filtro = ",".join(antigos)
@@ -446,11 +451,9 @@ class DatabaseManager:
         """Retorna {especialidade: set(codigos)} com tudo que já foi salvo
         como 'não precisa analisar' em qualquer sessão anterior."""
         url = f"{self.supabase_url}/rest/v1/amostragem_procs_ignorados?select=especialidade,cd_procedimento"
-        r = requests.get(url, headers=self.headers)
         resultado = {}
-        if r.ok:
-            for item in r.json():
-                resultado.setdefault(item["especialidade"], set()).add(item["cd_procedimento"])
+        for item in self._get_paginado(url):
+            resultado.setdefault(item["especialidade"], set()).add(item["cd_procedimento"])
         return resultado
 
     def salvar_procs_ignorados(self, pares: list) -> bool:
@@ -717,8 +720,7 @@ class DatabaseManager:
         loader com fallback em core/amostragem.py (que ignora linhas com
         ativo=false)."""
         url = f"{self.supabase_url}/rest/v1/amostragem_regras_amostra?select=*&order=ordem"
-        r = requests.get(url, headers=self.headers)
-        return r.json() if r.ok else []
+        return self._get_paginado(url)
 
     def upsert_regra_amostragem(self, especialidade, tipo, pct, minimo_procs,
                                  minimo_amostra, ordem, ativo, atuante_role, atuante_nome="") -> bool:
@@ -768,8 +770,7 @@ class DatabaseManager:
         busca) -- usado pra mostrar a lista atual na tela de Configurações,
         que antes só aparecia se o usuário buscasse pelo código exato."""
         url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?select=codigo_tuss,descricao,critico&critico=eq.true&order=codigo_tuss"
-        r = requests.get(url, headers=self.headers)
-        return r.json() if r.ok else []
+        return self._get_paginado(url)
 
     def atualizar_procedimento_critico(self, codigo_tuss: str, critico: bool) -> bool:
         url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?codigo_tuss=eq.{codigo_tuss}"
@@ -779,10 +780,7 @@ class DatabaseManager:
     def carregar_dicionario_glosas(self) -> dict:
         """Carrega o dicionário de correção de textos de glosas do Supabase"""
         url = f"{self.supabase_url}/rest/v1/glosas_dicionario?select=texto_original,texto_corrigido"
-        r = requests.get(url, headers=self.headers)
-        if r.status_code == 200:
-            return {item["texto_original"].lower().strip(): item["texto_corrigido"] for item in r.json()}
-        return {}
+        return {item["texto_original"].lower().strip(): item["texto_corrigido"] for item in self._get_paginado(url)}
 
     # --- Segurança e Hashing ---
     def criptografar(self, texto: str) -> str:
@@ -925,11 +923,7 @@ class DatabaseManager:
         return user
 
     def listar_usuarios(self):
-        url = f"{self.supabase_url}/rest/v1/usuarios?select=*"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(f"{self.supabase_url}/rest/v1/usuarios?select=*")
         
     def atualizar_usuario_admin(self, usuario_id, status, role_interno, equipe):
         url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_id}"
@@ -976,8 +970,7 @@ class DatabaseManager:
             base += "&ativo=eq.true"
         if role and role not in self._ROLES_QUE_VEEM_TUDO:
             base += f"&niveis_visiveis=cs.{{{role}}}"
-        r = requests.get(base, headers=self.headers)
-        return r.json() if r.status_code == 200 else []
+        return self._get_paginado(base)
 
     def inserir_link_padrao(self, titulo, url, categoria, ordem, atuante_role, niveis_visiveis=None):
         if str(atuante_role) not in self._ROLES_QUE_GERENCIAM_LINKS:
@@ -1039,11 +1032,7 @@ class DatabaseManager:
 
     # --- Operações de Banco (Textos dos Prestadores) ---
     def carregar_textos_prestador(self):
-        url = f"{self.supabase_url}/rest/v1/textos_prestadores?select=*"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(f"{self.supabase_url}/rest/v1/textos_prestadores?select=*")
         
     def inserir_texto_prestador(self, titulo, glosas_relacionadas, texto, updated_by, sub_glosas_relacionadas="", procedimentos_relacionados=""):
         url = f"{self.supabase_url}/rest/v1/textos_prestadores"
@@ -1078,11 +1067,7 @@ class DatabaseManager:
 
     # --- Operações de Banco (Glosas Customizadas / Overrides) ---
     def carregar_glosas_customizadas(self):
-        url = f"{self.supabase_url}/rest/v1/glosas_customizadas?select=*"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(f"{self.supabase_url}/rest/v1/glosas_customizadas?select=*")
         
     def upsert_glosa_customizada(self, codigo_glosa, descricao, is_critica, tipo, updated_by):
         url = f"{self.supabase_url}/rest/v1/glosas_customizadas"
@@ -1104,10 +1089,7 @@ class DatabaseManager:
     # --- Operações de Banco (Usuários / Logins Autorizados) ---
     def carregar_logins_validos(self):
         url = f"{self.supabase_url}/rest/v1/usuarios?select=usuario_sigo"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return [str(u.get('usuario_sigo', '')).strip().upper() for u in response.json() if u.get('usuario_sigo')]
-        return []
+        return [str(u.get('usuario_sigo', '')).strip().upper() for u in self._get_paginado(url) if u.get('usuario_sigo')]
 
     # --- Operações de Banco (Links Úteis Relacionais) ---
     def inserir_link_util(self, usuario_id, titulo, url):
@@ -1172,19 +1154,13 @@ class DatabaseManager:
         url = f"{self.supabase_url}/rest/v1/alinhamentos?select=*&order=created_at.desc"
         if not incluir_excluidos:
             url += "&excluido=eq.false"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(url)
 
     def carregar_alinhamentos_excluidos(self):
         """Lista alinhamentos excluídos (soft-delete), mais recentes primeiro.
         Visível apenas na área "Excluídos" da tela de Alinhamentos (Gestor/Admin)."""
         url = f"{self.supabase_url}/rest/v1/alinhamentos?select=*&excluido=eq.true&order=excluido_em.desc"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(url)
 
     def excluir_alinhamento_com_motivo(self, alinhamento_id, motivo, usuario_id):
         """Exclusão suave: marca como excluído com motivo obrigatório, autor e
@@ -1222,10 +1198,7 @@ class DatabaseManager:
             f"{self.supabase_url}/rest/v1/alinhamentos"
             f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false&select=*&order=created_at.desc"
         )
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(url)
 
     def carregar_alinhamentos_pendentes(self, usuario_id, role):
         from core.settings import NIVEL_HIERARQUIA, ROLES_CIENCIA_OBRIGATORIA
@@ -1240,20 +1213,15 @@ class DatabaseManager:
             f"{self.supabase_url}/rest/v1/alinhamentos"
             f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false&select=*&order=created_at.asc"
         )
-        response = requests.get(url, headers=self.headers)
-        if response.status_code != 200:
-            return []
-        todos_visiveis = response.json()
+        todos_visiveis = self._get_paginado(url)
         if not todos_visiveis:
             return []
 
         url_lidos = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?usuario_id=eq.{usuario_id}&select=alinhamento_id"
-        response_lidos = requests.get(url_lidos, headers=self.headers)
-        lidos_ids = {item["alinhamento_id"] for item in response_lidos.json()} if response_lidos.status_code == 200 else set()
+        lidos_ids = {item["alinhamento_id"] for item in self._get_paginado(url_lidos)}
 
         url_inativacoes = f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?usuario_id=eq.{usuario_id}&select=alinhamento_id"
-        response_inat = requests.get(url_inativacoes, headers=self.headers)
-        inativacoes_lidas_ids = {item["alinhamento_id"] for item in response_inat.json()} if response_inat.status_code == 200 else set()
+        inativacoes_lidas_ids = {item["alinhamento_id"] for item in self._get_paginado(url_inativacoes)}
 
         pendentes = []
         for a in todos_visiveis:
@@ -1341,11 +1309,8 @@ class DatabaseManager:
         """Todos os eventos de inativação/reativação, mais recentes primeiro,
         agrupados por alinhamento_id para montar a linha do tempo de cada card."""
         url = f"{self.supabase_url}/rest/v1/alinhamentos_historico_status?select=*&order=created_at.desc"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code != 200:
-            return {}
         por_alinhamento = {}
-        for evento in response.json():
+        for evento in self._get_paginado(url):
             por_alinhamento.setdefault(evento["alinhamento_id"], []).append(evento)
         return por_alinhamento
 
@@ -1356,10 +1321,7 @@ class DatabaseManager:
         # (ver commit "uso de service_role para RLS"); não trocar para
         # self.headers, a chave anon simplesmente não teria acesso.
         url = f"{self.supabase_url}/rest/v1/permissoes_modulos?select=*"
-        response = requests.get(url, headers=self._admin_headers())
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(url, headers=self._admin_headers())
 
     def atualizar_permissao_modulo(self, modulo, role, habilitado):
         url = f"{self.supabase_url}/rest/v1/permissoes_modulos?on_conflict=modulo,role"
@@ -1374,10 +1336,7 @@ class DatabaseManager:
         # Mesmo padrão de permissoes_modulos: RLS habilitado sem policy,
         # só service_role consegue ler.
         url = f"{self.supabase_url}/rest/v1/permissoes_modulos_excecoes?select=*"
-        response = requests.get(url, headers=self._admin_headers())
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(url, headers=self._admin_headers())
 
     def atualizar_excecao_modulo(self, usuario_id, modulo, habilitado):
         url = f"{self.supabase_url}/rest/v1/permissoes_modulos_excecoes?on_conflict=usuario_id,modulo"
@@ -1410,10 +1369,7 @@ class DatabaseManager:
 
     def carregar_usuarios_ativos(self):
         url = f"{self.supabase_url}/rest/v1/usuarios?status=eq.Ativo&select=id,nome_completo,role_interno"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
+        return self._get_paginado(url)
 
     def carregar_todas_leituras(self):
         """Todas as linhas de alinhamentos_lidos -- paginado via _get_paginado
