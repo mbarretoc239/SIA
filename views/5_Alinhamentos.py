@@ -283,18 +283,7 @@ if pode_gerenciar:
 
                     st.markdown("**Status de Ciência**")
                     st.progress(len(confirmaram) / len(obrigados))
-                    col_prog, col_disparar = st.columns([3, 2])
-                    col_prog.caption(f"{len(confirmaram)}/{len(obrigados)} confirmaram a ciência")
-                    with col_disparar:
-                        if st.button(
-                            "Disparar popup novamente pra todos", key=f"btn_resetar_ciencia_{em_edicao}",
-                            help="Apaga as confirmações já dadas -- quem já confirmou volta a ver o popup 'Estou Ciente'.",
-                        ):
-                            if db.resetar_ciencia_alinhamento(em_edicao):
-                                st.success("Ciência resetada — o popup volta a aparecer pra todo mundo obrigado.")
-                                st.rerun()
-                            else:
-                                st.error("Erro ao resetar a ciência.")
+                    st.caption(f"{len(confirmaram)}/{len(obrigados)} confirmaram a ciência")
 
                     with st.expander(f"Ver detalhes ({len(obrigados)} pessoas)"):
                         df_ciencia = pd.DataFrame([
@@ -380,11 +369,23 @@ if pode_gerenciar:
                 st.caption(f"Nível: {a.get('nivel_minimo', 'Auditor')}")
                 _render_historico_status(aid, historico_por_alinhamento)
 
-                col_edit, col_status, col_del = st.columns([1, 1.4, 1])
+                col_edit, col_disparar, col_status, col_del = st.columns([1, 1.6, 1.4, 1])
                 with col_edit:
                     if st.button("Editar", key=f"edit_alinh_{aid}", use_container_width=True):
                         st.session_state["alinhamento_em_edicao"] = aid
                         st.rerun()
+                with col_disparar:
+                    if obrigados:
+                        if st.button(
+                            "Disparar ciência de novo", key=f"btn_resetar_ciencia_{aid}",
+                            use_container_width=True,
+                            help="Apaga as confirmações já dadas -- quem já confirmou volta a ver o popup 'Estou Ciente'.",
+                        ):
+                            if db.resetar_ciencia_alinhamento(aid):
+                                st.success("Ciência resetada — o popup volta a aparecer pra todo mundo obrigado.")
+                                st.rerun()
+                            else:
+                                st.error("Erro ao resetar a ciência.")
                 with col_status:
                     if ativo:
                         with st.popover("Inativar", use_container_width=True):
