@@ -1,3 +1,4 @@
+import html
 import streamlit as st
 import pdfplumber
 import re
@@ -149,21 +150,30 @@ def _fmt_moeda(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _metric_texto_longo(col, label: str, valor: str):
+    """Mesmo visual do st.metric (rótulo pequeno + valor grande em negrito),
+    mas quebrando linha em vez de truncar -- st.metric corta com CSS de
+    largura fixa não importa o tamanho do valor, o que deixava nome de
+    empresa/descrição de procedimento ilegível (ex.: "COMPANHI...")."""
+    col.markdown(
+        f"<div style='font-size:0.875rem; color:#91A4C2; "
+        f"margin-bottom:2px;'>{html.escape(label)}</div>"
+        f"<div style='font-size:1.5rem; font-weight:600; line-height:1.3; "
+        f"word-wrap:break-word;'>{html.escape(valor)}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def _renderizar_resultado(dados: dict):
     st.success("Análise concluída com sucesso!")
 
-    # Prestador e Top 1 podem ter texto longo (nome de empresa, descrição de
-    # procedimento) -- st.metric trunca com CSS de largura fixa não importa
-    # o que se passe (o `help` só acrescenta tooltip, não evita o corte),
-    # então esses dois ficam como texto normal (quebra linha) em vez de
-    # metric; só os números curtos (PDFs/Procedimentos) usam metric.
     st.markdown("### Visão Geral")
-    st.markdown(f"**Prestador:** {dados['prestador']}")
-    c2, c3 = st.columns(2)
+    c1, c2, c3, c4 = st.columns(4)
+    _metric_texto_longo(c1, "Prestador", dados["prestador"])
     c2.metric("Total de PDFs", fmt_num(dados["qtd_pdfs"]))
     c3.metric("Procedimentos Lidos", fmt_num(dados["total_linhas"]))
     top1 = dados["ranking"][0][0] if dados["ranking"] else "-"
-    st.markdown(f"**Top 1:** {top1}")
+    _metric_texto_longo(c4, "Top 1", top1)
 
     st.divider()
 
