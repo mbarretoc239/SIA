@@ -1026,7 +1026,7 @@ if "regras_amostragem" in abas_por_id:
 
         st.divider()
         procs_criticos_atuais = db.listar_procedimentos_criticos()
-        st.markdown(f"**Procedimentos críticos individuais ({len(procs_criticos_atuais)})**")
+        st.markdown(f"**Marcados atualmente ({len(procs_criticos_atuais)})**")
         if not procs_criticos_atuais:
             st.caption("Nenhum procedimento marcado como crítico no momento.")
         else:
