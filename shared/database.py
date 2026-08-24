@@ -1372,6 +1372,24 @@ class DatabaseManager:
         Gerenciar mesmo já confirmadas)."""
         return self._get_paginado(f"{self.supabase_url}/rest/v1/alinhamentos_lidos?select=alinhamento_id,usuario_id,lido_em")
 
+    def contar_leituras_por_alinhamento(self) -> dict:
+        """{alinhamento_id: total_confirmacoes}, via view pré-agregada
+        (alinhamentos_lidos_contagem) -- no máximo 1 linha por alinhamento
+        que já teve alguma confirmação (hoje ~130), nunca as linhas
+        individuais (1454+ e crescendo). Usado pro badge "X/Y cientes" da
+        lista em Gerenciar, que não precisa saber QUEM confirmou, só
+        quantos."""
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos_contagem?select=alinhamento_id,total"
+        return {item["alinhamento_id"]: item["total"] for item in self._get_paginado(url)}
+
+    def buscar_leituras_alinhamento(self, alinhamento_id) -> dict:
+        """{usuario_id: lido_em} só de UM alinhamento -- usado no detalhe
+        "Ver detalhes" (quem confirmou e quando), bounded pelo número de
+        obrigados daquele alinhamento (poucas dezenas), nunca em risco de
+        passar de 1000 não importa quanto o histórico geral cresça."""
+        url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?alinhamento_id=eq.{alinhamento_id}&select=usuario_id,lido_em"
+        return {item["usuario_id"]: item["lido_em"] for item in self._get_paginado(url)}
+
     def remover_leitura_alinhamento(self, alinhamento_id, usuario_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?alinhamento_id=eq.{alinhamento_id}&usuario_id=eq.{usuario_id}"
         response = requests.delete(url, headers=self.headers)

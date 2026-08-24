@@ -210,13 +210,14 @@ if pode_gerenciar:
         with col_ano2:
             ano_filtro2 = st.selectbox("Ano", ["Todos"] + [str(a) for a in anos_disponiveis2], key="gerenciar_ano", width=300)
 
-        # Carregados uma vez, usados tanto no formulário (ciência detalhada do
-        # item selecionado) quanto na lista (mini indicador por linha).
+        # Contagem agregada (não as linhas individuais) pro badge "X/Y
+        # cientes" de cada item da lista -- o detalhe completo (quem
+        # confirmou e quando) só é buscado sob demanda, abaixo, do
+        # alinhamento que estiver de fato aberto (ver _form_edicao e o loop
+        # da lista). Evita buscar as 1454+ linhas de alinhamentos_lidos
+        # inteira só pra montar um contador.
         usuarios_ativos = db.carregar_usuarios_ativos()
-        leituras = db.carregar_todas_leituras()
-        leituras_por_alinhamento = {}
-        for l in leituras:
-            leituras_por_alinhamento.setdefault(l["alinhamento_id"], {})[l["usuario_id"]] = l["lido_em"]
+        contagem_leituras_por_alinhamento = db.contar_leituras_por_alinhamento()
         historico_por_alinhamento = db.carregar_historico_status_alinhamentos()
 
         def _form_edicao(a_alvo, em_edicao):
@@ -277,7 +278,10 @@ if pode_gerenciar:
             if em_edicao != "NOVO":
                 obrigados = _obrigados_ciencia(a_alvo, usuarios_ativos)
                 if obrigados:
-                    leituras_item = leituras_por_alinhamento.get(em_edicao, {})
+                    # Detalhe (quem confirmou e quando) só desse alinhamento,
+                    # buscado sob demanda -- não precisa das 1454+ linhas
+                    # inteiras, só das poucas dezenas de `obrigados` daqui.
+                    leituras_item = db.buscar_leituras_alinhamento(em_edicao)
                     confirmaram = [u for u in obrigados if u["id"] in leituras_item]
                     pendentes_ciencia = [u for u in obrigados if u["id"] not in leituras_item]
 
@@ -348,10 +352,14 @@ if pode_gerenciar:
             data_fmt = pd.to_datetime(a["created_at"]).strftime("%d/%m/%Y") if a.get("created_at") else "—"
 
             obrigados = _obrigados_ciencia(a, usuarios_ativos)
-            leituras_item = leituras_por_alinhamento.get(aid, {})
             ciencia_label = ""
             if obrigados:
-                confirmaram_n = len([u for u in obrigados if u["id"] in leituras_item])
+                # Contagem agregada só desse alinhamento -- não precisa
+                # saber QUEM confirmou pra montar o badge, só quantos (ver
+                # contar_leituras_por_alinhamento). O detalhe individual só
+                # é buscado se o item for aberto (ver _form_edicao acima).
+                total_confirmados = contagem_leituras_por_alinhamento.get(aid, 0)
+                confirmaram_n = min(total_confirmados, len(obrigados))
                 ciencia_label = f" · {confirmaram_n}/{len(obrigados)} cientes"
 
             status_emoji = "🟢" if ativo else "🔴"
