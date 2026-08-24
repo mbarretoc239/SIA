@@ -1,4 +1,5 @@
 import html
+import json
 import re
 import unicodedata
 
@@ -770,7 +771,7 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
 def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, objetivo: int,
                              guias_vistas: set = frozenset(), biometria_por_guia: dict = None,
-                             imagem_por_guia: dict = None):
+                             imagem_por_guia: dict = None, guias_contagem: list = None):
     """Renderiza tabela HTML com NU_GUIA como botão clicável (copia ao clicar).
 
     `objetivo` é o tamanho de amostra requerido pela regra da especialidade
@@ -781,6 +782,16 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     a marcação é gravada direto do navegador na tabela
     amostragem_guias_vistas (chave publicável do Supabase, sem vínculo a
     usuário por enquanto).
+
+    `guias_contagem`: lista de NU_GUIA usada só pro NUMERADOR do contador,
+    quando é diferente das linhas renderizadas nesta tabela -- caso da aba
+    "Sugestão de amostra", que mostra só as N guias sorteadas mas cujo
+    contador deve refletir TODAS as guias já vistas da especialidade (o
+    auditor pode ter revisado guias fora da sugestão manualmente, e isso
+    conta pra bater a meta). Pode passar de `objetivo` nesse caso -- é
+    esperado, significa que a meta já foi superada. Se None, conta só as
+    linhas desta tabela (comportamento padrão, usado em "Tabela completa" e
+    "Sem Imagem").
 
     `biometria_por_guia`: {NU_GUIA: (qtd_com_biometria, qtd_total_itens,
     qtd_com_operador_gravado)}. Mostra "X/Y" na coluna BIOMETRIA; o ✓ só
@@ -881,6 +892,15 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         )
     rows = "\n".join(linhas_html)
     th_motivo = "<th style='width: 18%'>Motivo</th>" if mostrar_motivo else ""
+
+    # Contagem por especialidade inteira (quando guias_contagem é passado):
+    # o numerador do contador soma qualquer guia da lista já vista, mesmo
+    # que não esteja renderizada nesta tabela -- ver docstring acima.
+    guias_contagem_json = json.dumps([str(g) for g in guias_contagem]) if guias_contagem is not None else "null"
+    vistas_servidor_json = (
+        json.dumps([str(g) for g in guias_contagem if str(g) in guias_vistas])
+        if guias_contagem is not None else "[]"
+    )
 
     html_tabela = f"""
     <style>
@@ -996,8 +1016,19 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         }}
 
         const OBJETIVO = {objetivo};
+        const GUIAS_CONTAGEM = {guias_contagem_json};
+        const VISTAS_SERVIDOR = {vistas_servidor_json};
         function atualizarContador() {{
-            const vistos = document.querySelectorAll('.copy-btn.vista').length;
+            let vistos;
+            if (GUIAS_CONTAGEM) {{
+                const vistas = new Set(VISTAS_SERVIDOR);
+                GUIAS_CONTAGEM.forEach(g => {{
+                    if (localStorage.getItem(PREFIX + g) === '1') vistas.add(g);
+                }});
+                vistos = vistas.size;
+            }} else {{
+                vistos = document.querySelectorAll('.copy-btn.vista').length;
+            }}
             const c = document.querySelector('.pbi-counter');
             if (!c) return;
             c.innerHTML = '<strong>' + vistos + '</strong> de ' + OBJETIVO + ' analisado(s)';

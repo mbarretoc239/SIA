@@ -691,11 +691,17 @@ with aba_busca:
         total_procs = int(df_esp_total["Qtde"].sum())
         total_guias = len(df_esp_guias)
 
-        def _renderizar(df_alvo):
+        def _renderizar(df_alvo, contagem_especialidade=False):
+            # contagem_especialidade=True (só na aba "Sugestão de amostra"):
+            # o contador conta qualquer guia da especialidade já vista, não
+            # só as sorteadas -- se o auditor já revisou guias fora da
+            # sugestão, isso conta pra bater a meta (pode passar de
+            # `objetivo`, ex.: "6 de 5 ✓").
             renderizar_tabela_guias(
                 df_alvo, esp, objetivo=len(df_alvo),
                 guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
                 imagem_por_guia=imagem_por_guia,
+                guias_contagem=df_esp_guias["NU_GUIA"].tolist() if contagem_especialidade else None,
             )
 
         df_amostra_especial = None
@@ -734,16 +740,16 @@ with aba_busca:
             titulo_expander = f":orange[{titulo_expander}]"
 
         with st.expander(titulo_expander, expanded=False):
-            abas = [(f"Tabela completa ({total_guias})", df_esp_guias)]
+            abas = [(f"Tabela completa ({total_guias})", df_esp_guias, False)]
             if df_amostra_especial is not None:
-                abas.append((titulo_amostra, df_amostra_especial))
+                abas.append((titulo_amostra, df_amostra_especial, True))
             if len(df_sem_imagem) > 0:
-                abas.append((f"Sem Imagem ({len(df_sem_imagem)})", df_sem_imagem))
+                abas.append((f"Sem Imagem ({len(df_sem_imagem)})", df_sem_imagem, False))
 
             if len(abas) == 1:
                 _renderizar(df_esp_guias)
             else:
-                tabs_esp = st.tabs([titulo for titulo, _ in abas])
-                for tab_esp, (_, df_aba) in zip(tabs_esp, abas):
+                tabs_esp = st.tabs([titulo for titulo, _, _ in abas])
+                for tab_esp, (_, df_aba, contagem_especialidade) in zip(tabs_esp, abas):
                     with tab_esp:
-                        _renderizar(df_aba)
+                        _renderizar(df_aba, contagem_especialidade)
