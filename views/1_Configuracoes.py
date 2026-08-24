@@ -998,8 +998,28 @@ if "regras_amostragem" in abas_por_id:
             "'Detalhamento por especialidade' e força a guia na 'Sugestão de amostra', mesmo em "
             "especialidades sem regra de amostragem acima (ex.: Periodontia, Odontopediatria)."
         )
+
+        procs_criticos_atuais = db.listar_procedimentos_criticos()
+        st.markdown(f"**Marcados como críticos hoje ({len(procs_criticos_atuais)})**")
+        if not procs_criticos_atuais:
+            st.caption("Nenhum procedimento marcado como crítico no momento.")
+        else:
+            for p in procs_criticos_atuais:
+                pc1, pc2, pc3 = st.columns([1.5, 5, 1.5])
+                pc1.markdown(f"**{p['codigo_tuss']}**")
+                pc2.markdown(p.get("descricao", ""))
+                ainda_critico = pc3.checkbox(
+                    "Crítico", value=True, key=f"proc_critico_atual_{p['codigo_tuss']}",
+                )
+                if not ainda_critico:
+                    if db.atualizar_procedimento_critico(p["codigo_tuss"], False):
+                        st.rerun()
+                    else:
+                        st.error(f"Erro ao atualizar {p['codigo_tuss']}.")
+
+        st.divider()
         busca_proc_critico = st.text_input(
-            "Pesquisar procedimento (código ou descrição)", key="busca_proc_critico",
+            "Pesquisar procedimento pra marcar como crítico (código ou descrição)", key="busca_proc_critico",
             placeholder="Ex: 5010 ou exodontia",
         )
         if busca_proc_critico.strip():

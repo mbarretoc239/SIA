@@ -716,6 +716,14 @@ class DatabaseManager:
         r = requests.get(url, headers=self.headers)
         return r.json() if r.ok else []
 
+    def listar_procedimentos_criticos(self) -> list:
+        """Todos os procedimentos hoje marcados como críticos (sem filtro de
+        busca) -- usado pra mostrar a lista atual na tela de Configurações,
+        que antes só aparecia se o usuário buscasse pelo código exato."""
+        url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?select=codigo_tuss,descricao,critico&critico=eq.true&order=codigo_tuss"
+        r = requests.get(url, headers=self.headers)
+        return r.json() if r.ok else []
+
     def atualizar_procedimento_critico(self, codigo_tuss: str, critico: bool) -> bool:
         url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?codigo_tuss=eq.{codigo_tuss}"
         r = requests.patch(url, headers=self.headers, json={"critico": critico})
