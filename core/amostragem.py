@@ -89,7 +89,7 @@ REGRAS_AMOSTRAGEM = {
     "IMPLANTE": {"tipo": "todas"},
     "PROTESE": {"tipo": "todas"},
     "PROTESE ESPECIAL": {"tipo": "todas"},
-    "CIRURGIA": {"tipo": "percentual", "pct": 0.30, "minimo_procs": 10},
+    "CIRURGIA": {"tipo": "percentual", "pct": 0.30, "minimo_procs": 10, "minimo_amostra": 5},
     "ENDODONTIA": {"tipo": "percentual", "pct": 0.50, "minimo_procs": 10},
 }
 
@@ -510,8 +510,12 @@ def calcular_amostra(especialidade: str, total_procs: int, total_guias: int):
         if total_procs < regra["minimo_procs"]:
             return total_guias, f"Menos de {regra['minimo_procs']} procs — auditar todas"
         n = max(1, round(total_guias * regra["pct"]))
+        minimo_amostra = regra.get("minimo_amostra")
+        if minimo_amostra:
+            n = min(max(n, minimo_amostra), total_guias)
         pct = int(regra["pct"] * 100)
-        return n, f"{pct}% das guias — auditar {n} de {total_guias}"
+        sufixo = f" (mín. {minimo_amostra})" if minimo_amostra else ""
+        return n, f"{pct}% das guias{sufixo} — auditar {n} de {total_guias}"
     return total_guias, ""
 
 
@@ -717,6 +721,10 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
         pct = regra["pct"]
         tamanho_amostra = max(1, round(n_total_guias * pct))
+        minimo_amostra = regra.get("minimo_amostra")
+        if minimo_amostra:
+            # Nunca exige mais amostra do que existe de guias na especialidade.
+            tamanho_amostra = min(max(tamanho_amostra, minimo_amostra), n_total_guias)
 
         df = df_esp_guias.copy()
         df["_prioritaria"] = df["Procedimentos"].apply(
