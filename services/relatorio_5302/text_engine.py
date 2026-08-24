@@ -1075,6 +1075,12 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
     if not guias_por_codigo:
         return prefixo + "Nenhuma glosa selecionada."
 
+    # 480 sai do sorteio normal e vira sua própria cláusula, sempre movida
+    # pro final do texto (mesmo tratamento dos outros modos) -- sem isso,
+    # a ordem seguia a ordem de inserção do dict (primeira guia processada
+    # no df), que podia colocar 480 na frente das demais.
+    guias_480 = guias_por_codigo.pop("480", None)
+
     clausulas_criticas, clausulas_outras = [], []
     clausulas_prioritarias = []
     for codigo, guias in guias_por_codigo.items():
@@ -1098,7 +1104,15 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
     clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_PARENTESE_GUIA)
     clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_PARENTESE_GUIA)
 
+    clausula_480 = ""
+    if guias_480:
+        guias_480_ordenadas = sorted(guias_480)
+        n = len(guias_480_ordenadas)
+        clausula_480 = f"{n} {'glosa' if n == 1 else 'glosas'} 480 ({_formatar_guias_resumido_curto(guias_480_ordenadas)})"
+
     clausulas = clausulas_prioritarias + clausulas_criticas + clausulas_outras
+    if clausula_480:
+        clausulas.append(clausula_480)
     if len(clausulas) == 1:
         texto_final = "Prestador apresentou " + clausulas[0]
     else:
@@ -1150,7 +1164,7 @@ def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
     if not guias_por_chave:
         return prefixo + "Nenhuma glosa selecionada."
 
-    clausulas_criticas, clausulas_outras = [], []
+    clausulas_criticas, clausulas_outras, clausulas_480 = [], [], []
     for chave, guias in guias_por_chave.items():
         codigo, sub, justificativa = chave
         guias_ordenadas = sorted(guias)
@@ -1164,16 +1178,22 @@ def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
         if justificativa:
             frase += f", {justificativa}"
         frase += f" ({_formatar_guias_resumido_curto(guias_ordenadas)})"
-        destino = clausulas_criticas if "Crítica" in tipos_por_chave[chave] else clausulas_outras
-        destino.append(frase)
+        if codigo == "480":
+            # 480 sempre vai pro final do texto, igual aos outros modos --
+            # sem isso a ordem seguia a ordem de inserção do dict.
+            clausulas_480.append(frase)
+        else:
+            destino = clausulas_criticas if "Crítica" in tipos_por_chave[chave] else clausulas_outras
+            destino.append(frase)
 
     # Mesma mesclagem por guia isolada dos outros níveis -- código+motivo
     # diferentes na mesma guia viram uma frase só, guia no final.
     clausulas_criticas = _mesclar_clausulas_mesma_guia(clausulas_criticas, _PADRAO_PARENTESE_GUIA)
     clausulas_outras = _mesclar_clausulas_mesma_guia(clausulas_outras, _PADRAO_PARENTESE_GUIA)
+    clausulas_480 = _mesclar_clausulas_mesma_guia(clausulas_480, _PADRAO_PARENTESE_GUIA)
     clausulas_criticas = _priorizar_manipulacao(clausulas_criticas)
 
-    clausulas = clausulas_criticas + clausulas_outras
+    clausulas = clausulas_criticas + clausulas_outras + clausulas_480
     if len(clausulas) == 1:
         texto_final = "Prestador apresentou " + clausulas[0]
     else:
