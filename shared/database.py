@@ -126,6 +126,33 @@ class DatabaseManager:
             resultados.append(item["response"]["result"])
         return resultados
 
+    def buscar_procedimentos_processo(self, nu_ordem: str) -> list:
+        """Procedimentos (cd_procedimento, nu_guia) de UM processo específico,
+        direto da base IA (Turso) -- cobre guias liberadas e não liberadas
+        (tudo que foi solicitado), mas só enquanto o processo estiver num dos
+        2 meses ainda retidos na tabela. Usado pela busca manual por processo
+        em Análise de Produção, alternativa ao upload do demonstrativo em
+        PDF quando o auditor já sabe o número do processo."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT cd_procedimento, nu_guia FROM base_ia_guias WHERE nu_ordem = ?",
+            "args": [self._turso_arg(str(nu_ordem).strip())],
+        }], self._turso_token_leitura)[0]
+        return self._turso_linhas(resultado)
+
+    def buscar_descricoes_procedimentos(self, codigos: list) -> dict:
+        """{codigo_tuss: {descricao, valor_unitario}} pros códigos
+        informados -- usado pra dar nome/valor de tabela aos códigos crus
+        vindos de base_ia_guias (que só tem o código, não descrição)."""
+        codigos_validos = sorted({str(c).strip() for c in codigos if str(c).strip()})
+        if not codigos_validos:
+            return {}
+        lista = ",".join(codigos_validos)
+        url = f"{self.supabase_url}/rest/v1/tabela_procedimentos?select=codigo_tuss,descricao,valor_unitario&codigo_tuss=in.({lista})"
+        r = requests.get(url, headers=self.headers)
+        if not r.ok:
+            return {}
+        return {str(row["codigo_tuss"]): row for row in r.json()}
+
     def _importar_por_mes_turso(
         self, tabela: str, registros: list, mes_referencia: str,
         campos_permitidos: tuple, manter_meses: int = 2, lote: int = 500,
