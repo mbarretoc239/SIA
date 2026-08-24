@@ -192,11 +192,30 @@ def _renderizar_resultado(dados: dict):
 
     with col_lista:
         st.markdown("### Top 10 Produzidos")
+        linhas_html = []
         for pos, (procedimento, qtd) in enumerate(dados["ranking"][:10], 1):
             pct = (qtd / dados["total_linhas"]) * 100
             valor = dados["valores"].get(procedimento, 0.0)
-
-            st.info(f"**{pos}. {procedimento}**\n\n{qtd} proc. ({_fmt_pct(pct)}) | Soma Pago: {_fmt_moeda(valor)}")
+            borda = "border-bottom:1px solid #223652;" if pos < min(10, len(dados["ranking"])) else ""
+            linhas_html.append(
+                f"<div style='display:flex; align-items:center; justify-content:space-between; "
+                f"gap:12px; padding:10px 14px; {borda}'>"
+                f"<div style='display:flex; align-items:baseline; gap:10px; min-width:0;'>"
+                f"<span style='color:#91A4C2; font-size:0.8rem; font-variant-numeric:tabular-nums; "
+                f"flex-shrink:0;'>{pos:02d}</span>"
+                f"<span style='color:#F8FAFC; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; "
+                f"white-space:nowrap;' title='{html.escape(procedimento)}'>{html.escape(procedimento)}</span>"
+                f"</div>"
+                f"<div style='text-align:right; flex-shrink:0;'>"
+                f"<div style='color:#F8FAFC; font-size:0.9rem; font-weight:600;'>{_fmt_moeda(valor)}</div>"
+                f"<div style='color:#91A4C2; font-size:0.75rem;'>{qtd} proc · {_fmt_pct(pct)}</div>"
+                f"</div></div>"
+            )
+        st.markdown(
+            f"<div style='border:1px solid #223652; border-radius:8px; overflow:hidden;'>"
+            f"{''.join(linhas_html)}</div>",
+            unsafe_allow_html=True,
+        )
 
     for pos, (procedimento, qtd) in enumerate(dados["ranking"], 1):
         pct = (qtd / dados["total_linhas"]) * 100
@@ -225,7 +244,7 @@ def _renderizar_resultado(dados: dict):
         csv_data = df_csv.to_csv(index=False, sep=";").encode("utf-8-sig")
 
         st.download_button(
-            label=" Exportar Ranking Completo em CSV",
+            label="Exportar ranking completo em CSV",
             data=csv_data,
             file_name="ranking_producao.csv",
             mime="text/csv",
