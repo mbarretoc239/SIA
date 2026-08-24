@@ -1123,16 +1123,20 @@ def renderizar_botao_copiar_processo(processo) -> None:
     processo_esc = html.escape(str(processo))
     html_botao = f"""
     <style>
-        body {{ margin: 0; background: transparent; color: inherit; font-family: 'Source Sans Pro', sans-serif; }}
+        body {{
+            margin: 0; padding: 4px 0; background: transparent; color: inherit;
+            font-family: 'Source Sans Pro', sans-serif;
+            display: flex; align-items: center;
+        }}
+        .rotulo-processo {{ font-weight: 600; margin-right: 8px; }}
         .copy-btn-processo {{
             background: transparent;
             border: 1px solid rgba(125,125,125,0.5);
             border-radius: 4px;
-            padding: 5px 12px;
+            padding: 3px 10px;
             cursor: pointer;
             font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
             color: inherit;
         }}
         .copy-btn-processo:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
@@ -1142,7 +1146,8 @@ def renderizar_botao_copiar_processo(processo) -> None:
             .copy-btn-processo:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
         }}
     </style>
-    <button class="copy-btn-processo" id="btn-processo" title="Clique para copiar">Processo: {processo_esc}</button>
+    <span class="rotulo-processo">Processo:</span>
+    <button class="copy-btn-processo" id="btn-processo" title="Clique para copiar">{processo_esc}</button>
     <script>
         document.getElementById('btn-processo').addEventListener('click', () => {{
             navigator.clipboard.writeText('{processo_esc}').then(() => {{
@@ -1158,7 +1163,7 @@ def renderizar_botao_copiar_processo(processo) -> None:
         }});
     </script>
     """
-    components.html(html_botao, height=42)
+    components.html(html_botao, height=34)
 
 
 def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
