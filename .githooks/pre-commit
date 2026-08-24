@@ -1,0 +1,21 @@
+#!/bin/sh
+# Bloqueia o commit se shared/database.py estiver sendo alterado e tiver
+# algum requests.get() sem passar por _get_paginado (ver scripts/checar_paginacao.py
+# e a memória "feedback_paginacao_supabase" -- o PostgREST corta respostas
+# em 1000 linhas por padrão, silenciosamente, e isso já causou bug real em
+# produção mais de uma vez nesta sessão).
+#
+# Só roda a checagem se database.py estiver de fato no commit -- não
+# atrasa commits que não mexem nele.
+
+if git diff --cached --name-only | grep -q "^shared/database.py$"; then
+    python scripts/checar_paginacao.py
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "Commit bloqueado: shared/database.py tem requests.get() sem paginacao/justificativa."
+        echo "Corrija (use self._get_paginado) ou marque com '# nao-paginado: motivo' e tente de novo."
+        exit 1
+    fi
+fi
+
+exit 0
