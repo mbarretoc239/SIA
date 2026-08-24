@@ -61,6 +61,7 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
         if st.button("Estou ciente de que esta regra NÃO vale mais", type="primary", use_container_width=True):
             db.marcar_inativacao_lida(alinhamento["id"], usuario_id)
             st.session_state["alinhamentos_pendentes"].pop(0)
+            st.session_state["_dialog_alinhamento_id"] = None
             st.rerun()
     else:
         st.subheader(alinhamento["titulo"])
@@ -69,6 +70,12 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
         if st.button("Estou Ciente", type="primary", use_container_width=True):
             db.marcar_alinhamento_lido(alinhamento["id"], usuario_id)
             st.session_state["alinhamentos_pendentes"].pop(0)
+            # Limpa o marcador de "já mostrei esse popup nesta sessão" -- sem
+            # isso, se um admin resetar a ciência deste MESMO alinhamento
+            # depois (botão "Disparar ciência de novo"), ele volta a ficar
+            # pendente no banco mas o popup nunca reabre, porque o app acha
+            # que já mostrou esse id nesta sessão.
+            st.session_state["_dialog_alinhamento_id"] = None
             st.rerun()
 
 
@@ -324,7 +331,15 @@ else:
 
         pendentes_atuais = st.session_state.get("alinhamentos_pendentes") or []
         if pendentes_atuais:
-            id_e_status = f"{pendentes_atuais[0]['id']}_{pendentes_atuais[0].get('ativo')}"
+            # ciencia_disparada_em entra na chave do guard -- quando o admin
+            # clica "Disparar ciência de novo" (views/5_Alinhamentos.py), essa
+            # marca muda e o popup volta a aparecer pra quem ainda não
+            # confirmou, mesmo quem só fechou sem clicar no botão da vez
+            # anterior (sem isso, o guard nunca reabria pra essa pessoa).
+            id_e_status = (
+                f"{pendentes_atuais[0]['id']}_{pendentes_atuais[0].get('ativo')}"
+                f"_{pendentes_atuais[0].get('ciencia_disparada_em')}"
+            )
             if st.session_state.get("_dialog_alinhamento_id") != id_e_status:
                 st.session_state["_dialog_alinhamento_id"] = id_e_status
                 mostrar_alinhamento_dialog(pendentes_atuais[0], st.session_state.get("usuario_id"))

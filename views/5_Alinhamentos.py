@@ -379,13 +379,17 @@ if pode_gerenciar:
                         if st.button(
                             "Disparar ciência de novo", key=f"btn_resetar_ciencia_{aid}",
                             use_container_width=True,
-                            help="Apaga as confirmações já dadas -- quem já confirmou volta a ver o popup 'Estou Ciente'.",
+                            help=(
+                                "Não mexe em quem já confirmou. Força o popup 'Estou Ciente' a "
+                                "reaparecer pra quem ainda está pendente -- inclusive quem só "
+                                "fechou o popup sem clicar no botão da vez anterior."
+                            ),
                         ):
                             if db.resetar_ciencia_alinhamento(aid):
-                                st.success("Ciência resetada — o popup volta a aparecer pra todo mundo obrigado.")
+                                st.success("Popup vai reaparecer pra quem ainda não confirmou (até 15s).")
                                 st.rerun()
                             else:
-                                st.error("Erro ao resetar a ciência.")
+                                st.error("Erro ao disparar a ciência de novo.")
                 with col_status:
                     if ativo:
                         with st.popover("Inativar", use_container_width=True):

@@ -1381,20 +1381,19 @@ class DatabaseManager:
         return response.status_code in [200, 204]
 
     def resetar_ciencia_alinhamento(self, alinhamento_id) -> bool:
-        """Apaga TODAS as confirmações de ciência (e de leitura de
-        inativação, se for o caso) de um alinhamento -- volta a aparecer
-        como pendente pro popup "Estou Ciente" pra quem já tinha confirmado.
-        Usado pra reforçar um alinhamento importante, forçando todo mundo a
-        ler de novo."""
-        ok1 = requests.delete(
-            f"{self.supabase_url}/rest/v1/alinhamentos_lidos?alinhamento_id=eq.{alinhamento_id}",
+        """NÃO mexe em quem já confirmou -- só atualiza ciencia_disparada_em,
+        que muda o valor usado pelo guard de sessão em app.py
+        (_dialog_alinhamento_id). Isso força o popup "Estou Ciente" a
+        reaparecer pra quem ainda está pendente, incluindo quem fechou o
+        popup sem clicar no botão (o Streamlit permite fechar clicando fora/
+        no X, e sem essa marca mudando o guard nunca reabria pra essa
+        pessoa, mesmo ela nunca tendo confirmado de verdade)."""
+        r = requests.patch(
+            f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}",
             headers=self.headers,
-        ).status_code in [200, 204]
-        ok2 = requests.delete(
-            f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?alinhamento_id=eq.{alinhamento_id}",
-            headers=self.headers,
-        ).status_code in [200, 204]
-        return ok1 and ok2
+            json={"ciencia_disparada_em": datetime.now(timezone.utc).isoformat()},
+        )
+        return r.status_code in [200, 204]
 
     def excluir_alinhamento(self, alinhamento_id):
         url = f"{self.supabase_url}/rest/v1/alinhamentos?id=eq.{alinhamento_id}"
