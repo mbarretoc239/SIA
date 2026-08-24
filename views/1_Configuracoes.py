@@ -965,6 +965,25 @@ if "regras_amostragem" in abas_por_id:
                 novo_tipo_label = st.selectbox("Regra", list(TIPOS_REGRA.keys()), key="ra_novo_tipo")
             with n3:
                 nova_ordem = st.number_input("Ordem", min_value=1, value=100, step=10, key="ra_nova_ordem")
+
+            novo_tipo = TIPOS_REGRA[novo_tipo_label]
+            nova_pct, novo_min_procs, novo_min_amostra = 30, 10, 0
+            if novo_tipo == "percentual":
+                n4, n5, n6 = st.columns(3)
+                with n4:
+                    nova_pct = st.number_input(
+                        "% da amostra", min_value=1, max_value=100, step=5, value=30, key="ra_nova_pct",
+                    )
+                with n5:
+                    novo_min_procs = st.number_input(
+                        "Mín. procs (audita tudo abaixo)", min_value=0, step=1, value=10, key="ra_novo_minprocs",
+                    )
+                with n6:
+                    novo_min_amostra = st.number_input(
+                        "Mín. guias na amostra", min_value=0, step=1, value=0, key="ra_novo_minamostra",
+                        help="0 = sem mínimo, só os % calculados.",
+                    )
+
             if st.button("Adicionar especialidade", type="primary", key="ra_btn_adicionar"):
                 nome_norm = nova_esp.strip().upper()
                 if not nome_norm:
@@ -972,13 +991,12 @@ if "regras_amostragem" in abas_por_id:
                 elif any(_r["especialidade"] == nome_norm for _r in regras_atuais):
                     st.warning(f"{nome_norm} já está configurada — edite a regra existente acima.")
                 else:
-                    novo_tipo = TIPOS_REGRA[novo_tipo_label]
                     ok = db.upsert_regra_amostragem(
                         especialidade=nome_norm,
                         tipo=novo_tipo,
-                        pct=0.30 if novo_tipo == "percentual" else None,
-                        minimo_procs=10 if novo_tipo == "percentual" else None,
-                        minimo_amostra=None,
+                        pct=(nova_pct / 100) if novo_tipo == "percentual" else None,
+                        minimo_procs=novo_min_procs if novo_tipo == "percentual" else None,
+                        minimo_amostra=(novo_min_amostra or None) if novo_tipo == "percentual" else None,
                         ordem=nova_ordem,
                         ativo=True,
                         atuante_role=role,
