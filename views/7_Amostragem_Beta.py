@@ -558,6 +558,9 @@ with aba_busca:
         df_guias = todas_guias.merge(df_guias, on=["Especialidade", "NU_GUIA"], how="left")
         df_guias["Procedimentos"] = df_guias["Procedimentos"].fillna("")
         df_guias["Qtde_procs"] = df_guias["Qtde_procs"].fillna(0).astype(int)
+        df_guias["Procedimentos_qtd"] = df_guias["Procedimentos_qtd"].apply(
+            lambda v: v if isinstance(v, list) else []
+        )
         # Prótese: guia some da lista inteira se sobrou sem nenhum
         # procedimento (só tinha o(s) ignorado(s)) — nas demais
         # especialidades a guia continua aparecendo mesmo vazia.

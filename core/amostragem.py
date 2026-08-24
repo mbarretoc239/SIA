@@ -460,17 +460,41 @@ def consolidar_por_guia(df: pd.DataFrame) -> pd.DataFrame:
 
     Ordenado por Procedimentos (código) pra facilitar o escaneio da
     tabela — sem isso as guias apareciam em qualquer ordem, misturando
-    códigos diferentes ao longo da lista."""
+    códigos diferentes ao longo da lista.
+
+    'Procedimentos' guarda só os códigos puros (usado pela lógica de
+    prioridade/crítico/requisitos, que não deve lidar com sufixo de
+    quantidade). 'Procedimentos_qtd' guarda a lista [(código, quantidade)]
+    na mesma ordem -- usada só na hora de renderizar a tabela, pra marcar
+    com "×N" o código que se repete na guia (ex.: 2x do mesmo procedimento
+    somava escondido no total da especialidade sem aparecer em lugar
+    nenhum)."""
     if df.empty:
         return df
-    return (
+    base = (
         df.groupby(["Especialidade", "NU_GUIA"], sort=False)
         .agg(
             Procedimentos=("CD_PROCEDIMENTO", lambda s: ", ".join(sorted(set(s)))),
             Qtde_procs=("Qtde", "sum"),
         )
         .reset_index()
-        .sort_values(["Especialidade", "Procedimentos", "NU_GUIA"])
+    )
+
+    qtd_por_codigo = (
+        df.groupby(["Especialidade", "NU_GUIA", "CD_PROCEDIMENTO"])["Qtde"]
+        .sum()
+        .reset_index()
+        .sort_values("CD_PROCEDIMENTO")
+    )
+    procs_qtd = (
+        qtd_por_codigo.groupby(["Especialidade", "NU_GUIA"])
+        .apply(lambda g: list(zip(g["CD_PROCEDIMENTO"], g["Qtde"].astype(int))), include_groups=False)
+        .rename("Procedimentos_qtd")
+    )
+    base = base.merge(procs_qtd, on=["Especialidade", "NU_GUIA"], how="left")
+
+    return (
+        base.sort_values(["Especialidade", "Procedimentos", "NU_GUIA"])
         .reset_index(drop=True)
     )
 
@@ -715,9 +739,14 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
                 else sortear_amostra(df_prioritarias, n_prior_amostra, seed=seed)
             )
         else:
-            # Composição 50/50 dentro da amostra.
+            # Composição 50/50 dentro da amostra. Se um dos lados não tem
+            # guias suficientes pra preencher a cota dele, o restante volta
+            # pro outro lado -- senão a amostra final fica menor que
+            # tamanho_amostra só porque um dos grupos estava vazio/pequeno
+            # (ex.: todas as guias prioritárias, nenhuma normal).
             n_prior_amostra = min(tamanho_amostra // 2, n_prior)
             n_norm_amostra = min(tamanho_amostra - n_prior_amostra, n_norm)
+            n_prior_amostra = min(n_prior_amostra + (tamanho_amostra - n_prior_amostra - n_norm_amostra), n_prior)
             df_prioritarias_final = sortear_amostra(df_prioritarias, n_prior_amostra, seed=seed)
 
         df_normais_final = sortear_amostra(df_normais, n_norm_amostra, seed=seed)
@@ -809,7 +838,15 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     linhas_html = []
     for _, row in df_guias.iterrows():
         guia = html.escape(str(row["NU_GUIA"]))
-        procs = html.escape(str(row["Procedimentos"]))
+        procs_qtd = row.get("Procedimentos_qtd")
+        if isinstance(procs_qtd, list) and procs_qtd:
+            procs = ", ".join(
+                f"{html.escape(str(cod))} <span class='qtd-badge'>×{qtd}</span>" if qtd > 1
+                else html.escape(str(cod))
+                for cod, qtd in procs_qtd
+            )
+        else:
+            procs = html.escape(str(row["Procedimentos"]))
         requisitos_txt, requisitos_tooltip = _requisitos_guia(row["Procedimentos"])
         requisitos = html.escape(requisitos_txt)
         requisitos_html = (
@@ -893,6 +930,17 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         .badge-ok {{ background: rgba(46, 125, 50, 0.18); color: #2e7d32; border-color: rgba(76, 175, 80, 0.45); }}
         .badge-parcial {{ background: rgba(180, 83, 9, 0.14); color: #b45309; border-color: rgba(180, 83, 9, 0.4); }}
         .badge-vazio {{ color: rgba(120,120,120,0.55); }}
+        .qtd-badge {{
+            display: inline-block;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+            padding: 1px 6px;
+            border-radius: 99px;
+            background: rgba(56, 132, 224, 0.14);
+            color: #2563a8;
+            border: 1px solid rgba(56, 132, 224, 0.35);
+            margin-left: 2px;
+        }}
 
         @media (prefers-color-scheme: dark) {{
             body {{ color: #e6ecf5; }}
@@ -908,6 +956,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
             .badge-ok {{ background: rgba(76, 175, 80, 0.2); color: #7fd88a; border-color: rgba(102, 187, 106, 0.55); }}
             .badge-parcial {{ background: rgba(242, 169, 60, 0.16); color: #f2a93c; border-color: rgba(242, 169, 60, 0.45); }}
             .badge-vazio {{ color: rgba(255,255,255,0.35); }}
+            .qtd-badge {{ background: rgba(96, 165, 250, 0.18); color: #93c5fd; border-color: rgba(96, 165, 250, 0.45); }}
             .motivo-sorteio {{ color: rgba(255,255,255,0.55); }}
         }}
     </style>
