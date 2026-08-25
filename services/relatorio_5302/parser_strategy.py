@@ -53,6 +53,19 @@ def processar_pdf(pdf_file):
                     clean = clean.replace(',', '')
             elif ',' in clean:
                 clean = clean.replace(',', '.')
+            elif '.' in clean:
+                # Sem vírgula: BRL não usa ponto como decimal, então ponto
+                # sozinho quase sempre é separador de milhar sem os centavos
+                # (ex.: "1.234" = R$1.234, faltando o ",00" -- acontecia
+                # quando o layout do PDF cortava o valor, e o float virava
+                # 1.234 em vez de 1234.0, um erro de ~1000x no valor). Só
+                # mantém como decimal se for claramente o padrão americano
+                # de 1 ponto com 1-2 dígitos depois (ex.: "1234.56"), que
+                # também aparece nesse PDF (ver comentário acima sobre
+                # mistura de formatos BR/US).
+                partes = clean.split('.')
+                if not (len(partes) == 2 and 1 <= len(partes[-1]) <= 2):
+                    clean = clean.replace('.', '')
             return float(clean)
         except:
             return 0.0
@@ -194,6 +207,13 @@ def processar_csv(csv_file):
                         clean = clean.replace(',', '')
                 elif ',' in clean:
                     clean = clean.replace(',', '.')
+                elif '.' in clean:
+                    # Mesmo caso do parse_float() do path PDF (ver comentário lá
+                    # em cima): sem vírgula, ponto sozinho quase sempre é
+                    # separador de milhar sem os centavos.
+                    partes = clean.split('.')
+                    if not (len(partes) == 2 and 1 <= len(partes[-1]) <= 2):
+                        clean = clean.replace('.', '')
                 return float(clean)
             except:
                 return 0.0

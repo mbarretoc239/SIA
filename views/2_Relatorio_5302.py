@@ -268,9 +268,14 @@ if pdf_file is not None:
         st.markdown("### 1. Auditoria e Justificativas")
         st.markdown("Todas as glosas vêm marcadas em **Incluir no Relatório**. Use o seletor abaixo para selecionar qual glosa deve estar no texto ou não. Utilize a coluna de Justificativa para adicionar o motivo personalizado da glosa")
 
-        if "df_glosas_state" not in st.session_state or st.session_state.get("origem_glosas") != pdf_file.name:
+        # Compara pelo mesmo hash de conteúdo usado lá em cima (linha ~245)
+        # pra recarregar dados_pdf -- só o nome não bastava: reenviar um
+        # arquivo CORRIGIDO com o mesmo nome atualizava dados_pdf (que já
+        # tinha essa proteção), mas a tabela editável ficava presa na
+        # versão antiga, porque só ela ainda comparava só pelo nome.
+        if "df_glosas_state" not in st.session_state or st.session_state.get("origem_glosas") != pdf_hash_atual:
             st.session_state.df_glosas_state = pd.DataFrame(dados).copy()
-            st.session_state.origem_glosas = pdf_file.name
+            st.session_state.origem_glosas = pdf_hash_atual
             st.session_state.editor_version = 0
             # Limpa qualquer edicao/estado de widgets ligados ao arquivo anterior
             for _k in [k for k in st.session_state.keys() if k.startswith("texto_final_v_")]:
@@ -412,12 +417,21 @@ if pdf_file is not None:
                     elif "s/ Especialidades" in opcao_prefixo:
                         texto_pronto = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// " + texto_gerado
                     
-                # Key versionada pelo arquivo + opções: trocar de PDF, mudar
-                # filtros ou prefixo reseta o widget com o novo texto gerado;
-                # edições manuais dentro da mesma combinação são preservadas.
+                # Key versionada pelo arquivo + opções + CONTEÚDO de df_final
+                # (hash, não só o nome do arquivo): trocar de PDF, mudar
+                # filtros/prefixo, OU marcar/desmarcar/editar uma linha
+                # (Incluir no Relatório, Justificativa, Tipo) reseta o widget
+                # com o novo texto gerado; edições manuais dentro da mesma
+                # combinação+conteúdo continuam preservadas. Antes a key só
+                # levava em conta o arquivo+opções -- clicar "Gerar Texto" de
+                # novo após só mudar a seleção de linhas recomputava
+                # texto_pronto certinho, mas o textarea ficava com o texto
+                # antigo (Streamlit ignora `value` quando a key já existe em
+                # session_state).
+                hash_df_final = hashlib.md5(df_final.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
                 key_texto_final = (
                     f"texto_final_v_{pdf_file.name}_"
-                    f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}"
+                    f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}_{hash_df_final}"
                 )
                 # Label centralizado numa variável: o botão "Copiar Texto" busca
                 # o textarea por este mesmo texto exato no DOM. Definir os dois
@@ -580,10 +594,17 @@ if pdf_file is not None:
                     ]
                     
                     if textos_sugeridos:
-                        # Key versionada pelo arquivo + filtro (únicos dois fatores
-                        # que mudam textos_sugeridos): edições manuais e melhorias
-                        # via IA ficam preservadas entre reruns da mesma combinação.
-                        key_texto_mix = f"texto_mix_v_{pdf_file.name}_{opcao_filtro}"
+                        # Key versionada pelo arquivo + filtro + conteúdo de
+                        # df_final (mesmo hash_df_final do Texto Final acima --
+                        # é a mesma fonte, glosas_presentes vem de df_final).
+                        # O comentário antigo aqui dizia que só arquivo+filtro
+                        # mudavam textos_sugeridos, mas isso está errado:
+                        # marcar/desmarcar uma linha muda glosas_presentes e
+                        # portanto textos_sugeridos, sem mudar nem arquivo nem
+                        # filtro -- o texto sugerido ficava preso na seleção
+                        # antiga. Edições manuais e melhorias via IA continuam
+                        # preservadas entre reruns da mesma combinação+conteúdo.
+                        key_texto_mix = f"texto_mix_v_{pdf_file.name}_{opcao_filtro}_{hash_df_final}"
                         key_mix_pendente = f"{key_texto_mix}_pendente"
                         key_mix_anterior = f"{key_texto_mix}_anterior"
 
