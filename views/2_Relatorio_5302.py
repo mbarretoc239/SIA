@@ -346,6 +346,11 @@ if pdf_file is not None:
         )
 
         # Fallback: também persiste no fim do rerun caso o callback nao tenha rodado
+        # "Cód. Sub-Glosa" fica de fora do column_order (não aparece no editor),
+        # e o data_editor preenche colunas ocultas com NaN em linha nova
+        # (num_rows="dynamic") -- sem isso, NaN é truthy e vaza como "nan"
+        # literal no texto de orientação (ver uso em 'Cód. Sub-Glosa' mais abaixo).
+        df_editado["Cód. Sub-Glosa"] = df_editado["Cód. Sub-Glosa"].fillna("")
         st.session_state.df_glosas_state = df_editado
 
         st.markdown("### 2. Configuração do Texto")
