@@ -46,7 +46,7 @@ def extrair_glosas_coords(paginas_words, mapa_glosas, mapa_procedimentos,
     e retorna a lista de glosas detectadas, na ordem do documento.
 
     Cada item é um dict:
-        {"guia", "proc_cod", "proc_desc", "glosa", "sub"}
+        {"guia", "proc_cod", "proc_desc", "glosa", "sub", "glosa_raw"}
 
     `mapa_glosas`        : {codigo_glosa: descricao}
     `mapa_procedimentos` : {codigo_proc: descricao}
@@ -113,8 +113,16 @@ def extrair_glosas_coords(paginas_words, mapa_glosas, mapa_procedimentos,
             if not m_g:
                 continue
             cod = m_g.group(1).lstrip('0') or '0'
-            if cod not in mapa_glosas or cod in ('71', '72'):
+            if cod in ('71', '72'):
                 continue
+
+            # Texto bruto da coluna Glosa (o que sobra depois do código),
+            # usado como fallback de descrição quando o código não está
+            # cadastrado em mapa_glosas -- mesmo comportamento do caminho
+            # CSV (parser_strategy.py), que mantém o texto bruto do arquivo
+            # em vez de descartar a glosa inteira.
+            resto = col_glosa[0]['text'][m_g.end():]
+            glosa_raw = " ".join([resto] + [w['text'] for w in col_glosa[1:]]).strip(" -").strip()
 
             # Autorização do auditor (login válido presente na linha) → ignora
             row_text = " ".join(textos).upper()
@@ -139,6 +147,7 @@ def extrair_glosas_coords(paginas_words, mapa_glosas, mapa_procedimentos,
                 "proc_desc": proc_desc_atual,
                 "glosa": cod,
                 "sub": sub_cod,
+                "glosa_raw": glosa_raw,
             })
 
     return resultados

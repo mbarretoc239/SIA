@@ -114,7 +114,11 @@ def processar_pdf(pdf_file):
         sub_cod = r["sub"]
         is_auto = len(cod) <= 2 or cod.startswith('0')
         is_critica = cod in glosas_criticas
-        oficial = str(mapa_glosas.get(cod, "")).lower()
+        # Código sem cadastro em mapa_glosas cai pro texto bruto extraído do
+        # PDF (glosa_raw), igual ao caminho CSV -- antes essas glosas eram
+        # descartadas inteiras (ver glosa_pdf.py), agora aparecem no
+        # relatório com a mesma descrição não-oficial que o CSV mostraria.
+        oficial = str(mapa_glosas.get(cod) or r.get("glosa_raw") or "").lower()
 
         if is_critica:
             tipo = "Crítica"
