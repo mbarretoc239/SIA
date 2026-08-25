@@ -263,7 +263,6 @@ class DatabaseManager:
         """
         if not nu_guias:
             return set()
-        filtro = ",".join(str(g) for g in nu_guias)
         # Paginado: já existe processo com mais de 1000 itens -- o limite de
         # 1000 do PostgREST vale pra RESPOSTA, não pra quantos valores tem
         # no IN(), então um processo grande com muitas guias já marcadas
@@ -274,8 +273,17 @@ class DatabaseManager:
         # no meio (e ha: cada guia marcada como vista grava direto do
         # navegador, ver marcarVistaNoServidor), podendo fazer uma guia
         # sumir das duas paginas e voltar como "nao vista".
-        url = f"{self.supabase_url}/rest/v1/amostragem_guias_vistas?nu_guia=in.({filtro})&select=nu_guia&order=nu_guia"
-        return {item["nu_guia"] for item in self._get_paginado(url)}
+        # Lista de guias em lotes de 300 -- um processo com muitos milhares
+        # de guias jogaria tudo num IN() só, e a URL poderia estourar limite
+        # de tamanho de servidor/proxy, fazendo a busca inteira falhar.
+        vistas = set()
+        tamanho_lote = 300
+        for i in range(0, len(nu_guias), tamanho_lote):
+            lote = nu_guias[i:i + tamanho_lote]
+            filtro = ",".join(str(g) for g in lote)
+            url = f"{self.supabase_url}/rest/v1/amostragem_guias_vistas?nu_guia=in.({filtro})&select=nu_guia&order=nu_guia"
+            vistas.update(item["nu_guia"] for item in self._get_paginado(url))
+        return vistas
 
     # --- Base IA (Amostragem BETA): guias importadas mensalmente (todas as
     # linhas da planilha, liberadas e não liberadas -- ver

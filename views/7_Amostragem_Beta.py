@@ -12,6 +12,7 @@ from core.amostragem import (
     carregar_procedimentos_criticos,
     carregar_processos_turso,
     consolidar_por_guia,
+    guia_100pct,
     guias_com_proc_critico,
     marcar_amostra,
     montar_lista_processos_mes,
@@ -345,7 +346,7 @@ with aba_busca:
     # não tiver match no REL5201 importado.
     qt_guias_rel = info_status.get("qt_guias") if info_status else None
     total_guias_exibir = qt_guias_rel if qt_guias_rel is not None else total_guias_processo
-    texto_total_guias = str(total_guias_exibir) if total_guias_exibir else "—"
+    texto_total_guias = str(total_guias_exibir) if total_guias_exibir is not None else "—"
 
     texto_risco_prestador = None
     prestador_ativo = None
@@ -643,23 +644,16 @@ with aba_busca:
     # --- Filtros de Biometria e Imagem ---
     # "Sem dado" (guia ainda não aparece na base de biometria/imagem) conta
     # como "não 100%" no filtro "Sem" — é o lado mais seguro pra auditoria
-    # (não confirmado = trata como pendência).
-    def _guia_100pct(info):
-        if not info:
-            return None
-        n_ok, n_total = info[0], info[1]
-        n_com_dado = info[2] if len(info) > 2 else n_total
-        if n_total == 0 or n_com_dado == 0:
-            return None
-        return n_ok == n_total
-
+    # (não confirmado = trata como pendência). guia_100pct é a mesma função
+    # usada pra decidir o ✓ do badge (core/amostragem.py) -- unificado pra
+    # badge e filtro nunca discordarem sobre o que conta como "completo".
     def _aplicar_filtro_guia(df_in, mapa, filtro):
         if not filtro or filtro == "Todos":
             return df_in
         quer_com = filtro == "Com"
 
         def _passa(guia):
-            resultado = _guia_100pct(mapa.get(str(guia)))
+            resultado = guia_100pct(mapa.get(str(guia)))
             if resultado is None:
                 return not quer_com
             return resultado == quer_com

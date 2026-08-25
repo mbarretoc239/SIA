@@ -195,6 +195,33 @@ def _norm(texto: str) -> str:
     return sem_acento.strip().upper()
 
 
+def _abrir_planilha_normalizada(arquivo, colunas_necessarias: set):
+    """Abre a planilha via openpyxl (read_only, linha a linha -- as planilhas
+    mensais têm centenas de milhares de linhas, carregar tudo de uma vez num
+    DataFrame consome memória demais). Valida que as colunas mínimas existem
+    (nomes normalizados via _norm) e devolve (workbook, iterador de linhas
+    já sem o cabeçalho, dict{nome_coluna: índice}).
+
+    Quem chama é responsável por fechar o workbook (`wb.close()`) depois de
+    consumir o iterador -- compartilhado por preparar_registros_base_ia e
+    preparar_registros_imagem, que tinham esse mesmo trecho duplicado."""
+    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
+    aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
+    ws = wb[aba]
+    linhas = ws.iter_rows(values_only=True)
+
+    header = [_norm(str(c)) for c in next(linhas)]
+    idx = {nome: i for i, nome in enumerate(header)}
+    faltantes = colunas_necessarias - set(idx)
+    if faltantes:
+        wb.close()
+        raise ValueError(
+            "Colunas não encontradas na planilha (aba '" + aba + "'): "
+            + ", ".join(sorted(faltantes))
+        )
+    return wb, linhas, idx
+
+
 def preparar_registros_base_ia(arquivo) -> tuple[list, str, int]:
     """Lê a planilha mensal da base IA e devolve (registros_para_inserir, mes_referencia, total_bruto).
 
@@ -213,19 +240,7 @@ def preparar_registros_base_ia(arquivo) -> tuple[list, str, int]:
     `mes_referencia` é derivado de DT_PRODUCAO (constante por arquivo,
     ex: planilha 'IA 07 2026' tem DT_PRODUCAO = 2026-07-01).
     """
-    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
-    aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
-    ws = wb[aba]
-    linhas = ws.iter_rows(values_only=True)
-
-    header = [_norm(str(c)) for c in next(linhas)]
-    idx = {nome: i for i, nome in enumerate(header)}
-    faltantes = COLUNAS_NECESSARIAS_BASE_IA - set(idx)
-    if faltantes:
-        raise ValueError(
-            "Colunas não encontradas na planilha (aba '" + aba + "'): "
-            + ", ".join(sorted(faltantes))
-        )
+    wb, linhas, idx = _abrir_planilha_normalizada(arquivo, COLUNAS_NECESSARIAS_BASE_IA)
 
     i_ordem, i_guia = idx["NU_ORDEM"], idx["NU_GUIA"]
     i_cd, i_grupo = idx["CD_PROCEDIMENTO"], idx["DS_GRUPO"]
@@ -289,19 +304,7 @@ def preparar_registros_imagem(arquivo) -> tuple[list, str, int]:
     mes, ano = match.group(1), match.group(2)
     mes_referencia = f"{ano}-{mes}"
 
-    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
-    aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
-    ws = wb[aba]
-    linhas = ws.iter_rows(values_only=True)
-
-    header = [_norm(str(c)) for c in next(linhas)]
-    idx = {nome: i for i, nome in enumerate(header)}
-    faltantes = COLUNAS_NECESSARIAS_IMAGEM - set(idx)
-    if faltantes:
-        raise ValueError(
-            "Colunas não encontradas na planilha (aba '" + aba + "'): "
-            + ", ".join(sorted(faltantes))
-        )
+    wb, linhas, idx = _abrir_planilha_normalizada(arquivo, COLUNAS_NECESSARIAS_IMAGEM)
 
     i_guia, i_dente, i_arquivo = idx["NU_GUIA"], idx["DENTE_INICIAL"], idx["NOME_ARQUIVO"]
     # Opcionais: presentes no layout antigo, ausentes no atual (que trouxe
@@ -532,27 +535,30 @@ def consolidar_por_guia(df: pd.DataFrame) -> pd.DataFrame:
         # 7_Amostragem_Beta.py) com KeyError quando todos os procedimentos
         # do processo caíam no filtro de "ignorados nesta análise".
         return pd.DataFrame(columns=["Especialidade", "NU_GUIA", "Procedimentos", "Qtde_procs", "Procedimentos_qtd"])
-    base = (
-        df.groupby(["Especialidade", "NU_GUIA"], sort=False)
-        .agg(
-            Procedimentos=("CD_PROCEDIMENTO", lambda s: ", ".join(sorted(set(s)))),
-            Qtde_procs=("Qtde", "sum"),
-        )
-        .reset_index()
-    )
-
+    # Uma passagem pra somar a quantidade por código dentro de cada guia,
+    # depois uma segunda pra montar as 3 colunas finais a partir desse
+    # resultado já reduzido -- antes eram 3 groupbys (2 sobre o df bruto +
+    # 1 sobre o intermediário) fazendo trabalho redundante sobre os mesmos
+    # dados.
     qtd_por_codigo = (
         df.groupby(["Especialidade", "NU_GUIA", "CD_PROCEDIMENTO"])["Qtde"]
         .sum()
         .reset_index()
         .sort_values("CD_PROCEDIMENTO")
     )
-    procs_qtd = (
-        qtd_por_codigo.groupby(["Especialidade", "NU_GUIA"])
-        .apply(lambda g: list(zip(g["CD_PROCEDIMENTO"], g["Qtde"].astype(int))), include_groups=False)
-        .rename("Procedimentos_qtd")
+
+    def _agregar_grupo(g):
+        return pd.Series({
+            "Procedimentos": ", ".join(sorted(g["CD_PROCEDIMENTO"])),
+            "Qtde_procs": int(g["Qtde"].sum()),
+            "Procedimentos_qtd": list(zip(g["CD_PROCEDIMENTO"], g["Qtde"].astype(int))),
+        })
+
+    base = (
+        qtd_por_codigo.groupby(["Especialidade", "NU_GUIA"], sort=False)
+        .apply(_agregar_grupo, include_groups=False)
+        .reset_index()
     )
-    base = base.merge(procs_qtd, on=["Especialidade", "NU_GUIA"], how="left")
 
     return (
         base.sort_values(["Especialidade", "Procedimentos", "NU_GUIA"])
@@ -580,6 +586,23 @@ def calcular_amostra(especialidade: str, total_procs: int, total_guias: int, reg
         sufixo = f" (mín. {minimo_amostra})" if minimo_amostra else ""
         return n, f"{pct}% das guias{sufixo} — auditar {n} de {total_guias}"
     return total_guias, ""
+
+
+def guia_100pct(info):
+    """True/False/None (sem dado suficiente pra decidir) a partir de uma
+    fração (n_ok, n_total[, n_com_dado]) -- formato comum de
+    biometria_por_guia/imagem_por_guia. None = "sem dado" (guia ainda não
+    apareceu na base, ou nenhum item tem dado gravado ainda), tratado como
+    "não confirmado" tanto pro badge quanto pelo filtro Com/Sem de
+    Biometria/Imagem da tela -- unificado aqui pra não ter duas
+    implementações que podem divergir sobre o que conta como "sem dado"."""
+    if not info:
+        return None
+    n_ok, n_total = info[0], info[1]
+    n_com_dado = info[2] if len(info) > 2 else n_total
+    if n_total == 0 or n_com_dado == 0:
+        return None
+    return n_ok == n_total
 
 
 def sortear_amostra(df_guias: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
@@ -817,7 +840,11 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
             # pro outro lado -- senão a amostra final fica menor que
             # tamanho_amostra só porque um dos grupos estava vazio/pequeno
             # (ex.: todas as guias prioritárias, nenhuma normal).
-            n_prior_amostra = min(tamanho_amostra // 2, n_prior)
+            # Arredonda pra cima pro lado prioritário (não pra baixo): numa
+            # amostra ímpar, "//" sempre deixava a sobra pro lado normal,
+            # sub-representando por 1 vaga justamente os procedimentos que
+            # essa composição existe pra garantir cobertura.
+            n_prior_amostra = min(-(-tamanho_amostra // 2), n_prior)
             n_norm_amostra = min(tamanho_amostra - n_prior_amostra, n_norm)
             n_prior_amostra = min(n_prior_amostra + (tamanho_amostra - n_prior_amostra - n_norm_amostra), n_prior)
             df_prioritarias_final = sortear_amostra(df_prioritarias, n_prior_amostra, seed=seed)
@@ -910,12 +937,13 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         return texto, tooltip
 
     def _fracao_html(info):
-        if info and info[1] > 0 and (len(info) < 3 or info[2] > 0):
-            n_ok, n_total = info[0], info[1]
-            if n_ok == n_total:
-                return f"<td style='text-align:center'><span class='badge badge-ok'>{n_ok}/{n_total} ✓</span></td>"
-            return f"<td style='text-align:center'><span class='badge badge-parcial'>{n_ok}/{n_total}</span></td>"
-        return "<td style='text-align:center'><span class='badge badge-vazio'>—</span></td>"
+        completo = guia_100pct(info)
+        if completo is None:
+            return "<td style='text-align:center'><span class='badge badge-vazio'>—</span></td>"
+        n_ok, n_total = info[0], info[1]
+        if completo:
+            return f"<td style='text-align:center'><span class='badge badge-ok'>{n_ok}/{n_total} ✓</span></td>"
+        return f"<td style='text-align:center'><span class='badge badge-parcial'>{n_ok}/{n_total}</span></td>"
 
     mostrar_motivo = "Motivo" in df_guias.columns
     linhas_html = []
