@@ -63,7 +63,6 @@ def formatar_descricao_glosa_inteligente(desc, glosa):
 
 def formatar_conectivo_subglosa(t):
     if not t: return ""
-    t_orig = t
     t = t.strip().lower()
     if t.endswith('.'): t = t[:-1]
 
@@ -100,7 +99,11 @@ def formatar_conectivo_subglosa(t):
         return 'por falta da ' + t
 
     if t.startswith(('pois ', 'devido ', 'visto que ', 'por ')):
-        return t_orig[0].lower() + t_orig[1:]
+        # Já processado (minúsculo, aparado, com as correções do dicionário
+        # aplicadas) -- devolver t_orig aqui (como era antes) descartava
+        # tudo isso: correção do dicionário perdida, espaço/pontuação da
+        # entrada crua vazando pro texto final.
+        return t
         
     if t.startswith('falta '):
         if not t.startswith('falta de '):
@@ -155,7 +158,18 @@ def pluralizar_descricao(desc):
     elif primeira.endswith('m'):
         nova = primeira[:-1] + 'ns'
     elif primeira.endswith('il'):
-        nova = primeira[:-2] + 'eis'
+        # Paroxítona (fácil->fáceis, hábil->hábeis, réptil->répteis) sempre
+        # carrega acento na sílaba tônica em português -- é o que a tira da
+        # regra padrão de acentuação, que por padrão classificaria como
+        # oxítona. Sem acento (barril->barris, fuzil->fuzis) é oxítona:
+        # plural em "-is", não "-eis". Não cobre o caso raro de a palavra
+        # ser paroxítona mas ter perdido o acento na fonte (mesmo problema
+        # de descrição sem acentuação já visto em outras partes do app) --
+        # sem o acento não dá pra distinguir dos dois jeitos.
+        if any(c in primeira for c in 'áéíóúâêôãõ'):
+            nova = primeira[:-2] + 'eis'
+        else:
+            nova = primeira[:-1] + 's'
     elif primeira[-2:] in ('al', 'el', 'ol', 'ul'):
         nova = primeira[:-1] + 'is'
     elif primeira.endswith(('r', 's', 'z')):
