@@ -581,6 +581,13 @@ with aba_busca:
                 label_visibility="collapsed",
             )
 
+    # Regras de amostragem por especialidade, configuráveis por Admin/Gestor
+    # em Configurações > Regras de Amostragem (cai pro padrão hardcoded se a
+    # tabela estiver vazia -- ver carregar_regras_amostragem_cache). Carregada
+    # aqui em cima (não só lá embaixo) porque também é usada para decidir se
+    # uma guia esvaziada por procedimentos ignorados deve sumir da lista.
+    REGRAS_AMOSTRAGEM, ORDEM_CRITICAS = carregar_regras_amostragem_cache()
+
     todas_guias = df[["Especialidade", "NU_GUIA"]].drop_duplicates()
     df = df[~df["CD_PROCEDIMENTO"].isin(codigos_excluidos)] if codigos_excluidos else df
 
@@ -592,11 +599,16 @@ with aba_busca:
         df_guias["Procedimentos_qtd"] = df_guias["Procedimentos_qtd"].apply(
             lambda v: v if isinstance(v, list) else []
         )
-        # Prótese: guia some da lista inteira se sobrou sem nenhum
+        # Especialidade com regra "auditar todas" (IMPLANTE, PROTESE,
+        # PROTESE ESPECIAL): guia some da lista inteira se sobrou sem nenhum
         # procedimento (só tinha o(s) ignorado(s)) — nas demais
-        # especialidades a guia continua aparecendo mesmo vazia.
-        vazia_protese = (df_guias["Especialidade"].apply(_norm) == "PROTESE") & (df_guias["Qtde_procs"] == 0)
-        df_guias = df_guias[~vazia_protese]
+        # especialidades a guia continua aparecendo mesmo vazia. Antes
+        # checava só o nome "PROTESE" -- as outras especialidades "todas"
+        # ficavam com a mesma guia vazia visível, sem nada pra auditar.
+        vazia_regra_todas = df_guias["Especialidade"].apply(
+            lambda e: REGRAS_AMOSTRAGEM.get(_norm(e), {}).get("tipo") == "todas"
+        ) & (df_guias["Qtde_procs"] == 0)
+        df_guias = df_guias[~vazia_regra_todas]
         df_guias = df_guias.sort_values(["Especialidade", "Procedimentos", "NU_GUIA"]).reset_index(drop=True)
 
     # Corrige o denominador do badge IMAGEM: a planilha 4016R às vezes traz
@@ -608,12 +620,23 @@ with aba_busca:
     # Só ajusta guia que já TEM algum registro de imagem -- guia ausente do
     # dict continua em branco (célula "—"), mesmo caso de sempre de "4016R
     # ainda não importada" pra essa guia, não vira "0/N confirmado".
+    # df_guias é agrupado por (Especialidade, NU_GUIA) -- uma guia com
+    # procedimentos de mais de uma especialidade aparece em mais de uma
+    # linha aqui. O esperado de cada linha é só da fatia de procedimentos
+    # daquela especialidade, então precisa SOMAR entre as linhas da mesma
+    # guia antes de comparar com o total real -- usar max() direto no loop
+    # descartava a exigência das outras especialidades da mesma guia.
+    _esperado_por_guia = {}
     for _, _row_guia in df_guias.iterrows():
         _chave = str(_row_guia["NU_GUIA"])
-        if _chave not in imagem_por_guia:
-            continue
-        _esperado = calcular_imagens_esperadas_guia(_row_guia["Procedimentos"])
-        if _esperado > 0:
+        _esperado_por_guia[_chave] = (
+            _esperado_por_guia.get(_chave, 0)
+            + calcular_imagens_esperadas_guia(
+                _row_guia["Procedimentos"], procs_qtd=_row_guia.get("Procedimentos_qtd")
+            )
+        )
+    for _chave, _esperado in _esperado_por_guia.items():
+        if _esperado > 0 and _chave in imagem_por_guia:
             _n_ok, _n_total = imagem_por_guia[_chave]
             imagem_por_guia[_chave] = (_n_ok, max(_n_total, _esperado))
 
@@ -657,10 +680,8 @@ with aba_busca:
 
     guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
-    # Regras de amostragem por especialidade, configuráveis por Admin/Gestor
-    # em Configurações > Regras de Amostragem (cai pro padrão hardcoded se a
-    # tabela estiver vazia -- ver carregar_regras_amostragem_cache).
-    REGRAS_AMOSTRAGEM, ORDEM_CRITICAS = carregar_regras_amostragem_cache()
+    # REGRAS_AMOSTRAGEM/ORDEM_CRITICAS já carregadas lá em cima (antes do
+    # bloco de filtros), reaproveitadas aqui.
 
     # Procedimentos cadastrados como críticos (tabela_procedimentos.critico) —
     # só importam pras especialidades fora de REGRAS_AMOSTRAGEM (Periodontia,
@@ -745,11 +766,13 @@ with aba_busca:
 
         if _norm(esp) in REGRAS_AMOSTRAGEM:
             df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
-            # Prótese sempre audita 100% das guias (regra "todas") — a
-            # "Sugestão de amostra" ficaria idêntica à "Tabela completa",
-            # então não ganha aba própria pra essa especialidade (as demais
-            # com regra "todas", como Implante, continuam mostrando normalmente).
-            if _norm(esp) != "PROTESE":
+            # Regra "todas" (auditar 100% das guias, ex.: Implante, Prótese,
+            # Prótese Especial) — a "Sugestão de amostra" ficaria idêntica à
+            # "Tabela completa", então não ganha aba própria pra nenhuma
+            # especialidade com essa regra (checa o TIPO da regra, não o
+            # nome -- antes só "PROTESE" era tratado, deixando a mesma aba
+            # redundante aparecer pras outras especialidades "todas").
+            if REGRAS_AMOSTRAGEM.get(_norm(esp), {}).get("tipo") != "todas":
                 df_amostra_especial = df_amostra.drop(columns=["Motivo"], errors="ignore")
                 titulo_amostra = f"Sugestão de amostra ({len(df_amostra_especial)})"
         elif especialidade_tem_critico.get(esp):

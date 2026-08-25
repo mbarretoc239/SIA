@@ -83,7 +83,16 @@ class DatabaseManager:
             # nao-paginado: e a propria implementacao de _get_paginado
             r = requests.get(url, headers=headers_paginado, params=params)
             if r.status_code not in (200, 206):
-                return todas
+                # Nunca devolver silenciosamente as paginas ja lidas como se
+                # fossem a tabela inteira -- uma falha transitoria no meio da
+                # paginacao (timeout, 5xx) faria o caller tratar dado parcial
+                # como completo, exatamente o bug de "corte em 1000 linhas"
+                # que essa funcao existe pra evitar, so que disparado por
+                # falha de rede em vez de falta de paginacao.
+                raise RuntimeError(
+                    f"Falha ao paginar {url} (offset {inicio}): "
+                    f"HTTP {r.status_code} -- {r.text[:200]}"
+                )
             lote = r.json()
             todas.extend(lote)
             if len(lote) < tamanho_pagina:
@@ -259,7 +268,13 @@ class DatabaseManager:
         # 1000 do PostgREST vale pra RESPOSTA, não pra quantos valores tem
         # no IN(), então um processo grande com muitas guias já marcadas
         # podia vir cortado (guia real "vista" aparecendo como não vista).
-        url = f"{self.supabase_url}/rest/v1/amostragem_guias_vistas?nu_guia=in.({filtro})&select=nu_guia"
+        # order= obrigatorio numa consulta paginada em varias requisicoes --
+        # sem ordenacao explicita o Postgres nao garante a mesma posicao de
+        # linha entre a pagina 1 e a pagina 2 se houver escrita concorrente
+        # no meio (e ha: cada guia marcada como vista grava direto do
+        # navegador, ver marcarVistaNoServidor), podendo fazer uma guia
+        # sumir das duas paginas e voltar como "nao vista".
+        url = f"{self.supabase_url}/rest/v1/amostragem_guias_vistas?nu_guia=in.({filtro})&select=nu_guia&order=nu_guia"
         return {item["nu_guia"] for item in self._get_paginado(url)}
 
     # --- Base IA (Amostragem BETA): guias importadas mensalmente (todas as
@@ -455,7 +470,10 @@ class DatabaseManager:
     def carregar_procs_ignorados(self) -> dict:
         """Retorna {especialidade: set(codigos)} com tudo que já foi salvo
         como 'não precisa analisar' em qualquer sessão anterior."""
-        url = f"{self.supabase_url}/rest/v1/amostragem_procs_ignorados?select=especialidade,cd_procedimento"
+        # order= pelo mesmo motivo de buscar_guias_vistas acima: sem
+        # ordenacao explicita, paginacao em varias requisicoes nao garante
+        # posicao estavel de linha entre paginas.
+        url = f"{self.supabase_url}/rest/v1/amostragem_procs_ignorados?select=especialidade,cd_procedimento&order=especialidade"
         resultado = {}
         for item in self._get_paginado(url):
             resultado.setdefault(item["especialidade"], set()).add(item["cd_procedimento"])

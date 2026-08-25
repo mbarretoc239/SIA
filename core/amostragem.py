@@ -56,11 +56,24 @@ def _qtd_imagens_esperada(requisito: str) -> int:
     return min(valores) if valores else 0
 
 
-def calcular_imagens_esperadas_guia(procedimentos_str) -> int:
+def calcular_imagens_esperadas_guia(procedimentos_str, procs_qtd=None) -> int:
     """Soma a quantidade de imagens/documentos esperada pra guia, por
     procedimento (cada procedimento pede as suas, não compartilha com os
     outros da mesma guia). Procedimento sem requisito mapeado não soma
-    nada -- não inventa exigência pro que não temos dado."""
+    nada -- não inventa exigência pro que não temos dado.
+
+    `procs_qtd`: lista [(código, quantidade)] (ver Procedimentos_qtd de
+    consolidar_por_guia). Quando informada, multiplica o esperado de cada
+    código pela quantidade de ocorrências na guia -- sem isso, o mesmo
+    código cobrado 2x na guia (ex.: 2 dentes) contava só 1x, porque
+    `procedimentos_str` já vem deduplicado (consolidar_por_guia junta os
+    códigos com set()). Se não informada, cai no comportamento antigo
+    (cada código conta 1x, ignora repetição)."""
+    if procs_qtd:
+        return sum(
+            _qtd_imagens_esperada(REQUISITOS_POR_PROCEDIMENTO[cod]) * qtd
+            for cod, qtd in procs_qtd if cod in REQUISITOS_POR_PROCEDIMENTO
+        )
     codigos = [c.strip() for c in str(procedimentos_str).split(",") if c.strip()]
     return sum(
         _qtd_imagens_esperada(REQUISITOS_POR_PROCEDIMENTO[cod])
@@ -349,37 +362,41 @@ def gerenciar_procedimentos_ignorados(db, key_prefix: str):
 
     with st.expander("Gerenciar procedimentos ignorados (todas as especialidades)"):
         salvos = db.carregar_procs_ignorados()
+        mapa_procedimentos = carregar_mapa_procedimentos()
 
         if any(salvos.values()):
             st.markdown("**Já salvos**")
-            for esp in sorted(k for k, v in salvos.items() if v):
-                codigos = sorted(salvos[esp])
-                col_esp, col_codigos, col_rem = st.columns([2, 4, 3])
-                with col_esp:
-                    st.markdown(f"**{esp}**")
-                with col_codigos:
-                    st.caption(", ".join(codigos))
-                with col_rem:
-                    remover_selecionados = st.multiselect(
-                        "Remover",
-                        options=codigos,
-                        key=f"{key_prefix}_gerenciar_remover_{esp}",
-                        label_visibility="collapsed",
-                        placeholder="Remover código...",
-                    )
-                    if remover_selecionados and st.button(
-                        "Remover", key=f"{key_prefix}_gerenciar_btn_remover_{esp}", use_container_width=True
-                    ):
-                        pares = [(esp, cod) for cod in remover_selecionados]
-                        if db.remover_procs_ignorados(pares):
-                            st.toast(f"Removido(s) de {esp}.")
-                            st.rerun()
-                        else:
-                            st.error("Erro ao remover.")
+            # Tabela única + um só botão de remover pra seleção -- CLAUDE.md
+            # pede lista somente-leitura + formulário único pra listas
+            # administráveis, em vez de um multiselect+botão por linha (ficava
+            # pesado com muitas especialidades salvas).
+            linhas_salvos = sorted(
+                (esp, cod, mapa_procedimentos.get(cod, "descrição não encontrada"))
+                for esp, codigos in salvos.items() for cod in codigos
+            )
+            df_salvos = pd.DataFrame(linhas_salvos, columns=["Especialidade", "Código", "Descrição"])
+            evento_salvos = st.dataframe(
+                df_salvos, use_container_width=True, hide_index=True,
+                on_select="rerun", selection_mode="multi-row",
+                key=f"{key_prefix}_gerenciar_tabela_salvos",
+            )
+            linhas_selecionadas = evento_salvos.selection.get("rows") if evento_salvos else []
+            if st.button(
+                "Remover selecionado(s)", key=f"{key_prefix}_gerenciar_btn_remover",
+                disabled=not linhas_selecionadas,
+            ):
+                pares = [
+                    (df_salvos.iloc[i]["Especialidade"], df_salvos.iloc[i]["Código"])
+                    for i in linhas_selecionadas
+                ]
+                if db.remover_procs_ignorados(pares):
+                    st.toast(f"Removido(s) {len(pares)} procedimento(s).")
+                    st.rerun()
+                else:
+                    st.error("Erro ao remover.")
             st.divider()
 
         st.markdown("**Adicionar novo**")
-        mapa_procedimentos = carregar_mapa_procedimentos()
         opcoes_todas = {
             f"{cod} - {desc}": cod
             for cod, desc in sorted(mapa_procedimentos.items(), key=lambda x: x[1])
@@ -432,9 +449,15 @@ def selecionar_procedimentos_ignorados(df: pd.DataFrame, db, key_prefix: str) ->
 
     # Primeira especialidade em que cada código aparece neste dataset —
     # usado pra saber em qual especialidade salvar/remover o código.
+    # Normalizada (_norm) porque amostragem_procs_ignorados é salva por
+    # gerenciar_procedimentos_ignorados usando ESPECIALIDADES_CONHECIDAS
+    # (maiúsculo, sem acento) -- comparar com a especialidade crua da
+    # planilha (ex.: "Cirurgia" em vez de "CIRURGIA") fazia o default do
+    # multiselect nunca bater com o que já estava salvo, e salvar de novo
+    # criava uma entrada duplicada pra "mesma" especialidade.
     cod_para_especialidade = {}
     for _, row in df[["CD_PROCEDIMENTO", "Especialidade"]].drop_duplicates().iterrows():
-        cod_para_especialidade.setdefault(row["CD_PROCEDIMENTO"], row["Especialidade"])
+        cod_para_especialidade.setdefault(row["CD_PROCEDIMENTO"], _norm(row["Especialidade"]))
 
     codigos_presentes = sorted(cod_para_especialidade.keys())
     opcoes = {
@@ -504,7 +527,11 @@ def consolidar_por_guia(df: pd.DataFrame) -> pd.DataFrame:
     somava escondido no total da especialidade sem aparecer em lugar
     nenhum)."""
     if df.empty:
-        return df
+        # Devolve com as MESMAS colunas que o caminho normal produz -- um
+        # df vazio sem elas quebrava o merge/fillna do caller (views/
+        # 7_Amostragem_Beta.py) com KeyError quando todos os procedimentos
+        # do processo caíam no filtro de "ignorados nesta análise".
+        return pd.DataFrame(columns=["Especialidade", "NU_GUIA", "Procedimentos", "Qtde_procs", "Procedimentos_qtd"])
     base = (
         df.groupby(["Especialidade", "NU_GUIA"], sort=False)
         .agg(
