@@ -141,10 +141,20 @@ def _secao_produtividade_individual(
         st.info("Nenhum processo fechado/calculado" + (f" em {escolha_dia}." if dia_filtro else " neste mês."))
     else:
         linha = tabela.iloc[0]
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("Fechados", _fmt_num(int(linha["Fechados"])))
         c2.metric("Calculados", _fmt_num(int(linha["Calculados"])))
         c3.metric("Total", _fmt_num(int(linha["Total"])))
+        c4.metric(
+            "% Glosa (média)", linha["% Glosa"],
+            help=(
+                "Média ponderada pelo valor cobrado de cada processo "
+                "(VALOR_COBRADO/VALOR_CALCULADO do REL5201), não a média "
+                "simples dos percentuais -- um processo de valor alto pesa "
+                "mais que um de valor baixo. \"—\" quando o REL5201 "
+                "importado não tem essas colunas."
+            ),
+        )
 
         _secao_lista_processos(df, auditor, dia=dia_filtro)
 

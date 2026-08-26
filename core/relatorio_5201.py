@@ -26,10 +26,14 @@ COLUNAS_NECESSARIAS = {
 # historico_glosas_prestador). Opcionais -- se o arquivo não tiver (formato
 # mais antigo, ou exportação diferente), a importação não falha, só fica
 # sem esse corte específico.
+# VALOR_COBRADO/VALOR_CALCULADO: pra calcular o % de glosa em R$ por
+# processo (glosado = cobrado - calculado, recalculado aqui em vez de usar
+# a coluna VALOR_GLOSA do relatório -- por pedido explícito do time,
+# receio de a coluna vir inconsistente).
 COLUNAS_OPCIONAIS = {
     "EXECUCAO", "MODALIDADE", "DATA_RECEBIMENTO_PROCESSO_FISICO",
     "QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
-    "PRESTADOR",
+    "PRESTADOR", "VALOR_COBRADO", "VALOR_CALCULADO",
 }
 CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
@@ -168,6 +172,14 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
         else:
             df[col] = pd.array([None] * len(df), dtype="Int64")
 
+    # Valores em R$: None (não 0) quando a coluna não existe no arquivo --
+    # mesmo cuidado do QT_GUIAS acima, "sem dado" != "cobrado zero".
+    for col in ("VALOR_COBRADO", "VALOR_CALCULADO"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        else:
+            df[col] = pd.array([None] * len(df), dtype="float64")
+
     if "PRESTADOR" in df.columns:
         # Sem _norm() (que uppercase e tira acento) -- mantém o mesmo
         # formato do nome que o parser do 5302 extrai, pra bater na hora de
@@ -291,7 +303,40 @@ def procedimentos_consistido_digitado_por_canal(df: pd.DataFrame) -> int:
     return int(app["QT_PROCEDIMENTO"].sum() + misto_napp_com_data["QT_PROCEDIMENTO"].sum())
 
 
-COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total"]
+def _pct_glosa_valor(valor_cobrado, valor_calculado):
+    """% de glosa em R$ de UM processo: (cobrado - calculado) / cobrado.
+    Recalculado a partir de VALOR_COBRADO/VALOR_CALCULADO -- não usa a
+    coluna VALOR_GLOSA do próprio relatório, por pedido explícito (receio
+    de vir inconsistente). None quando falta um dos dois valores (arquivo
+    sem essas colunas) ou valor_cobrado <= 0 (nada a dividir)."""
+    if pd.isna(valor_cobrado) or pd.isna(valor_calculado) or valor_cobrado <= 0:
+        return None
+    return (valor_cobrado - valor_calculado) / valor_cobrado * 100
+
+
+def _pct_glosa_grupo(grupo: pd.DataFrame):
+    """% de glosa em R$ agregado de um GRUPO de processos (ex.: todos os de
+    um auditor) -- soma dos valores primeiro, divide depois (não a média
+    dos percentuais de cada processo). Isso pesa cada processo pelo seu
+    valor real: um processo de R$50.000 não pode contar igual a um de R$44
+    só porque os dois têm 1 processo cada."""
+    if "VALOR_COBRADO" not in grupo.columns or "VALOR_CALCULADO" not in grupo.columns:
+        return None
+    valido = grupo["VALOR_COBRADO"].notna() & grupo["VALOR_CALCULADO"].notna() & (grupo["VALOR_COBRADO"] > 0)
+    cobrado_total = grupo.loc[valido, "VALOR_COBRADO"].sum()
+    if cobrado_total <= 0:
+        return None
+    calculado_total = grupo.loc[valido, "VALOR_CALCULADO"].sum()
+    return (cobrado_total - calculado_total) / cobrado_total * 100
+
+
+def _fmt_pct_glosa(pct) -> str:
+    if pct is None:
+        return "—"
+    return f"{pct:.1f}".replace(".", ",") + "%"
+
+
+COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total", "% Glosa"]
 
 # Só processos num estado final contam como produtividade — CONSISTIDO ainda
 # está em aberto e GLOSADO não é uma ação do auditor.
@@ -361,6 +406,7 @@ def produtividade_por_auditor(df: pd.DataFrame, dia=None, auditor: str = None) -
             "Fechados": int(grupo.loc[grupo["STATUS"] == "FECHADO", "QT_PROCEDIMENTO"].sum()),
             "Calculados": int(grupo.loc[grupo["STATUS"] == "CALCULADO", "QT_PROCEDIMENTO"].sum()),
             "Total": int(grupo["QT_PROCEDIMENTO"].sum()),
+            "% Glosa": _fmt_pct_glosa(_pct_glosa_grupo(grupo)),
         })
 
     resultado = pd.DataFrame(linhas)
@@ -396,7 +442,7 @@ def detalhe_processos_periodo(df: pd.DataFrame, auditor: str, dia=None) -> pd.Da
     `_minutos` fica na saída (float ou None) pra tempo_medio_resolucao usar;
     quem for exibir a tabela deve descartar essa coluna auxiliar.
     """
-    colunas = ["Processo", "Status", "Execução", "Modalidade", "Consistência", "Fechamento", "Tempo", "_minutos"]
+    colunas = ["Processo", "Status", "Execução", "Modalidade", "Consistência", "Fechamento", "Tempo", "% Glosa", "_minutos"]
     produtivos = _produtivos_com_auditor_e_data(df)
     if produtivos.empty:
         return pd.DataFrame(columns=colunas)
@@ -426,6 +472,7 @@ def detalhe_processos_periodo(df: pd.DataFrame, auditor: str, dia=None) -> pd.Da
             "Consistência": consistencia.strftime("%d/%m/%Y %H:%M") if pd.notna(consistencia) else "—",
             "Fechamento": fechamento.strftime("%d/%m/%Y %H:%M") if pd.notna(fechamento) else "—",
             "Tempo": _formatar_duracao(minutos) if minutos is not None else "—",
+            "% Glosa": _fmt_pct_glosa(_pct_glosa_valor(row.get("VALOR_COBRADO"), row.get("VALOR_CALCULADO"))),
             "_minutos": minutos,
         })
 
