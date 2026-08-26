@@ -1,4 +1,5 @@
 import unicodedata
+import zipfile
 from datetime import date, datetime
 
 import pandas as pd
@@ -90,7 +91,19 @@ def _ler_bruto(arquivo) -> pd.DataFrame:
     """
     nome = (getattr(arquivo, "name", "") or "").lower()
     if not nome.endswith(".csv"):
-        return pd.read_excel(arquivo, engine="openpyxl")
+        try:
+            return pd.read_excel(arquivo, engine="openpyxl")
+        except zipfile.BadZipFile:
+            # .xlsx é um zip por dentro -- esse erro sai como "File is not a
+            # zip file" (mensagem do Python, sem contexto nenhum pro
+            # usuário) sempre que o arquivo está corrompido, é um .xls
+            # antigo só renomeado pra .xlsx, ou o download/upload foi
+            # interrompido no meio.
+            raise ValueError(
+                f"O arquivo '{arquivo.name}' não é um .xlsx válido (pode estar corrompido, "
+                "ser um .xls antigo renomeado, ou o download ter sido interrompido). "
+                "Baixe o relatório de novo e tente subir novamente."
+            )
 
     arquivo.seek(0)
     bruto = arquivo.read()

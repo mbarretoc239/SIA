@@ -2,6 +2,7 @@ import html
 import json
 import re
 import unicodedata
+import zipfile
 
 import openpyxl
 import pandas as pd
@@ -205,7 +206,18 @@ def _abrir_planilha_normalizada(arquivo, colunas_necessarias: set):
     Quem chama é responsável por fechar o workbook (`wb.close()`) depois de
     consumir o iterador -- compartilhado por preparar_registros_base_ia e
     preparar_registros_imagem, que tinham esse mesmo trecho duplicado."""
-    wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
+    try:
+        wb = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
+    except zipfile.BadZipFile:
+        # .xlsx é um zip por dentro -- esse erro sai como "File is not a zip
+        # file" (mensagem crua do Python, sem contexto pro usuário) sempre
+        # que o arquivo está corrompido, é um .xls antigo renomeado, ou o
+        # download/upload foi interrompido no meio.
+        raise ValueError(
+            f"O arquivo '{getattr(arquivo, 'name', '')}' não é um .xlsx válido (pode estar "
+            "corrompido, ser um .xls antigo renomeado, ou o download ter sido interrompido). "
+            "Baixe o relatório de novo e tente subir novamente."
+        )
     aba = "Planilha1" if "Planilha1" in wb.sheetnames else wb.sheetnames[0]
     ws = wb[aba]
     linhas = ws.iter_rows(values_only=True)

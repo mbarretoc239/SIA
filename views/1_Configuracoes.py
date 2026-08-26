@@ -22,11 +22,32 @@ if "db" not in st.session_state:
     st.session_state.db = DatabaseManager()
 db = st.session_state.db
 
+def _flash(mensagem: str, tipo: str = "success"):
+    """Guarda uma mensagem pra mostrar na PRÓXIMA execução do script (depois
+    de um st.rerun()). Chamar st.success()/st.error() direto antes de
+    st.rerun() só deixa a mensagem visível por uma fração de segundo -- o
+    rerun troca a tela inteira antes do navegador conseguir renderizar por
+    tempo suficiente pro usuário ler, dando a impressão de que a ação não
+    funcionou. Usar isso + st.rerun() no lugar faz a mensagem sobreviver até
+    a próxima execução, onde _renderizar_flash_mensagens() exibe e limpa."""
+    st.session_state.setdefault("_flash_mensagens", []).append((tipo, mensagem))
+
+
+def _renderizar_flash_mensagens():
+    """Mostra e descarta as mensagens guardadas por _flash() -- chamado uma
+    vez no topo da página, antes de qualquer nova ação poder disparar outro
+    st.rerun()."""
+    mensagens = st.session_state.pop("_flash_mensagens", [])
+    for tipo, mensagem in mensagens:
+        getattr(st, tipo)(mensagem)
+
+
 role = st.session_state.get("role_interno", "Contas")
 nome = st.session_state.get("auditor_nome", "Usuário")
 
 st.title("Configurações")
 st.caption("Gerencie seu perfil e, conforme seu nível de acesso, as regras e cadastros do sistema.")
+_renderizar_flash_mensagens()
 
 # Define quais abas o usuário tem acesso. Cada aba tem um id interno
 # estável (nunca muda) separado do rótulo exibido (pode ser reescrito à
@@ -90,7 +111,7 @@ if "meus_links" in abas_por_id:
                 if b1.button("Salvar", type="primary", use_container_width=True, key="ml_salvar"):
                     if link_titulo and link_url:
                         if db.inserir_link_util(st.session_state.get("usuario_id", ""), link_titulo, link_url):
-                            st.success("Link salvo com sucesso!")
+                            _flash("Link salvo com sucesso!")
                             st.session_state["meu_link_em_edicao"] = None
                             st.rerun()
                         else:
@@ -180,14 +201,14 @@ if "aprovacao_equipe" in abas_por_id:
                         with col_save:
                             if st.button("Salvar Alteração", key=f"btn_{row['id']}", type="primary", use_container_width=True):
                                 if db.atualizar_usuario_admin(row['id'], novo_status, novo_role, nova_equipe):
-                                    st.success("Usuário atualizado com sucesso!")
+                                    _flash("Usuário atualizado com sucesso!")
                                     st.rerun()
                                 else:
                                     st.error("Erro ao atualizar usuário no Supabase.")
                         with col_del:
                             if st.button("Excluir", key=f"btn_excluir_pendente_{row['id']}", use_container_width=True):
                                 if db.excluir_usuario(row['id'], role):
-                                    st.success("Usuário excluído.")
+                                    _flash("Usuário excluído.")
                                     st.rerun()
                                 else:
                                     st.error("Erro ao excluir usuário no Supabase.")
@@ -220,7 +241,7 @@ if "aprovacao_equipe" in abas_por_id:
                         st.markdown("Esta ação não pode ser desfeita.")
                         if st.button("Sim, excluir permanentemente", key="btn_excluir_usuario_confirmar", type="primary", use_container_width=True):
                             if db.excluir_usuario(uid, role):
-                                st.success("Usuário excluído com sucesso.")
+                                _flash("Usuário excluído com sucesso.")
                                 st.rerun()
                             else:
                                 st.error("Não foi possível excluir o usuário. Verifique se você é Admin.")
@@ -292,7 +313,7 @@ if "debug_testes" in abas_por_id:
             if st.form_submit_button("Registrar Alinhamento de Teste", type="primary"):
                 titulo_final = f"[TESTE] {t_titulo}" if not t_titulo.startswith("[TESTE]") else t_titulo
                 if db.inserir_alinhamento(titulo_final, t_conteudo, t_categoria, t_nivel, usuario_id_admin):
-                    st.success("Alinhamento de teste registrado!")
+                    _flash("Alinhamento de teste registrado!")
                     st.rerun()
                 else:
                     st.error("Erro ao registrar alinhamento de teste.")
@@ -469,7 +490,7 @@ if "tabelas_base" in abas_por_id:
                     if b1.button("Salvar", type="primary", use_container_width=True):
                         if f_cod and f_desc:
                             db.upsert_glosa_customizada(f_cod, f_desc, f_crit, f_tipo, nome)
-                            st.success("Glosa salva com sucesso na nuvem!")
+                            _flash("Glosa salva com sucesso na nuvem!")
                             st.session_state["glosa_em_edicao"] = None
                             st.rerun()
                         else:
@@ -543,7 +564,7 @@ if "tabelas_base" in abas_por_id:
                     if st.button("Salvar Sub-Glosa", key="btn_salvar_nova_sg", type="primary"):
                         if sg_cod and sg_desc:
                             db.upsert_glosa_customizada(sg_cod, sg_desc, sg_crit, sg_tipo, nome)
-                            st.success(f"Glosa {codigo_pai} | Sub {sg_sub_num.strip()} salva!")
+                            _flash(f"Glosa {codigo_pai} | Sub {sg_sub_num.strip()} salva!")
                             st.rerun()
                         else:
                             st.error("Preencha o Nº da sub-glosa e a descrição.")
@@ -704,14 +725,14 @@ if "textos_prestadores" in abas_por_id:
                         f_proc = ",".join(label_to_valor_proc[lbl] for lbl in f_proc_labels)
                         if em_edicao == "NOVO":
                             if db.inserir_texto_prestador(f_tit, f_glo, f_txt, nome, f_sub, f_proc):
-                                st.success("Texto cadastrado com sucesso!")
+                                _flash("Texto cadastrado com sucesso!")
                                 st.session_state["texto_em_edicao"] = None
                                 st.rerun()
                             else:
                                 st.error("Erro ao salvar no banco.")
                         else:
                             if db.atualizar_texto_prestador(t_alvo['id'], f_tit, f_glo, f_txt, nome, f_sub, f_proc):
-                                st.success("Texto atualizado com sucesso!")
+                                _flash("Texto atualizado com sucesso!")
                                 st.session_state["texto_em_edicao"] = None
                                 st.rerun()
                             else:
@@ -798,7 +819,7 @@ if "permissoes" in abas_por_id:
                             erros += 1
                 if erros == 0:
                     carregar_permissoes_modulos_cache.clear()
-                    st.success("Permissões atualizadas!")
+                    _flash("Permissões atualizadas!")
                     st.rerun()
                 else:
                     st.error(f"{erros} permissões falharam ao salvar.")
@@ -855,7 +876,7 @@ if "permissoes" in abas_por_id:
                                     erros_excecao += 1
                     if erros_excecao == 0:
                         carregar_excecoes_modulos_cache.clear()
-                        st.success("Exceções atualizadas!")
+                        _flash("Exceções atualizadas!")
                         st.rerun()
                     else:
                         st.error(f"{erros_excecao} exceções falharam ao salvar.")
@@ -943,14 +964,14 @@ if "regras_amostragem" in abas_por_id:
                     )
                     if ok:
                         carregar_regras_amostragem_cache.clear()
-                        st.success(f"Regra de {esp} salva!")
+                        _flash(f"Regra de {esp} salva!")
                         st.rerun()
                     else:
                         st.error("Erro ao salvar a regra.")
                 if b2.button("Excluir", use_container_width=True, key=f"ra_excluir_{esp}"):
                     if db.excluir_regra_amostragem(esp, atuante_role=role):
                         carregar_regras_amostragem_cache.clear()
-                        st.success(f"Regra de {esp} excluída.")
+                        _flash(f"Regra de {esp} excluída.")
                         st.rerun()
                     else:
                         st.error("Erro ao excluir a regra.")
@@ -1004,7 +1025,7 @@ if "regras_amostragem" in abas_por_id:
                     )
                     if ok:
                         carregar_regras_amostragem_cache.clear()
-                        st.success(f"{nome_norm} adicionada como crítica!")
+                        _flash(f"{nome_norm} adicionada como crítica!")
                         st.rerun()
                     else:
                         st.error("Erro ao adicionar.")
@@ -1122,14 +1143,14 @@ if "links_home" in abas_por_id:
                     else:
                         if em_edicao == "NOVO":
                             if db.inserir_link_padrao(lp_titulo, lp_url, lp_categoria, lp_ordem, atuante_role=role, niveis_visiveis=lp_niveis):
-                                st.success("Link adicionado!")
+                                _flash("Link adicionado!")
                                 st.session_state["link_padrao_em_edicao"] = None
                                 st.rerun()
                             else:
                                 st.error("Erro ao salvar.")
                         else:
                             if db.atualizar_link_padrao(l_alvo["id"], lp_titulo, lp_url, lp_categoria, lp_ordem, lp_ativo, atuante_role=role, niveis_visiveis=lp_niveis):
-                                st.success("Link atualizado!")
+                                _flash("Link atualizado!")
                                 st.session_state["link_padrao_em_edicao"] = None
                                 st.rerun()
                             else:
@@ -1222,7 +1243,7 @@ if "importar_planilhas" in abas_por_id:
                             except Exception:
                                 pass
                         carregar_dados_atuais.clear()
-                        st.success(f"{total_5201} processo(s) importado(s) em {mes_referencia_5201} com sucesso.")
+                        _flash(f"{total_5201} processo(s) importado(s) em {mes_referencia_5201} com sucesso.")
                         st.rerun()
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")
