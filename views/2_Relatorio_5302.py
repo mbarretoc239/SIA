@@ -12,7 +12,7 @@ from core.settings import (
 from shared.database import DatabaseManager
 from services.relatorio_5302.parser_strategy import processar_csv, processar_pdf
 from services.relatorio_5302.text_engine import gerar_texto, mixar_textos_inteligente
-from shared.ai_utils import gerar_texto_ocorrencia_com_ia, melhorar_texto_com_ia
+from shared.ai_utils import gerar_texto_ocorrencia_com_ia
 
 st.set_page_config(page_title="Relatório 5302", page_icon="🦷", layout="wide")
 
@@ -550,129 +550,108 @@ if pdf_file is not None:
                         <button id="btn_copiar_ocorrencia" onclick="copyTextOcorrencia()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Texto</button>
                         """, height=65)
 
-                st.markdown("### Texto de orientação ao Prestador")
-                if "Nenhuma glosa" not in texto_gerado:
-                    glosas_presentes = set(df_final['Glosa'].unique())
+                # Texto de orientação ao prestador -- ligado só pro Admin por
+                # enquanto (tirado temporariamente do Contas/Auditor).
+                if _role == "Admin":
+                    st.markdown("### Texto de orientação ao Prestador")
+                    if "Nenhuma glosa" not in texto_gerado:
+                        glosas_presentes = set(df_final['Glosa'].unique())
 
-                    sub_glosas_presentes = set()
-                    for _, row in df_final.iterrows():
-                        sub_cod = str(row.get('Cód. Sub-Glosa', '') or '').strip()
-                        if sub_cod:
-                            sub_glosas_presentes.add(f"{row['Glosa']}.{sub_cod}")
+                        sub_glosas_presentes = set()
+                        for _, row in df_final.iterrows():
+                            sub_cod = str(row.get('Cód. Sub-Glosa', '') or '').strip()
+                            if sub_cod:
+                                sub_glosas_presentes.add(f"{row['Glosa']}.{sub_cod}")
 
-                    procedimentos_presentes = set(str(p) for p in df_final['Cód. Procedimento'].unique())
+                        procedimentos_presentes = set(str(p) for p in df_final['Cód. Procedimento'].unique())
 
-                    from shared.database import DatabaseManager
-                    if "db" not in st.session_state:
-                        st.session_state.db = DatabaseManager()
+                        from shared.database import DatabaseManager
+                        if "db" not in st.session_state:
+                            st.session_state.db = DatabaseManager()
 
-                    textos_db = st.session_state.db.carregar_textos_prestador()
+                        textos_db = st.session_state.db.carregar_textos_prestador()
 
-                    candidatos = []
-                    for txt in textos_db:
-                        glosas_relacionadas = set([g.strip() for g in str(txt.get('glosas_relacionadas', '')).split(',') if g.strip()])
-                        glosas_cobertas = glosas_relacionadas & glosas_presentes
-                        if not glosas_cobertas:
-                            continue
+                        candidatos = []
+                        for txt in textos_db:
+                            glosas_relacionadas = set([g.strip() for g in str(txt.get('glosas_relacionadas', '')).split(',') if g.strip()])
+                            glosas_cobertas = glosas_relacionadas & glosas_presentes
+                            if not glosas_cobertas:
+                                continue
 
-                        sub_glosas_relacionadas = set([s.strip() for s in str(txt.get('sub_glosas_relacionadas') or '').split(',') if s.strip()])
-                        if sub_glosas_relacionadas and not (sub_glosas_relacionadas & sub_glosas_presentes):
-                            continue
+                            sub_glosas_relacionadas = set([s.strip() for s in str(txt.get('sub_glosas_relacionadas') or '').split(',') if s.strip()])
+                            if sub_glosas_relacionadas and not (sub_glosas_relacionadas & sub_glosas_presentes):
+                                continue
 
-                        procedimentos_relacionados = set([p.strip() for p in str(txt.get('procedimentos_relacionados') or '').split(',') if p.strip()])
-                        if procedimentos_relacionados and not (procedimentos_relacionados & procedimentos_presentes):
-                            continue
+                            procedimentos_relacionados = set([p.strip() for p in str(txt.get('procedimentos_relacionados') or '').split(',') if p.strip()])
+                            if procedimentos_relacionados and not (procedimentos_relacionados & procedimentos_presentes):
+                                continue
 
-                        is_especifico = bool(sub_glosas_relacionadas) or bool(procedimentos_relacionados)
-                        candidatos.append((txt.get('texto', '').strip(), glosas_cobertas, is_especifico))
+                            is_especifico = bool(sub_glosas_relacionadas) or bool(procedimentos_relacionados)
+                            candidatos.append((txt.get('texto', '').strip(), glosas_cobertas, is_especifico))
 
-                    # Glosas já atendidas por algum texto específico (sub-glosa/procedimento)
-                    glosas_com_especifico = set()
-                    for _, glosas_cobertas, is_especifico in candidatos:
-                        if is_especifico:
-                            glosas_com_especifico |= glosas_cobertas
+                        # Glosas já atendidas por algum texto específico (sub-glosa/procedimento)
+                        glosas_com_especifico = set()
+                        for _, glosas_cobertas, is_especifico in candidatos:
+                            if is_especifico:
+                                glosas_com_especifico |= glosas_cobertas
 
-                    # Textos gerais só entram se cobrirem alguma glosa sem texto específico
-                    textos_sugeridos = [
-                        texto for texto, glosas_cobertas, is_especifico in candidatos
-                        if is_especifico or not glosas_cobertas.issubset(glosas_com_especifico)
-                    ]
+                        # Textos gerais só entram se cobrirem alguma glosa sem texto específico
+                        textos_sugeridos = [
+                            texto for texto, glosas_cobertas, is_especifico in candidatos
+                            if is_especifico or not glosas_cobertas.issubset(glosas_com_especifico)
+                        ]
                     
-                    if textos_sugeridos:
-                        # Key versionada pelo arquivo + filtro + conteúdo de
-                        # df_final (mesmo hash_df_final do Texto Final acima --
-                        # é a mesma fonte, glosas_presentes vem de df_final).
-                        # O comentário antigo aqui dizia que só arquivo+filtro
-                        # mudavam textos_sugeridos, mas isso está errado:
-                        # marcar/desmarcar uma linha muda glosas_presentes e
-                        # portanto textos_sugeridos, sem mudar nem arquivo nem
-                        # filtro -- o texto sugerido ficava preso na seleção
-                        # antiga. Edições manuais e melhorias via IA continuam
-                        # preservadas entre reruns da mesma combinação+conteúdo.
-                        key_texto_mix = f"texto_mix_v_{pdf_file.name}_{opcao_filtro}_{hash_df_final}"
-                        key_mix_pendente = f"{key_texto_mix}_pendente"
-                        key_mix_anterior = f"{key_texto_mix}_anterior"
+                        if textos_sugeridos:
+                            # Key versionada pelo arquivo + filtro + conteúdo de
+                            # df_final (mesmo hash_df_final do Texto Final acima --
+                            # é a mesma fonte, glosas_presentes vem de df_final).
+                            # O comentário antigo aqui dizia que só arquivo+filtro
+                            # mudavam textos_sugeridos, mas isso está errado:
+                            # marcar/desmarcar uma linha muda glosas_presentes e
+                            # portanto textos_sugeridos, sem mudar nem arquivo nem
+                            # filtro -- o texto sugerido ficava preso na seleção
+                            # antiga. Edições manuais continuam preservadas entre
+                            # reruns da mesma combinação+conteúdo.
+                            key_texto_mix = f"texto_mix_v_{pdf_file.name}_{opcao_filtro}_{hash_df_final}"
+                            if key_texto_mix not in st.session_state:
+                                st.session_state[key_texto_mix] = mixar_textos_inteligente(textos_sugeridos)
 
-                        # Streamlit não permite escrever em st.session_state[key] no
-                        # mesmo run em que o widget com essa key já foi instanciado.
-                        # Por isso o botão de IA grava num key "_pendente" e dispara
-                        # st.rerun(); só no início do PRÓXIMO run (aqui, antes do
-                        # text_area existir) o valor pendente é promovido pra key real.
-                        if key_mix_pendente in st.session_state:
-                            st.session_state[key_texto_mix] = st.session_state.pop(key_mix_pendente)
-                        elif key_texto_mix not in st.session_state:
-                            st.session_state[key_texto_mix] = mixar_textos_inteligente(textos_sugeridos)
+                            LABEL_TEXTO_MIX = "Mensagem Combinada (Copie e cole):"
+                            st.text_area(LABEL_TEXTO_MIX, height=150, key=key_texto_mix)
 
-                        LABEL_TEXTO_MIX = "Mensagem Combinada (Copie e cole):"
-                        st.text_area(LABEL_TEXTO_MIX, height=150, key=key_texto_mix)
-
-                        col_copy_mix, col_ia_mix, col_undo_mix = st.columns([2, 2, 2])
-                        with col_copy_mix:
-                            label_js_mix = LABEL_TEXTO_MIX.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-                            components.html(f"""
-                            <script>
-                            function copyTextMix() {{
-                                let texto = '';
-                                try {{
-                                    const doc = window.parent.document;
-                                    const textareas = doc.querySelectorAll('textarea');
-                                    for (const ta of textareas) {{
-                                        if ((ta.getAttribute('aria-label') || '') === `{label_js_mix}`) {{
-                                            texto = ta.value;
-                                            break;
+                            col_copy_mix, _ = st.columns([2, 8])
+                            with col_copy_mix:
+                                label_js_mix = LABEL_TEXTO_MIX.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                                components.html(f"""
+                                <script>
+                                function copyTextMix() {{
+                                    let texto = '';
+                                    try {{
+                                        const doc = window.parent.document;
+                                        const textareas = doc.querySelectorAll('textarea');
+                                        for (const ta of textareas) {{
+                                            if ((ta.getAttribute('aria-label') || '') === `{label_js_mix}`) {{
+                                                texto = ta.value;
+                                                break;
+                                            }}
                                         }}
+                                    }} catch (e) {{ texto = ''; }}
+                                    if (!texto) {{
+                                        document.getElementById('btn_copiar_mix').innerText = ' Erro ao copiar';
+                                        return;
                                     }}
-                                }} catch (e) {{ texto = ''; }}
-                                if (!texto) {{
-                                    document.getElementById('btn_copiar_mix').innerText = ' Erro ao copiar';
-                                    return;
+                                    navigator.clipboard.writeText(texto).then(function() {{
+                                        document.getElementById('btn_copiar_mix').innerText = ' Copiado!';
+                                        setTimeout(function() {{
+                                            document.getElementById('btn_copiar_mix').innerText = ' Copiar Mensagem';
+                                        }}, 2000);
+                                    }});
                                 }}
-                                navigator.clipboard.writeText(texto).then(function() {{
-                                    document.getElementById('btn_copiar_mix').innerText = ' Copiado!';
-                                    setTimeout(function() {{
-                                        document.getElementById('btn_copiar_mix').innerText = ' Copiar Mensagem';
-                                    }}, 2000);
-                                }});
-                            }}
-                            </script>
-                            <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Mensagem</button>
-                            """, height=65)
-                        with col_ia_mix:
-                            if st.button("✨ Melhorar com IA (beta)", key=f"btn_ia_{key_texto_mix}", use_container_width=True):
-                                with st.spinner("Melhorando texto..."):
-                                    texto_melhorado, erro_ia = melhorar_texto_com_ia(st.session_state[key_texto_mix])
-                                if erro_ia:
-                                    st.error(f"Não foi possível melhorar o texto agora: {erro_ia}")
-                                else:
-                                    st.session_state[key_mix_anterior] = st.session_state[key_texto_mix]
-                                    st.session_state[key_mix_pendente] = texto_melhorado
-                                    st.rerun()
-                        with col_undo_mix:
-                            if st.button("↩ Desfazer", key=f"btn_undo_{key_texto_mix}", use_container_width=True, disabled=key_mix_anterior not in st.session_state):
-                                st.session_state[key_mix_pendente] = st.session_state.pop(key_mix_anterior)
-                                st.rerun()
-                    else:
-                        st.info("Nenhum texto adicional mapeado para as glosas detectadas.")
+                                </script>
+                                <button id="btn_copiar_mix" onclick="copyTextMix()" style="background-color: #FF4B4B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.3rem; cursor: pointer; font-family: sans-serif; font-weight: 500; width: 100%;"> Copiar Mensagem</button>
+                                """, height=65)
+                        else:
+                            st.info("Nenhum texto adicional mapeado para as glosas detectadas.")
             else:
                 st.info("Selecione os filtros ao lado e clique em Gerar Texto.")
             
