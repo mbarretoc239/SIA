@@ -907,7 +907,8 @@ if "regras_amostragem" in abas_por_id:
             "guias entra na amostra sugerida. 'Auditar todas' força 100% das guias; 'Percentual' "
             "sorteia a % informada, com opção de mínimo de guias e de procedimentos abaixo dos "
             "quais audita tudo. Desativar (sem excluir) tira a especialidade da lista de críticas "
-            "sem perder a configuração salva."
+            "sem perder a configuração salva. Em 'Percentual', dá pra configurar também quais "
+            "procedimentos entram garantidos na amostra (prioridade), sem depender do sorteio."
         )
 
         TIPOS_REGRA = {"Auditar todas": "todas", "Percentual": "percentual"}
@@ -949,6 +950,43 @@ if "regras_amostragem" in abas_por_id:
                         help="0 = sem mínimo, só os % calculados.",
                     )
 
+                r_procs_prioridade, r_limiar_prior, r_pct_prior = "", 5, 50
+                if r_tipo == "percentual":
+                    with st.expander("Prioridade de procedimento dentro da amostra (opcional)"):
+                        st.caption(
+                            "Guia com QUALQUER procedimento fora da lista abaixo entra garantida na "
+                            "amostra (não depende do sorteio). Deixe a lista vazia pra sortear a "
+                            "especialidade inteira sem separar por prioridade."
+                        )
+                        mapa_procedimentos_ra = carregar_mapa_procedimentos()
+                        opcoes_prior = {
+                            f"{cod} - {desc}": cod
+                            for cod, desc in sorted(mapa_procedimentos_ra.items(), key=lambda x: x[1])
+                        }
+                        codigo_para_label = {cod: lbl for lbl, cod in opcoes_prior.items()}
+                        codigos_salvos = [c.strip() for c in str(regra.get("procs_prioridade_normal") or "").split(",") if c.strip()]
+                        default_labels_prior = [codigo_para_label[c] for c in codigos_salvos if c in codigo_para_label]
+                        cp1, cp2 = st.columns(2)
+                        with cp1:
+                            labels_prior = st.multiselect(
+                                "Procedimentos de baixa prioridade (sorteio normal)",
+                                options=sorted(opcoes_prior.keys()), default=default_labels_prior,
+                                key=f"ra_procsprior_{esp}",
+                            )
+                            r_procs_prioridade = ",".join(opcoes_prior[lbl] for lbl in labels_prior)
+                        with cp2:
+                            r_limiar_prior = st.number_input(
+                                "Limiar de guias prioritárias (acima disso, divide a amostra)",
+                                min_value=1, step=1, value=int(regra.get("limiar_guias_prioritarias") or 5),
+                                key=f"ra_limiarprior_{esp}",
+                            )
+                            r_pct_prior = st.number_input(
+                                "% da amostra p/ prioritárias (acima do limiar)",
+                                min_value=1, max_value=100, step=5,
+                                value=int(round(float(regra.get("pct_amostra_prioritaria") or 0.5) * 100)),
+                                key=f"ra_pctprior_{esp}",
+                            )
+
                 b1, b2, _ = st.columns([2, 2, 8])
                 if b1.button("Salvar", type="primary", use_container_width=True, key=f"ra_salvar_{esp}"):
                     ok = db.upsert_regra_amostragem(
@@ -961,6 +999,9 @@ if "regras_amostragem" in abas_por_id:
                         ativo=r_ativo,
                         atuante_role=role,
                         atuante_nome=nome,
+                        procs_prioridade_normal=(r_procs_prioridade or None) if r_tipo == "percentual" else None,
+                        limiar_guias_prioritarias=r_limiar_prior if r_tipo == "percentual" else 5,
+                        pct_amostra_prioritaria=(r_pct_prior / 100) if r_tipo == "percentual" else 0.5,
                     )
                     if ok:
                         carregar_regras_amostragem_cache.clear()
@@ -1005,6 +1046,35 @@ if "regras_amostragem" in abas_por_id:
                         help="0 = sem mínimo, só os % calculados.",
                     )
 
+            novos_procs_prioridade, novo_limiar_prior, nova_pct_prior = "", 5, 50
+            if novo_tipo == "percentual":
+                with st.expander("Prioridade de procedimento dentro da amostra (opcional)"):
+                    st.caption(
+                        "Deixe vazio pra sortear a especialidade inteira sem separar por prioridade "
+                        "-- pode configurar depois, editando a regra recém-criada acima."
+                    )
+                    mapa_procedimentos_novo = carregar_mapa_procedimentos()
+                    opcoes_prior_novo = {
+                        f"{cod} - {desc}": cod
+                        for cod, desc in sorted(mapa_procedimentos_novo.items(), key=lambda x: x[1])
+                    }
+                    ncp1, ncp2 = st.columns(2)
+                    with ncp1:
+                        labels_prior_novo = st.multiselect(
+                            "Procedimentos de baixa prioridade (sorteio normal)",
+                            options=sorted(opcoes_prior_novo.keys()), key="ra_nova_procsprior",
+                        )
+                        novos_procs_prioridade = ",".join(opcoes_prior_novo[lbl] for lbl in labels_prior_novo)
+                    with ncp2:
+                        novo_limiar_prior = st.number_input(
+                            "Limiar de guias prioritárias", min_value=1, step=1, value=5,
+                            key="ra_nova_limiarprior",
+                        )
+                        nova_pct_prior = st.number_input(
+                            "% da amostra p/ prioritárias", min_value=1, max_value=100, step=5,
+                            value=50, key="ra_nova_pctprior",
+                        )
+
             if st.button("Adicionar especialidade", type="primary", key="ra_btn_adicionar"):
                 nome_norm = nova_esp.strip().upper()
                 if not nome_norm:
@@ -1022,6 +1092,9 @@ if "regras_amostragem" in abas_por_id:
                         ativo=True,
                         atuante_role=role,
                         atuante_nome=nome,
+                        procs_prioridade_normal=(novos_procs_prioridade or None) if novo_tipo == "percentual" else None,
+                        limiar_guias_prioritarias=novo_limiar_prior if novo_tipo == "percentual" else 5,
+                        pct_amostra_prioritaria=(nova_pct_prior / 100) if novo_tipo == "percentual" else 0.5,
                     )
                     if ok:
                         carregar_regras_amostragem_cache.clear()

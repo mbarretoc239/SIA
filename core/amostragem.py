@@ -1,5 +1,6 @@
 import html
 import json
+import math
 import re
 import unicodedata
 import zipfile
@@ -109,8 +110,14 @@ REGRAS_AMOSTRAGEM_PADRAO = {
     "IMPLANTE": {"tipo": "todas"},
     "PROTESE": {"tipo": "todas"},
     "PROTESE ESPECIAL": {"tipo": "todas"},
-    "CIRURGIA": {"tipo": "percentual", "pct": 0.30, "minimo_procs": 10, "minimo_amostra": 5},
-    "ENDODONTIA": {"tipo": "percentual", "pct": 0.50, "minimo_procs": 10},
+    "CIRURGIA": {
+        "tipo": "percentual", "pct": 0.30, "minimo_procs": 10, "minimo_amostra": 5,
+        "procs_prioridade": {"5010", "5030", "5031"}, "limiar_prioritarias": 5, "pct_prioritaria": 0.5,
+    },
+    "ENDODONTIA": {
+        "tipo": "percentual", "pct": 0.50, "minimo_procs": 10,
+        "procs_prioridade": {"2015", "2025", "2035"}, "limiar_prioritarias": 5, "pct_prioritaria": 0.5,
+    },
 }
 
 ORDEM_CRITICAS_PADRAO = [
@@ -145,28 +152,27 @@ def carregar_regras_amostragem_cache() -> tuple[dict, list]:
             regra = {"tipo": "percentual", "pct": float(l["pct"]), "minimo_procs": int(l["minimo_procs"] or 0)}
             if l.get("minimo_amostra"):
                 regra["minimo_amostra"] = int(l["minimo_amostra"])
+            # Prioridade de procedimento dentro da amostra -- mesma
+            # configuração que antes vivia hardcoded em
+            # PROCS_PRIORIDADE_NORMAL_PADRAO, agora editável por
+            # Admin/Gestor junto com o resto da regra (ver marcar_amostra).
+            # procs_prioridade None = sem separação por prioridade, cai
+            # direto no sorteio simples da especialidade inteira.
+            procs_str = l.get("procs_prioridade_normal") or ""
+            procs_prioridade = {c.strip() for c in procs_str.split(",") if c.strip()}
+            regra["procs_prioridade"] = procs_prioridade or None
+            regra["limiar_prioritarias"] = int(l.get("limiar_guias_prioritarias") or 5)
+            regra["pct_prioritaria"] = float(l.get("pct_amostra_prioritaria") or 0.5)
             regras[esp] = regra
     ordem_criticas = list(regras.keys())
     return regras, ordem_criticas
 
-# Procedimentos de baixa prioridade pra amostra, por especialidade — os mais
-# recorrentes/baratos, que passam pelo sorteio normal. Guias que contêm
-# QUALQUER procedimento fora desta lista são de alta prioridade e entram na
-# amostra automaticamente (sem depender do sorteio).
-#
-# Motivação: certos procedimentos são raros e/ou custosos e não podem cair
-# fora da amostra por acaso do sorteio (ex.: exodontia de incluso na
-# CIRURGIA). Deixá-los "sempre auditar" garante cobertura.
-#
-# Não confundir com "especialidade crítica" (ORDEM_CRITICAS/REGRAS_AMOSTRAGEM
-# acima) nem com "procedimento crítico" (PROCEDIMENTOS_CRITICOS_ESPECIALIDADE_
-# COMUM abaixo) — são três conceitos independentes: este aqui é só sobre
-# prioridade de procedimento dentro da amostra, DENTRO de uma especialidade
-# já crítica.
-PROCS_PRIORIDADE_NORMAL = {
-    "CIRURGIA": {"5010", "5030", "5031"},
-    "ENDODONTIA": {"2015", "2025", "2035"},
-}
+# Não confundir "prioridade de procedimento dentro da amostra" (regra.
+# procs_prioridade/limiar_prioritarias/pct_prioritaria, carregados por
+# carregar_regras_amostragem_cache) com "especialidade crítica"
+# (ORDEM_CRITICAS/REGRAS_AMOSTRAGEM acima) nem com "procedimento crítico"
+# (PROCEDIMENTOS_CRITICOS_ESPECIALIDADE_COMUM abaixo) — são três conceitos
+# independentes.
 
 # Especialidades que NÃO estão em REGRAS_AMOSTRAGEM (ex.: Periodontia,
 # Odontopediatria, Radiologia Especial...) normalmente não têm seção de
@@ -774,11 +780,13 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
          todas' (integral, ou < mínimo de procs), retorna tudo.
       2. Caso contrário, o tamanho da amostra = % das guias da especialidade
          (ex.: 30% pra CIRURGIA). Dentro desse tamanho, prioriza guias com
-         procs de alta prioridade:
-           - Se guias prioritárias ≤ 5: entram todas + completa com sorteio
-             das normais até bater o tamanho da amostra.
-           - Se guias prioritárias > 5: 50% da amostra vira prioritária
-             sorteada + 50% vira normal sorteada.
+         procs de alta prioridade (regra["procs_prioridade"], editável em
+         Configurações > Regras de Amostragem):
+           - Se guias prioritárias ≤ regra["limiar_prioritarias"] (padrão 5):
+             entram todas + completa com sorteio das normais até bater o
+             tamanho da amostra.
+           - Acima do limiar: regra["pct_prioritaria"] (padrão 50%) da
+             amostra vira prioritária sorteada + o resto vira normal sorteada.
 
     Coluna 'Motivo' é mantida por compatibilidade (dropada antes de renderizar).
     """
@@ -794,9 +802,9 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
 
     n_total_guias = len(df_esp_guias)
     total_procs_esp = int(df_esp_procs_brutos["Qtde"].sum())
-    procs_prioridade_normal = PROCS_PRIORIDADE_NORMAL.get(_norm(especialidade))
     regras, _ = carregar_regras_amostragem_cache()
     regra = regras.get(_norm(especialidade), {})
+    procs_prioridade_normal = regra.get("procs_prioridade")
 
     # Caminho 1: sem lista de prioridade normal OU regra que manda auditar tudo.
     def _todas(motivo=""):
@@ -834,8 +842,9 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
         df_normais = df[~df["_prioritaria"]].drop(columns=["_prioritaria"]).copy()
         n_prior = len(df_prioritarias)
         n_norm = len(df_normais)
+        limiar_prioritarias = regra.get("limiar_prioritarias", 5)
 
-        if n_prior <= 5:
+        if n_prior <= limiar_prioritarias:
             # Todas as prioritárias entram (limitadas ao tamanho da amostra) e
             # o restante da amostra é preenchido com sorteio das normais.
             n_prior_amostra = min(n_prior, tamanho_amostra)
@@ -847,16 +856,19 @@ def marcar_amostra(df_esp_guias: pd.DataFrame, especialidade: str,
                 else sortear_amostra(df_prioritarias, n_prior_amostra, seed=seed)
             )
         else:
-            # Composição 50/50 dentro da amostra. Se um dos lados não tem
-            # guias suficientes pra preencher a cota dele, o restante volta
-            # pro outro lado -- senão a amostra final fica menor que
-            # tamanho_amostra só porque um dos grupos estava vazio/pequeno
-            # (ex.: todas as guias prioritárias, nenhuma normal).
-            # Arredonda pra cima pro lado prioritário (não pra baixo): numa
-            # amostra ímpar, "//" sempre deixava a sobra pro lado normal,
+            # Composição ponderada por regra["pct_prioritaria"] (0-1, editável
+            # em Configurações > Regras de Amostragem, padrão 50%) dentro da
+            # amostra. Se um dos lados não tem guias suficientes pra
+            # preencher a cota dele, o restante volta pro outro lado --
+            # senão a amostra final fica menor que tamanho_amostra só porque
+            # um dos grupos estava vazio/pequeno (ex.: todas as guias
+            # prioritárias, nenhuma normal). Arredonda pra cima pro lado
+            # prioritário (math.ceil, não //): numa amostra ímpar, arredondar
+            # pra baixo sempre deixava a sobra pro lado normal,
             # sub-representando por 1 vaga justamente os procedimentos que
             # essa composição existe pra garantir cobertura.
-            n_prior_amostra = min(-(-tamanho_amostra // 2), n_prior)
+            pct_prioritaria = regra.get("pct_prioritaria", 0.5)
+            n_prior_amostra = min(math.ceil(tamanho_amostra * pct_prioritaria), n_prior)
             n_norm_amostra = min(tamanho_amostra - n_prior_amostra, n_norm)
             n_prior_amostra = min(n_prior_amostra + (tamanho_amostra - n_prior_amostra - n_norm_amostra), n_prior)
             df_prioritarias_final = sortear_amostra(df_prioritarias, n_prior_amostra, seed=seed)

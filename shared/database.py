@@ -753,9 +753,18 @@ class DatabaseManager:
         return self._get_paginado(url)
 
     def upsert_regra_amostragem(self, especialidade, tipo, pct, minimo_procs,
-                                 minimo_amostra, ordem, ativo, atuante_role, atuante_nome="") -> bool:
+                                 minimo_amostra, ordem, ativo, atuante_role, atuante_nome="",
+                                 procs_prioridade_normal=None, limiar_guias_prioritarias=5,
+                                 pct_amostra_prioritaria=0.5) -> bool:
         """Cria ou atualiza a regra de uma especialidade. Só Admin/Gestor —
-        checado aqui além de na tela, porque grava direto via API pública."""
+        checado aqui além de na tela, porque grava direto via API pública.
+
+        `procs_prioridade_normal`/`limiar_guias_prioritarias`/
+        `pct_amostra_prioritaria`: só têm efeito em regras "percentual" (ver
+        marcar_amostra em core/amostragem.py) -- guia com procedimento fora
+        dessa lista entra garantida na amostra; acima do limiar de guias
+        assim, a amostra vira uma composição ponderada por
+        pct_amostra_prioritaria em vez de "todas entram"."""
         if atuante_role not in ("Admin", "Gestor"):
             return False
         url = f"{self.supabase_url}/rest/v1/amostragem_regras_amostra?on_conflict=especialidade"
@@ -770,6 +779,9 @@ class DatabaseManager:
             "ativo": ativo,
             "atualizado_em": datetime.now(timezone.utc).isoformat(),
             "atualizado_por": atuante_nome,
+            "procs_prioridade_normal": procs_prioridade_normal,
+            "limiar_guias_prioritarias": limiar_guias_prioritarias,
+            "pct_amostra_prioritaria": pct_amostra_prioritaria,
         }
         r = requests.post(url, headers=headers_upsert, json=data)
         return r.ok
