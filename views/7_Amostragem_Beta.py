@@ -674,6 +674,14 @@ with aba_busca:
 
     guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
 
+    # Snapshot imutável da "Sugestão de amostra" no momento em que ela foi
+    # calculada pela primeira vez pra cada especialidade deste processo --
+    # usado pra controle de gestão: comparar contra guias_vistas pra saber se
+    # o auditor revisou tudo que foi sugerido originalmente, mesmo que a
+    # sugestão recalculada agora tenha mudado (config de regras ou base IA
+    # diferentes de quando o auditor trabalhou).
+    snapshots_sugestao = st.session_state.db.buscar_snapshots_sugestao_amostra(processo_ativo)
+
     # REGRAS_AMOSTRAGEM/ORDEM_CRITICAS já carregadas lá em cima (antes do
     # bloco de filtros), reaproveitadas aqui.
 
@@ -755,6 +763,33 @@ with aba_busca:
                 guias_contagem=df_esp_guias["NU_GUIA"].tolist() if contagem_especialidade else None,
             )
 
+        def _mostrar_info_snapshot(guias_sugeridas_agora: set):
+            # Snapshot imutável de quando a sugestão foi calculada pela
+            # primeira vez pra esse processo+especialidade -- avisa se a
+            # sugestão de agora já não bate mais com a original (config de
+            # regras ou base IA mudou desde que o auditor trabalhou nisso),
+            # e mostra quantas das guias ORIGINAIS já foram vistas até agora.
+            snap = snapshots_sugestao.get(esp)
+            if not snap:
+                return
+            guias_snap = snap["guias"]
+            vistas_do_snap = len(guias_snap & guias_vistas)
+            data_txt = ""
+            if snap.get("criado_em"):
+                try:
+                    data_txt = f" em {pd.to_datetime(snap['criado_em']).strftime('%d/%m/%Y %H:%M')}"
+                except (ValueError, TypeError):
+                    data_txt = ""
+            st.caption(
+                f"📌 Sugestão original registrada{data_txt}: {snap['tamanho_sugerido']} guia(s) — "
+                f"{vistas_do_snap} de {snap['tamanho_sugerido']} já vista(s) até agora."
+            )
+            if guias_sugeridas_agora != guias_snap:
+                st.caption(
+                    "⚠️ A sugestão recalculada agora é diferente da original (config de regras ou "
+                    "base IA mudou desde então) -- a comparação acima usa a lista ORIGINAL."
+                )
+
         df_amostra_especial = None
         titulo_amostra = None
 
@@ -779,6 +814,22 @@ with aba_busca:
         # aba de "Sugestão de amostra" (hoje mostraria 100% das guias, igual
         # à Tabela completa, sem utilidade nenhuma).
 
+        guias_sugeridas_agora = set()
+        if df_amostra_especial is not None:
+            guias_sugeridas_agora = set(df_amostra_especial["NU_GUIA"].astype(str))
+            # Registra o snapshot imutável na primeira vez que essa sugestão
+            # é calculada pra esse processo+especialidade -- nunca sobrescreve
+            # depois (ver salvar_snapshot_sugestao_amostra), então funciona
+            # como prova de "o que foi sugerido quando o auditor trabalhou
+            # nisso", mesmo que a sugestão mude depois.
+            if esp not in snapshots_sugestao:
+                if st.session_state.db.salvar_snapshot_sugestao_amostra(processo_ativo, esp, list(guias_sugeridas_agora)):
+                    snapshots_sugestao[esp] = {
+                        "guias": guias_sugeridas_agora,
+                        "tamanho_sugerido": len(guias_sugeridas_agora),
+                        "criado_em": None,
+                    }
+
         # "Sem Imagem": só guias com dado de imagem CONFIRMANDO falta (nunca
         # guia sem dado nenhum -- ver _guia_confirmada_sem_imagem e o aviso
         # de 4016R não importada logo acima). Só ganha aba própria se houver
@@ -793,16 +844,18 @@ with aba_busca:
             titulo_expander = f":orange[{titulo_expander}]"
 
         with st.expander(titulo_expander, expanded=False):
-            abas = [(f"Tabela completa ({total_guias})", df_esp_guias, False)]
+            abas = [(f"Tabela completa ({total_guias})", df_esp_guias, False, False)]
             if df_amostra_especial is not None:
-                abas.append((titulo_amostra, df_amostra_especial, True))
+                abas.append((titulo_amostra, df_amostra_especial, True, True))
             if len(df_sem_imagem) > 0:
-                abas.append((f"Sem Imagem ({len(df_sem_imagem)})", df_sem_imagem, False))
+                abas.append((f"Sem Imagem ({len(df_sem_imagem)})", df_sem_imagem, False, False))
 
             if len(abas) == 1:
                 _renderizar(df_esp_guias)
             else:
-                tabs_esp = st.tabs([titulo for titulo, _, _ in abas])
-                for tab_esp, (_, df_aba, contagem_especialidade) in zip(tabs_esp, abas):
+                tabs_esp = st.tabs([titulo for titulo, _, _, _ in abas])
+                for tab_esp, (_, df_aba, contagem_especialidade, eh_amostra) in zip(tabs_esp, abas):
                     with tab_esp:
+                        if eh_amostra:
+                            _mostrar_info_snapshot(guias_sugeridas_agora)
                         _renderizar(df_aba, contagem_especialidade)

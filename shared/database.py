@@ -796,6 +796,46 @@ class DatabaseManager:
         r = requests.delete(url, headers=self.headers)
         return r.ok
 
+    # --- Snapshot da "Sugestão de amostra" (controle de gestão) ---
+    def buscar_snapshots_sugestao_amostra(self, processo) -> dict:
+        """{especialidade: {"guias": set(NU_GUIA), "tamanho_sugerido": int,
+        "criado_em": str}} com o snapshot IMUTÁVEL de cada especialidade
+        desse processo -- registrado na primeira vez que a 'Sugestão de
+        amostra' foi calculada, nunca sobrescrito depois (ver
+        salvar_snapshot_sugestao_amostra). Uma consulta só pra todas as
+        especialidades do processo, em vez de uma por especialidade."""
+        url = (
+            f"{self.supabase_url}/rest/v1/amostragem_sugestao_snapshot"
+            f"?processo=eq.{processo}&select=especialidade,guias,tamanho_sugerido,criado_em"
+        )
+        resultado = {}
+        for item in self._get_paginado(url):
+            resultado[item["especialidade"]] = {
+                "guias": {g.strip() for g in item["guias"].split(",") if g.strip()},
+                "tamanho_sugerido": item["tamanho_sugerido"],
+                "criado_em": item["criado_em"],
+            }
+        return resultado
+
+    def salvar_snapshot_sugestao_amostra(self, processo, especialidade, guias: list) -> bool:
+        """Grava a 'Sugestão de amostra' atual como o snapshot oficial dessa
+        especialidade nesse processo -- só se ainda não existir um (ignore-
+        duplicates via UNIQUE(processo, especialidade)): a primeira vez que
+        a sugestão é calculada é o registro que fica valendo pra sempre,
+        mesmo que a config de regras ou a base IA mudem depois."""
+        if not guias:
+            return True
+        url = f"{self.supabase_url}/rest/v1/amostragem_sugestao_snapshot?on_conflict=processo,especialidade"
+        headers_insert = {**self.headers, "Prefer": "resolution=ignore-duplicates,return=minimal"}
+        data = {
+            "processo": str(processo),
+            "especialidade": especialidade,
+            "guias": ",".join(str(g) for g in guias),
+            "tamanho_sugerido": len(guias),
+        }
+        r = requests.post(url, headers=headers_insert, json=data)
+        return r.ok
+
     # --- Procedimento crítico (tabela_procedimentos.critico) ---
     def buscar_procedimentos(self, busca: str = "", limit: int = 50) -> list:
         """Pesquisa em tabela_procedimentos por código ou descrição (usado
