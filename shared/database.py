@@ -149,7 +149,12 @@ class DatabaseManager:
             f"{self.turso_url}/v2/pipeline",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json=body,
-            timeout=60,
+            # 120s (não 60s): _importar_por_mes_turso agora agrupa varios
+            # INSERTs de ate `lote` linhas numa unica chamada de pipeline pra
+            # reduzir ida-e-volta de rede -- um pipeline com varias
+            # instrucoes de milhares de linhas pode legitimamente passar de
+            # 60s numa planilha grande.
+            timeout=120,
         )
         if not resp.ok:
             raise RuntimeError(f"Falha no Turso: HTTP {resp.status_code} — {resp.text[:500]}")
@@ -164,7 +169,7 @@ class DatabaseManager:
     def _importar_por_mes_turso(
         self, tabela: str, registros: list, mes_referencia: str,
         campos_permitidos: tuple, manter_meses: int = 2, lote: int = 500,
-        ao_progredir=None, retomar: bool = False,
+        lotes_por_requisicao: int = 16, ao_progredir=None, retomar: bool = False,
     ) -> int:
         """Equivalente ao _importar_por_mes (Supabase), mas pro Turso: apaga
         o mês informado, insere os novos registros em lotes (multi-row
@@ -172,6 +177,16 @@ class DatabaseManager:
         em `campos_permitidos` -- ver comentário nas constantes TURSO_CAMPOS_*
         no topo do arquivo. `ao_progredir(enviados, total)`, se informado, é
         chamado a cada lote inserido -- pra UI mostrar barra de progresso.
+
+        `lotes_por_requisicao`: quantos INSERTs de `lote` linhas cada vão
+        juntos numa ÚNICA chamada HTTP ao Turso (via _turso_pipeline, que já
+        aceita uma lista de statements). Antes eram 1 requisição por lote --
+        numa planilha de centenas de milhares de linhas isso vira centenas
+        de idas-e-voltas de rede SEQUENCIAIS (cada uma espera a anterior
+        responder), o maior gargalo real da importação. Agrupar N lotes por
+        requisição corta o número de round-trips por N, sem aumentar o
+        tamanho de cada INSERT individual (mesmo `lote` de sempre, já
+        validado em produção).
 
         `retomar=True`: pula o DELETE e conta quantas linhas desse mês já
         existem na tabela, pulando essa quantidade no INÍCIO de `registros`
@@ -219,16 +234,20 @@ class DatabaseManager:
         total = ja_inseridas
         if ao_progredir and ja_inseridas:
             ao_progredir(total, total_registros)
-        for i in range(0, len(pendentes), lote):
-            pedaco = pendentes[i:i + lote]
-            placeholder_linha = "(" + ",".join("?" * len(colunas)) + ")"
-            sql = (
-                f"INSERT INTO {tabela} ({','.join(colunas)}) VALUES "
-                + ",".join([placeholder_linha] * len(pedaco))
-            )
-            args = [self._turso_arg(reg.get(col)) for reg in pedaco for col in colunas]
-            self._turso_pipeline([{"sql": sql, "args": args}], token)
-            total += len(pedaco)
+        placeholder_linha = "(" + ",".join("?" * len(colunas)) + ")"
+        lotes = [pendentes[i:i + lote] for i in range(0, len(pendentes), lote)]
+        for i in range(0, len(lotes), lotes_por_requisicao):
+            grupo = lotes[i:i + lotes_por_requisicao]
+            statements = []
+            for pedaco in grupo:
+                sql = (
+                    f"INSERT INTO {tabela} ({','.join(colunas)}) VALUES "
+                    + ",".join([placeholder_linha] * len(pedaco))
+                )
+                args = [self._turso_arg(reg.get(col)) for reg in pedaco for col in colunas]
+                statements.append({"sql": sql, "args": args})
+            self._turso_pipeline(statements, token)
+            total += sum(len(pedaco) for pedaco in grupo)
             if ao_progredir:
                 ao_progredir(total, total_registros)
 
