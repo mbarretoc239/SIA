@@ -769,6 +769,12 @@ with aba_busca:
             # sugestão de agora já não bate mais com a original (config de
             # regras ou base IA mudou desde que o auditor trabalhou nisso),
             # e mostra quantas das guias ORIGINAIS já foram vistas até agora.
+            # Só pra quem tem função de gestão -- é controle de gestão sobre
+            # o trabalho do auditor, ele não precisa saber que isso é
+            # registrado (o registro em si acontece de qualquer forma,
+            # independente de quem está vendo a tela).
+            if _role_pagina not in ("Gestor", "Admin"):
+                return
             snap = snapshots_sugestao.get(esp)
             if not snap:
                 return
