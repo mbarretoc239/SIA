@@ -317,6 +317,26 @@ with aba_busca:
         guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
     df = _guias_para_df(guias)
 
+    # Consulta à parte, não entra em sorteio/contagem de amostra -- só pra
+    # quem quiser conferir o que a IA já liberou nesse processo. Fica antes
+    # do "df.empty" abaixo porque um processo pode ter só guias liberadas
+    # (nenhuma pendente), e mesmo assim vale poder consultar essa lista.
+    with st.expander("Guias já liberadas pela IA (consulta)"):
+        guias_liberadas = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
+        if not guias_liberadas:
+            st.caption("Nenhuma guia liberada pela IA encontrada pra esse processo.")
+        else:
+            df_liberadas = pd.DataFrame({
+                "Especialidade": [g["ds_grupo"] for g in guias_liberadas],
+                "NU_GUIA": [g["nu_guia"] for g in guias_liberadas],
+                "Cód. Procedimento": [g["cd_procedimento"] for g in guias_liberadas],
+            })
+            st.caption(
+                f"{df_liberadas['NU_GUIA'].nunique()} guia(s) única(s), "
+                f"{len(df_liberadas)} procedimento(s) liberado(s) pela IA."
+            )
+            st.dataframe(df_liberadas, use_container_width=True, hide_index=True)
+
     if df.empty:
         st.warning(
             f"Nenhuma guia com LIBERAÇÃO = N encontrada para o processo "

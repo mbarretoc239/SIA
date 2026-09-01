@@ -320,6 +320,17 @@ class DatabaseManager:
         }], self._turso_token_leitura)[0]
         return self._turso_linhas(resultado)
 
+    def buscar_guias_liberadas_ia_por_processo(self, nu_ordem: str) -> list:
+        """Guias com LIBERACAO=S (já liberadas pela IA, não entram no
+        sorteio/contagem da Amostragem) pra um processo -- só consulta, pra
+        quem quiser conferir o que a IA já deu como certo."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, cd_operador_atend "
+                   "FROM base_ia_guias WHERE nu_ordem = ? AND liberacao = 'S'",
+            "args": [self._turso_arg(str(nu_ordem))],
+        }], self._turso_token_leitura)[0]
+        return self._turso_linhas(resultado)
+
     def listar_processos_agregado(self) -> list:
         """Um registro por NU_ORDEM (processo) do mês mais recente em
         base_ia_guias -- agregado em SQL (2 queries numa única chamada ao
