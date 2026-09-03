@@ -263,6 +263,49 @@ def test_resumido_480_sem_frase_especial():
     assert "1 glosa 480 (guia G1)" in txt
 
 
+def test_resumido_conta_ocorrencias_nao_guias_distintas():
+    # A mesma guia pode levar a mesma glosa mais de uma vez (2 procedimentos
+    # diferentes glosados 430 na mesma guia) -- "N glosas" deve contar as
+    # ocorrências, não quantas guias distintas foram afetadas (G1 tem 2
+    # ocorrências + G2 e G3 têm 1 cada = 4 glosas, mas só 3 guias).
+    rows = [
+        _row("G1", "5030", "exodontia", "430", "Administrativa"),
+        _row("G1", "5030", "exodontia", "430", "Administrativa"),
+        _row("G2", "5010", "exodontia", "430", "Administrativa"),
+        _row("G3", "5030", "exodontia", "430", "Administrativa"),
+    ]
+    txt = _gerar_resumido(rows)
+    assert "4 glosas 430" in txt
+    assert "guia G1 e mais 2 guias" in txt
+
+
+def test_resumido_funde_420_e_430_contagens_assimetricas():
+    # 2x glosa 420 e 1x glosa 430 na mesma guia -- cada código mantém sua
+    # própria contagem de ocorrências mesmo depois do merge numa só frase.
+    rows = [
+        _row("G1", "2015", "endodontia", "420", "Técnica"),
+        _row("G1", "2015", "endodontia", "420", "Técnica"),
+        _row("G1", "2015", "endodontia", "430", "Técnica"),
+    ]
+    txt = _gerar_resumido(rows)
+    assert "2 glosas 420 e 1 glosa 430 (guia G1)" in txt
+
+
+def test_resumido_com_justificativa_conta_ocorrencias():
+    # Mesmo cuidado do modo Resumido puro (ver
+    # test_resumido_conta_ocorrencias_nao_guias_distintas), mas no modo que
+    # mantém a justificativa -- agrupamento por (código, sub, justificativa).
+    rows = [
+        _row("G1", "5030", "exodontia", "430", "Administrativa", just="falta rx inicial"),
+        _row("G1", "5030", "exodontia", "430", "Administrativa", just="falta rx inicial"),
+        _row("G2", "5010", "exodontia", "430", "Administrativa", just="falta rx inicial"),
+    ]
+    df = pd.DataFrame(rows)
+    txt = text_engine.gerar_texto(df, "Resumido com Justificativa", META_BASE)
+    assert "3 glosas 430" in txt
+    assert "guia G1 e mais 1 guia)" in txt
+
+
 def test_completa_e_resumida_ambas_funcionam():
     rows = [_row("G1", "4170", "resina", "459", "Crítica")]
     resumida = _gerar(rows, "Resumido")

@@ -1076,6 +1076,17 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
         })
 
     guias_por_codigo = collections.defaultdict(set)
+    # Contagem de OCORRÊNCIAS (não guias distintas) -- a mesma guia pode
+    # levar a mesma glosa mais de uma vez (ex.: 2 procedimentos diferentes
+    # glosados 430 na mesma guia), e "N glosas X" deve refletir esse total,
+    # não quantas guias foram afetadas (guias_por_codigo continua servindo
+    # só pra montar a lista "(guia X e mais N guias)", que é sobre guias
+    # mesmo). 420+430 contam à parte (contagem_420/430) porque o merge
+    # abaixo colapsa os dois códigos numa única entrada por guia, perdendo
+    # a contagem individual de cada um se não for somada antes do merge.
+    contagem_por_codigo = collections.defaultdict(int)
+    contagem_420 = 0
+    contagem_430 = 0
     tipos_por_codigo = collections.defaultdict(set)
     # Esse modo não guarda subglosa na cláusula (só código + guias) -- não
     # dá pra detectar a 438.32/438.33 pelo texto final como nos outros
@@ -1086,10 +1097,13 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
         codigos_guia = {i["glosa"] for i in itens_guia}
         # Mesma fusão 420+430 (falta de RX inicial e final) usada nos outros níveis.
         if "420" in codigos_guia and "430" in codigos_guia:
+            contagem_420 += sum(1 for i in itens_guia if i["glosa"] == "420")
+            contagem_430 += sum(1 for i in itens_guia if i["glosa"] == "430")
             itens_guia = [i for i in itens_guia if i["glosa"] not in ("420", "430")]
             itens_guia.append({"glosa": "430_420", "sub": "", "tipo": ""})
         for item in itens_guia:
             guias_por_codigo[item["glosa"]].add(guia)
+            contagem_por_codigo[item["glosa"]] += 1
             if item["tipo"]:
                 tipos_por_codigo[item["glosa"]].add(item["tipo"])
             if item["glosa"] == "438" and item["sub"] in ("32", "33"):
@@ -1108,12 +1122,14 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
     clausulas_prioritarias = []
     for codigo, guias in guias_por_codigo.items():
         guias_ordenadas = sorted(guias)
-        n = len(guias_ordenadas)
         if codigo == "430_420":
             # Continuam na mesma frase/guia, mas cada código com sua própria
-            # contagem ("N glosas 420 e N glosas 430"), não somadas numa só.
-            rotulo_codigo = f"{n} {'glosa' if n == 1 else 'glosas'} 420 e {n} {'glosa' if n == 1 else 'glosas'} 430"
+            # contagem de ocorrências ("N glosas 420 e M glosas 430"), que
+            # pode divergir entre os dois (ex.: 2x 430 e 1x 420 na mesma guia).
+            n420, n430 = contagem_420, contagem_430
+            rotulo_codigo = f"{n420} {'glosa' if n420 == 1 else 'glosas'} 420 e {n430} {'glosa' if n430 == 1 else 'glosas'} 430"
         else:
+            n = contagem_por_codigo[codigo]
             rotulo_codigo = f"{n} {'glosa' if n == 1 else 'glosas'} {codigo}"
         frase = f"{rotulo_codigo} ({_formatar_guias_resumido_curto(guias_ordenadas)})"
         if codigo in codigo_tem_prioridade_maxima:
@@ -1130,7 +1146,7 @@ def _gerar_texto_resumido_curto(df, meta, prefixo) -> str:
     clausula_480 = ""
     if guias_480:
         guias_480_ordenadas = sorted(guias_480)
-        n = len(guias_480_ordenadas)
+        n = contagem_por_codigo["480"]
         clausula_480 = f"{n} {'glosa' if n == 1 else 'glosas'} 480 ({_formatar_guias_resumido_curto(guias_480_ordenadas)})"
 
     clausulas = clausulas_prioritarias + clausulas_criticas + clausulas_outras
@@ -1171,16 +1187,25 @@ def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
         })
 
     guias_por_chave = collections.defaultdict(set)
+    # Contagem de OCORRÊNCIAS por chave (mesmo motivo pra contagem_por_codigo
+    # em _gerar_texto_resumido_curto) -- a mesma guia pode repetir a mesma
+    # (código, sub, justificativa) mais de uma vez.
+    contagem_por_chave = collections.defaultdict(int)
+    contagem_420 = 0
+    contagem_430 = 0
     tipos_por_chave = collections.defaultdict(set)
     for guia, itens_guia in por_guia.items():
         codigos_guia = {i["glosa"] for i in itens_guia}
         # Mesma fusão 420+430 (falta de RX inicial e final) usada nos outros níveis.
         if "420" in codigos_guia and "430" in codigos_guia:
+            contagem_420 += sum(1 for i in itens_guia if i["glosa"] == "420")
+            contagem_430 += sum(1 for i in itens_guia if i["glosa"] == "430")
             itens_guia = [i for i in itens_guia if i["glosa"] not in ("420", "430")]
             itens_guia.append({"glosa": "430_420", "sub": "", "justificativa": "", "tipo": ""})
         for item in itens_guia:
             chave = (item["glosa"], item["sub"], item["justificativa"])
             guias_por_chave[chave].add(guia)
+            contagem_por_chave[chave] += 1
             if item["tipo"]:
                 tipos_por_chave[chave].add(item["tipo"])
 
@@ -1191,12 +1216,14 @@ def _gerar_texto_resumido_com_justificativa(df, meta, prefixo) -> str:
     for chave, guias in guias_por_chave.items():
         codigo, sub, justificativa = chave
         guias_ordenadas = sorted(guias)
-        n = len(guias_ordenadas)
         if codigo == "430_420":
             # Continuam na mesma frase/guia, mas cada código com sua própria
-            # contagem ("N glosas 420 e N glosas 430"), não somadas numa só.
-            frase = f"{n} {'glosa' if n == 1 else 'glosas'} 420 e {n} {'glosa' if n == 1 else 'glosas'} 430"
+            # contagem de ocorrências ("N glosas 420 e M glosas 430"), que
+            # pode divergir entre os dois.
+            n420, n430 = contagem_420, contagem_430
+            frase = f"{n420} {'glosa' if n420 == 1 else 'glosas'} 420 e {n430} {'glosa' if n430 == 1 else 'glosas'} 430"
         else:
+            n = contagem_por_chave[chave]
             frase = f"{n} {'glosa' if n == 1 else 'glosas'} {codigo}"
         if justificativa:
             frase += f", {justificativa}"
