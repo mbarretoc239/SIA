@@ -366,9 +366,9 @@ COLUNAS_NECESSARIAS_5310 = {
 LIMITE_GLOSA_5310 = 400
 
 
-def preparar_registros_5310(arquivo) -> tuple[list, str, int]:
+def preparar_registros_5310(arquivo) -> tuple[list, str, int, int]:
     """Lê o REL5310 (.xlsx, já reduzido pelo usuário) e devolve
-    (registros_para_inserir, mes_referencia, total_bruto).
+    (registros_para_inserir, mes_referencia, total_bruto, nao_cruzados).
 
     Só entram linhas com GLOSA numérica < LIMITE_GLOSA_5310 -- são as
     glosas administrativas graves que a Amostragem sinaliza (046, 066 etc.),
@@ -382,11 +382,28 @@ def preparar_registros_5310(arquivo) -> tuple[list, str, int]:
     glosado é o mesmo que foi pago ou um diferente. Usa a que estiver
     preenchida, priorizando a do procedimento GLOSADO.
 
+    O código do REL5310 é o TUSS "de verdade" (longo, ex.: 85200158) --
+    diferente do código curto interno usado em tabela_procedimentos/base IA
+    (ex.: 4081), sem tabela de conversão entre os dois (mesmo problema já
+    documentado na seção "Histórico do prestador" desta tela). Como não tem
+    de-para de código, cruza pelo NOME do procedimento (normalizado) contra
+    o catálogo -- quando bate, usa o código curto interno (mantém
+    REQUISITOS/consistência com o resto da tela); quando não bate, cai pro
+    código TUSS do arquivo mesmo (melhor exibir algo do que nada).
+    `nao_cruzados` conta quantas linhas não bateram por nome, pra avisar o
+    usuário quantas ficaram só com o código TUSS.
+
     `mes_referencia` vem de DATA DE PAGAMENTO -- representa o ciclo/mês
     desse relatório (pode ter mais de um valor no arquivo, ex.: parcelas do
     dia 1 e do dia 15, mas sempre do mesmo mês), ao contrário de
     DATA DE PRODUCAO, que varia livremente entre guias antigas e recentes.
     """
+    from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
+
+    mapa_por_descricao = {}
+    for codigo_curto, descricao in carregar_mapa_procedimentos().items():
+        mapa_por_descricao.setdefault(_norm(descricao), codigo_curto)
+
     wb, linhas, idx = _abrir_planilha_normalizada(arquivo, COLUNAS_NECESSARIAS_5310)
 
     i_processo = idx["PROCESSO"]
@@ -417,6 +434,7 @@ def preparar_registros_5310(arquivo) -> tuple[list, str, int]:
     registros = []
     mes_referencia = None
     total_bruto = 0
+    nao_cruzados = 0
     for linha in linhas:
         if linha[i_processo] is None:
             continue
@@ -439,8 +457,13 @@ def preparar_registros_5310(arquivo) -> tuple[list, str, int]:
                 else str(dt_pagamento)[:7]
             )
 
-        cd_procedimento = _texto_numerico(linha[i_cod_proc_glosado]) or _texto_numerico(linha[i_cod_proc])
+        cd_procedimento_tuss = _texto_numerico(linha[i_cod_proc_glosado]) or _texto_numerico(linha[i_cod_proc])
         nomenclatura = _preenchido(linha[i_nomenc_glosado]) or _preenchido(linha[i_nomenc_proc])
+
+        cd_procedimento = mapa_por_descricao.get(_norm(nomenclatura), "")
+        if not cd_procedimento:
+            cd_procedimento = cd_procedimento_tuss
+            nao_cruzados += 1
 
         registros.append({
             "nu_ordem": _texto_numerico(linha[i_processo]),
@@ -464,7 +487,7 @@ def preparar_registros_5310(arquivo) -> tuple[list, str, int]:
     for registro in registros:
         registro["mes_referencia"] = mes_referencia
 
-    return registros, mes_referencia, total_bruto
+    return registros, mes_referencia, total_bruto, nao_cruzados
 
 
 # Especialidades (DS_GRUPO) conhecidas na base — usado só para popular o

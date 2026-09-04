@@ -1412,7 +1412,7 @@ if "importar_planilhas" in abas_por_id:
                 if arquivo_5310 and st.button("Importar REL5310", key="btn_importar_5310"):
                     try:
                         with st.spinner("Lendo planilha..."):
-                            registros_5310, mes_referencia_5310, total_bruto_5310 = preparar_registros_5310(arquivo_5310)
+                            registros_5310, mes_referencia_5310, total_bruto_5310, nao_cruzados_5310 = preparar_registros_5310(arquivo_5310)
                         if not registros_5310:
                             st.warning(
                                 "Nenhuma linha com glosa administrativa (< 400) encontrada nesse arquivo."
@@ -1428,9 +1428,14 @@ if "importar_planilhas" in abas_por_id:
                                 retomar=retomar_5310,
                             )
                             barra_5310.empty()
+                            msg_cruzamento = (
+                                f" {nao_cruzados_5310} não bateram pelo nome do procedimento e ficaram "
+                                "com o código TUSS do arquivo." if nao_cruzados_5310 else " Todos os "
+                                "procedimentos bateram com o catálogo pelo nome."
+                            )
                             st.success(
                                 f"Mês {mes_referencia_5310}: {total_inserido_5310} glosa(s) administrativa(s) "
-                                f"importada(s) (de {total_bruto_5310} linha(s) no arquivo)."
+                                f"importada(s) (de {total_bruto_5310} linha(s) no arquivo).{msg_cruzamento}"
                             )
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")
