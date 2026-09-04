@@ -234,7 +234,10 @@ with aba_busca:
     if buscar:
         st.session_state["_amostragem_beta_processo"] = processo_digitado.strip()
 
-    if st.session_state.get("role_interno") in ("Gestor", "Admin"):
+    # Configurável em Configurações > Permissões (módulo "amostragem_lista_
+    # processos") -- por padrão só Gestor/Admin, mas dá pra abrir exceção
+    # pra um usuário específico sem precisar mudar a role dele.
+    if tem_acesso_modulo(_permissoes_pagina, _role_pagina, "amostragem_lista_processos", _usuario_id_pagina, _excecoes_pagina):
         with st.expander("Lista de processos do mês"):
             with st.spinner("Carregando processos..."):
                 df_processos = montar_lista_processos_mes(

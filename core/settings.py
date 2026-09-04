@@ -67,6 +67,13 @@ MODULOS_CONTROLADOS = {
     "copia_rapida": "Cópia Rápida (Cabeçalhos)",
     "amostragem": "Amostragem",
     "produtividade": "Produtividade",
+    # Sub-recursos dentro de um módulo -- mesma mecânica (permissão por role +
+    # exceção por usuário), só que travando uma PARTE da tela em vez do
+    # módulo inteiro. Hoje só tem esse; outros pontos hoje hardcoded pra
+    # Gestor/Admin (ver views/7_Amostragem_Beta.py e views/8_Produtividade.py)
+    # podem virar entradas aqui do mesmo jeito, se precisar de exceção por
+    # usuário no futuro.
+    "amostragem_lista_processos": "Amostragem — Lista de processos do mês",
 }
 
 # Roles cujo acesso aos módulos acima é configurável
