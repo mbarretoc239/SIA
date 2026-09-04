@@ -433,12 +433,11 @@ with aba_busca:
         else:
             st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
 
-        if glosas_5310:
-            codigos_5310_aviso = sorted({str(g["glosa"]) for g in glosas_5310}, key=lambda c: (c != "46", int(c)))
-            st.error(
-                f"⚠️ Processo possui glosa(s) administrativa(s) grave(s): "
-                f"{', '.join(codigos_5310_aviso)} — verificar (ver Detalhamento por especialidade abaixo)."
-            )
+        # Aviso no cabeçalho só pra glosa 46 (fraude) -- as demais glosas do
+        # REL5310 (10, 25, 69 etc.) ainda ganham expander próprio no
+        # Detalhamento abaixo, só não chamam atenção aqui em cima.
+        if any(str(g["glosa"]) == "46" for g in glosas_5310):
+            st.error("⚠️ Atenção auditor: Processo possui glosas 46, verificar no detalhamento abaixo")
 
         if info_status is None:
             st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
