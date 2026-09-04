@@ -351,6 +351,122 @@ def preparar_registros_imagem(arquivo) -> tuple[list, str, int]:
     return registros, mes_referencia, total_bruto
 
 
+# Colunas mínimas esperadas no REL5310 (glosas administrativas graves, ex.:
+# 046 "imagem em histórico de beneficiários distintos"). O arquivo original
+# tem CPF/CNPJ e nome de paciente em toda linha e centenas de milhares de
+# linhas -- o usuário reduz antes de subir (só as linhas com glosa < 400 que
+# interessam pra Amostragem), e LIMITE_GLOSA_5310 abaixo é a trava
+# defensiva contra subir o arquivo inteiro por engano.
+COLUNAS_NECESSARIAS_5310 = {
+    "PROCESSO", "GUIA", "GLOSA", "CODIGO DO PROCEDIMENTO",
+    "CODIGO DO PROCEDIMENTO GLOSADO", "NOMECLATURA DO PROCEDIMENTO",
+    "NOMECLATURA DO PROCEDIMENTO GLOSADO", "TIPO GLOSA",
+    "JUSTIFICATIVA DA GLOSA", "DATA DE PAGAMENTO",
+}
+LIMITE_GLOSA_5310 = 400
+
+
+def preparar_registros_5310(arquivo) -> tuple[list, str, int]:
+    """Lê o REL5310 (.xlsx, já reduzido pelo usuário) e devolve
+    (registros_para_inserir, mes_referencia, total_bruto).
+
+    Só entram linhas com GLOSA numérica < LIMITE_GLOSA_5310 -- são as
+    glosas administrativas graves que a Amostragem sinaliza (046, 066 etc.),
+    não as glosas técnicas comuns já cobertas pela análise regular. Isso é
+    uma trava DEFENSIVA (o arquivo já vem reduzido pelo usuário só com essas
+    linhas) contra subir por engano o REL5310 inteiro, que tem CPF/CNPJ e
+    nome de paciente em toda linha.
+
+    Cada linha do REL5310 tem duas colunas de procedimento (o pago e o
+    glosado) -- só uma vem preenchida por linha, dependendo se o item
+    glosado é o mesmo que foi pago ou um diferente. Usa a que estiver
+    preenchida, priorizando a do procedimento GLOSADO.
+
+    `mes_referencia` vem de DATA DE PAGAMENTO -- representa o ciclo/mês
+    desse relatório (pode ter mais de um valor no arquivo, ex.: parcelas do
+    dia 1 e do dia 15, mas sempre do mesmo mês), ao contrário de
+    DATA DE PRODUCAO, que varia livremente entre guias antigas e recentes.
+    """
+    wb, linhas, idx = _abrir_planilha_normalizada(arquivo, COLUNAS_NECESSARIAS_5310)
+
+    i_processo = idx["PROCESSO"]
+    i_guia = idx["GUIA"]
+    i_glosa = idx["GLOSA"]
+    i_cod_proc = idx["CODIGO DO PROCEDIMENTO"]
+    i_cod_proc_glosado = idx["CODIGO DO PROCEDIMENTO GLOSADO"]
+    i_nomenc_proc = idx["NOMECLATURA DO PROCEDIMENTO"]
+    i_nomenc_glosado = idx["NOMECLATURA DO PROCEDIMENTO GLOSADO"]
+    i_tipo_glosa = idx["TIPO GLOSA"]
+    i_justificativa = idx["JUSTIFICATIVA DA GLOSA"]
+    i_dt_pagamento = idx["DATA DE PAGAMENTO"]
+
+    def _preenchido(valor) -> str:
+        return "" if valor is None else str(valor).strip()
+
+    def _texto_numerico(valor) -> str:
+        # Processo/guia/código de procedimento são numéricos no arquivo,
+        # mas o Excel às vezes guarda um inteiro como float (123.0) -- sem
+        # isso viraria "123.0" em vez de "123", quebrando o cruzamento com
+        # NU_GUIA/NU_ORDEM (sempre string sem sufixo) do resto da tela.
+        if valor is None:
+            return ""
+        if isinstance(valor, float) and valor.is_integer():
+            return str(int(valor))
+        return str(valor).strip()
+
+    registros = []
+    mes_referencia = None
+    total_bruto = 0
+    for linha in linhas:
+        if linha[i_processo] is None:
+            continue
+        total_bruto += 1
+
+        glosa_val = linha[i_glosa]
+        if glosa_val is None or _preenchido(glosa_val) == "":
+            continue
+        try:
+            glosa_num = int(glosa_val)
+        except (TypeError, ValueError):
+            continue
+        if glosa_num >= LIMITE_GLOSA_5310:
+            continue
+
+        if mes_referencia is None and linha[i_dt_pagamento] is not None:
+            dt_pagamento = linha[i_dt_pagamento]
+            mes_referencia = (
+                dt_pagamento.strftime("%Y-%m") if hasattr(dt_pagamento, "strftime")
+                else str(dt_pagamento)[:7]
+            )
+
+        cd_procedimento = _texto_numerico(linha[i_cod_proc_glosado]) or _texto_numerico(linha[i_cod_proc])
+        nomenclatura = _preenchido(linha[i_nomenc_glosado]) or _preenchido(linha[i_nomenc_proc])
+
+        registros.append({
+            "nu_ordem": _texto_numerico(linha[i_processo]),
+            "nu_guia": _texto_numerico(linha[i_guia]),
+            "cd_procedimento": cd_procedimento,
+            "nomenclatura_procedimento": nomenclatura,
+            "glosa": str(glosa_num),
+            "tipo_glosa": _preenchido(linha[i_tipo_glosa]),
+            "justificativa_glosa": _preenchido(linha[i_justificativa]),
+            "mes_referencia": None,
+        })
+
+    wb.close()
+
+    if mes_referencia is None:
+        raise ValueError(
+            "Não foi possível ler DATA DE PAGAMENTO para determinar o mês de referência "
+            f"(nenhuma linha com glosa < {LIMITE_GLOSA_5310} encontrada nesse arquivo?)."
+        )
+
+    for registro in registros:
+        registro["mes_referencia"] = mes_referencia
+
+    return registros, mes_referencia, total_bruto
+
+
 # Especialidades (DS_GRUPO) conhecidas na base — usado só para popular o
 # seletor do painel de gerenciamento; não limita o que pode ser sorteado.
 ESPECIALIDADES_CONHECIDAS = [

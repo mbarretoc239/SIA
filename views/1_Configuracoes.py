@@ -5,7 +5,7 @@ import pandas as pd
 import io
 from shared.database import DatabaseManager
 
-from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem
+from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem, preparar_registros_5310
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
 from core.settings import carregar_excecoes_modulos_cache, carregar_permissoes_modulos_cache
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
@@ -1390,6 +1390,47 @@ if "importar_planilhas" in abas_por_id:
                             st.success(
                                 f"Mês {mes_referencia_img}: {total_inserido_img} de {total_bruto_img} "
                                 f"linha(s) importadas com sucesso."
+                            )
+                    except Exception as erro:
+                        st.error(f"Falha na importação: {erro}")
+
+            with st.expander("Planilha REL5310 — glosas administrativas (Amostragem)", expanded=False):
+                st.caption(
+                    "Sobe o REL5310 já reduzido (só as linhas com glosa administrativa grave, ex.: "
+                    "046, 066 — o arquivo original tem CPF/CNPJ e nome de paciente em toda linha, "
+                    "não suba ele inteiro). Só o necessário pra sinalizar na Amostragem é gravado "
+                    f"(processo, guia, procedimento, código e justificativa da glosa) -- linhas com "
+                    "glosa ≥ 400 são ignoradas mesmo que venham no arquivo, como trava extra. O mês "
+                    "de referência é lido de DATA DE PAGAMENTO."
+                )
+                arquivo_5310 = st.file_uploader("Relatório REL5310 (.xlsx)", type=["xlsx"], key="upload_5310")
+                retomar_5310 = st.checkbox(
+                    "Retomar import interrompido (reenviando o MESMO arquivo de antes -- "
+                    "não apaga o que já foi salvo, só completa o resto)",
+                    key="retomar_5310",
+                )
+                if arquivo_5310 and st.button("Importar REL5310", key="btn_importar_5310"):
+                    try:
+                        with st.spinner("Lendo planilha..."):
+                            registros_5310, mes_referencia_5310, total_bruto_5310 = preparar_registros_5310(arquivo_5310)
+                        if not registros_5310:
+                            st.warning(
+                                "Nenhuma linha com glosa administrativa (< 400) encontrada nesse arquivo."
+                            )
+                        else:
+                            barra_5310 = st.progress(0.0, text=f"Importando 0/{len(registros_5310)}...")
+
+                            def _atualizar_barra_5310(enviados, total):
+                                barra_5310.progress(enviados / total, text=f"Importando {enviados}/{total}...")
+
+                            total_inserido_5310 = db.importar_5310(
+                                registros_5310, mes_referencia_5310, ao_progredir=_atualizar_barra_5310,
+                                retomar=retomar_5310,
+                            )
+                            barra_5310.empty()
+                            st.success(
+                                f"Mês {mes_referencia_5310}: {total_inserido_5310} glosa(s) administrativa(s) "
+                                f"importada(s) (de {total_bruto_5310} linha(s) no arquivo)."
                             )
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")

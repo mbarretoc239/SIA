@@ -324,6 +324,13 @@ with aba_busca:
     # também as liberadas antes de montar `df`.
     analise_integral = st.session_state.db.buscar_analise_integral(processo_ativo)
 
+    # Glosas administrativas graves do REL5310 (046, 066 etc.) -- guias que
+    # nem aparecem na base IA, porque o relatório da IA não traz guia já
+    # glosada. Fonte totalmente separada de `guias`/`df` abaixo; vira uma
+    # ou mais seções próprias no Detalhamento (ver mais abaixo), sempre no
+    # topo, sem depender de especialidade nem de sorteio.
+    glosas_5310 = st.session_state.db.buscar_glosas_5310_por_processo(processo_ativo)
+
     with st.spinner("Buscando guias..."):
         guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
         guias_liberadas = (
@@ -425,6 +432,13 @@ with aba_busca:
             )
         else:
             st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
+
+        if glosas_5310:
+            codigos_5310_aviso = sorted({str(g["glosa"]) for g in glosas_5310}, key=lambda c: (c != "46", int(c)))
+            st.error(
+                f"⚠️ Processo possui glosa(s) administrativa(s) grave(s): "
+                f"{', '.join(codigos_5310_aviso)} — verificar (ver Detalhamento por especialidade abaixo)."
+            )
 
         if info_status is None:
             st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
@@ -818,6 +832,37 @@ with aba_busca:
 
     # --- Detalhamento ---
     st.markdown("### Detalhamento por especialidade")
+
+    # Glosas administrativas graves (REL5310) -- SEMPRE no topo, acima de
+    # qualquer especialidade (inclusive crítica). Uma seção por código de
+    # glosa encontrado nesse processo (046, 066 etc.), tratando o código
+    # como se fosse a "especialidade" só pra reaproveitar
+    # consolidar_por_guia/renderizar_tabela_guias -- essas guias não têm
+    # DS_GRUPO nenhum (nem vêm da base IA). Sem sugestão de amostra: é
+    # sempre 100%, o auditor precisa checar todas. 046 sempre primeiro
+    # (maior gravidade/fraude); as demais só ordenadas pelo código.
+    if glosas_5310:
+        df_5310 = pd.DataFrame({
+            "Especialidade": [str(g["glosa"]) for g in glosas_5310],
+            "CD_PROCEDIMENTO": [g["cd_procedimento"] for g in glosas_5310],
+            "NU_GUIA": [g["nu_guia"] for g in glosas_5310],
+            "Qtde": 1,
+        })
+        df_guias_5310 = consolidar_por_guia(df_5310)
+        codigos_5310 = sorted(
+            df_guias_5310["Especialidade"].unique().tolist(),
+            key=lambda c: (c != "46", int(c)),
+        )
+        for codigo in codigos_5310:
+            df_codigo_5310 = df_guias_5310[df_guias_5310["Especialidade"] == codigo].reset_index(drop=True)
+            titulo_5310 = f"Guias com glosa {codigo} — {len(df_codigo_5310)} guia(s)"
+            titulo_5310 = f":red[{titulo_5310}]" if codigo == "46" else f":orange[{titulo_5310}]"
+            with st.expander(titulo_5310, expanded=(codigo == "46")):
+                renderizar_tabela_guias(
+                    df_codigo_5310, f"Glosa {codigo}", objetivo=len(df_codigo_5310),
+                    guias_vistas=guias_vistas, biometria_por_guia=biometria_por_guia,
+                    imagem_por_guia=imagem_por_guia,
+                )
 
     for esp in especialidades:
         df_esp_total = df[df["Especialidade"] == esp]

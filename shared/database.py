@@ -21,6 +21,15 @@ TURSO_CAMPOS_BASE_IMAGEM = (
     "nu_guia", "cd_procedimento", "dente_inicial", "status_proced",
     "tem_imagem", "mes_referencia",
 )
+# REL5310 (glosas administrativas graves, ex.: 046 "imagem em histórico de
+# beneficiários distintos") -- só os campos necessários pra sinalizar na
+# Amostragem. O arquivo original tem CPF/CNPJ e nome de paciente em toda
+# linha; essa trava garante que esse dado sensível nunca entre aqui, mesmo
+# que uma edição futura tente ler mais colunas do CSV.
+TURSO_CAMPOS_5310 = (
+    "nu_ordem", "nu_guia", "cd_procedimento", "nomenclatura_procedimento",
+    "glosa", "tipo_glosa", "justificativa_glosa", "mes_referencia",
+)
 
 
 class DatabaseManager:
@@ -515,6 +524,42 @@ class DatabaseManager:
             "base_imagem_procedimentos", registros, mes_referencia, TURSO_CAMPOS_BASE_IMAGEM,
             manter_meses=1, lote=lote, ao_progredir=ao_progredir, retomar=retomar,
         )
+
+    def importar_5310(
+        self, registros: list, mes_referencia: str, lote: int = 500, ao_progredir=None, retomar: bool = False
+    ) -> int:
+        """Substitui os dados do `mes_referencia` informado no Turso
+        (reimportação idempotente) e mantém só os 2 meses mais recentes --
+        mesmo padrão de importar_base_ia.
+
+        `registros`: lista de dicts com nu_ordem/nu_guia/cd_procedimento/
+        nomenclatura_procedimento/glosa/tipo_glosa/justificativa_glosa/
+        mes_referencia já prontos (ver core.amostragem.preparar_registros_5310,
+        que já filtra pra só glosas < 400 antes de chegar aqui -- essa função
+        não filtra de novo, só grava o que vier em `registros`).
+        `ao_progredir(enviados, total)`: chamado a cada lote, opcional.
+        `retomar`: retoma um import interrompido em vez de apagar e reinserir
+        tudo -- ver docstring de _importar_por_mes_turso.
+        """
+        return self._importar_por_mes_turso(
+            "base_5310_glosas", registros, mes_referencia, TURSO_CAMPOS_5310,
+            manter_meses=2, lote=lote, ao_progredir=ao_progredir, retomar=retomar,
+        )
+
+    def buscar_glosas_5310_por_processo(self, nu_ordem: str) -> list:
+        """Glosas administrativas graves (REL5310, ex.: 046) registradas
+        pra esse processo -- guias que nem aparecem na base IA (relatório
+        da IA não traz guia já glosada), então é uma fonte extra de guias
+        pra sinalizar na Amostragem, sem depender de especialidade nenhuma
+        (a Amostragem agrupa essas guias por código de glosa, não por
+        DS_GRUPO como o resto da tela)."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_guia, cd_procedimento, nomenclatura_procedimento, glosa, "
+                   "tipo_glosa, justificativa_glosa "
+                   "FROM base_5310_glosas WHERE nu_ordem = ?",
+            "args": [self._turso_arg(str(nu_ordem))],
+        }], self._turso_token_leitura)[0]
+        return self._turso_linhas(resultado)
 
     def buscar_imagem_por_guias(self, nu_guias: list) -> list:
         """Registros de imagem (guia, procedimento, dente, status, tem_imagem)
