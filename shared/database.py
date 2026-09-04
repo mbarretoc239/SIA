@@ -321,15 +321,43 @@ class DatabaseManager:
         return self._turso_linhas(resultado)
 
     def buscar_guias_liberadas_ia_por_processo(self, nu_ordem: str) -> list:
-        """Guias com LIBERACAO=S (já liberadas pela IA, não entram no
-        sorteio/contagem da Amostragem) pra um processo -- só consulta, pra
-        quem quiser conferir o que a IA já deu como certo."""
+        """Guias com LIBERACAO=S (já liberadas pela IA) pra um processo. Por
+        padrão não entram no sorteio/contagem da Amostragem, só consulta --
+        exceto quando o processo está marcado como "Análise Integral" (ver
+        buscar_analise_integral), caso em que a tela soma essas guias às
+        pendentes (N) na análise principal."""
         resultado = self._turso_pipeline([{
             "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, cd_operador_atend "
                    "FROM base_ia_guias WHERE nu_ordem = ? AND liberacao = 'S'",
             "args": [self._turso_arg(str(nu_ordem))],
         }], self._turso_token_leitura)[0]
         return self._turso_linhas(resultado)
+
+    # --- Análise Integral (prestadores de risco: analisa também as guias já liberadas pela IA) ---
+    def buscar_analise_integral(self, processo) -> dict | None:
+        """Registro de marcação "Análise Integral" pra esse processo, se
+        existir. Processos assim precisam ter TODAS as guias revisadas
+        (inclusive liberacao=S), não só as pendentes -- alguns prestadores
+        de análise de risco exigem cobertura integral."""
+        url = f"{self.supabase_url}/rest/v1/amostragem_analise_integral?processo=eq.{processo}&select=*"
+        linhas = self._get_paginado(url)
+        return linhas[0] if linhas else None
+
+    def marcar_analise_integral(self, processo, marcado_por: str = "") -> bool:
+        """Marca o processo como Análise Integral (upsert -- reclicar não
+        duplica, só atualiza marcado_por/marcado_em)."""
+        url = f"{self.supabase_url}/rest/v1/amostragem_analise_integral?on_conflict=processo"
+        headers_upsert = {**self.headers, "Prefer": "resolution=merge-duplicates,return=minimal"}
+        data = {"processo": str(processo), "marcado_por": marcado_por}
+        r = requests.post(url, headers=headers_upsert, json=data)
+        return r.ok
+
+    def desmarcar_analise_integral(self, processo) -> bool:
+        """Remove a marcação -- o processo volta a analisar só as guias
+        pendentes (liberacao=N), como qualquer outro."""
+        url = f"{self.supabase_url}/rest/v1/amostragem_analise_integral?processo=eq.{processo}"
+        r = requests.delete(url, headers=self.headers)
+        return r.ok
 
     def listar_processos_agregado(self) -> list:
         """Um registro por NU_ORDEM (processo) do mês mais recente em

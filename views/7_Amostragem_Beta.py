@@ -316,29 +316,43 @@ with aba_busca:
         st.info("Digite o número do processo e clique em Buscar guias.")
         st.stop()
 
+    # Análise Integral: processo marcado (persistido por número de processo,
+    # ver marcar_analise_integral) soma as guias já liberadas pela IA
+    # (liberacao=S) às pendentes (N) em TODAS as tabelas -- alguns
+    # prestadores de análise de risco exigem cobertura de tudo, não só do
+    # que a IA não liberou. Carregado aqui em cima porque decide se busca
+    # também as liberadas antes de montar `df`.
+    analise_integral = st.session_state.db.buscar_analise_integral(processo_ativo)
+
     with st.spinner("Buscando guias..."):
         guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
-    df = _guias_para_df(guias)
+        guias_liberadas = (
+            st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
+            if analise_integral else []
+        )
+    df = _guias_para_df(guias + guias_liberadas)
 
-    # Consulta à parte, não entra em sorteio/contagem de amostra -- só pra
-    # quem quiser conferir o que a IA já liberou nesse processo. Fica antes
-    # do "df.empty" abaixo porque um processo pode ter só guias liberadas
-    # (nenhuma pendente), e mesmo assim vale poder consultar essa lista.
-    with st.expander("Guias já liberadas pela IA (consulta)"):
-        guias_liberadas = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
-        if not guias_liberadas:
-            st.caption("Nenhuma guia liberada pela IA encontrada pra esse processo.")
-        else:
-            df_liberadas = pd.DataFrame({
-                "Especialidade": [g["ds_grupo"] for g in guias_liberadas],
-                "NU_GUIA": [g["nu_guia"] for g in guias_liberadas],
-                "Cód. Procedimento": [g["cd_procedimento"] for g in guias_liberadas],
-            })
-            st.caption(
-                f"{df_liberadas['NU_GUIA'].nunique()} guia(s) única(s), "
-                f"{len(df_liberadas)} procedimento(s) liberado(s) pela IA."
-            )
-            st.dataframe(df_liberadas, use_container_width=True, hide_index=True)
+    # Consulta à parte (só quando NÃO é Análise Integral -- nesse caso as
+    # liberadas já estão dentro das tabelas principais acima, mostrar de
+    # novo aqui seria redundante). Fica antes do "df.empty" abaixo porque um
+    # processo pode ter só guias liberadas (nenhuma pendente), e mesmo assim
+    # vale poder consultar essa lista.
+    if not analise_integral:
+        with st.expander("Guias já liberadas pela IA (consulta)"):
+            guias_liberadas_consulta = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
+            if not guias_liberadas_consulta:
+                st.caption("Nenhuma guia liberada pela IA encontrada pra esse processo.")
+            else:
+                df_liberadas = pd.DataFrame({
+                    "Especialidade": [g["ds_grupo"] for g in guias_liberadas_consulta],
+                    "NU_GUIA": [g["nu_guia"] for g in guias_liberadas_consulta],
+                    "Cód. Procedimento": [g["cd_procedimento"] for g in guias_liberadas_consulta],
+                })
+                st.caption(
+                    f"{df_liberadas['NU_GUIA'].nunique()} guia(s) única(s), "
+                    f"{len(df_liberadas)} procedimento(s) liberado(s) pela IA."
+                )
+                st.dataframe(df_liberadas, use_container_width=True, hide_index=True)
 
     if df.empty:
         st.warning(
@@ -348,7 +362,9 @@ with aba_busca:
         )
         st.stop()
 
-    total_guias_processo = guias[0].get("total_guias_processo") if guias else None
+    total_guias_processo = guias[0].get("total_guias_processo") if guias else (
+        guias_liberadas[0].get("total_guias_processo") if guias_liberadas else None
+    )
 
     # Status/auditor do processo no snapshot mais recente do REL5201 —
     # visível para todos os roles, pra ninguém se esbarrar auditando o
@@ -375,8 +391,40 @@ with aba_busca:
     prestador_ativo = None
 
     with st.container(border=True):
-        renderizar_botao_copiar_processo(processo_ativo)
-        st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
+        col_proc, col_integral = st.columns([3, 2])
+        with col_proc:
+            renderizar_botao_copiar_processo(processo_ativo)
+        with col_integral:
+            if analise_integral:
+                st.success("Análise Integral ativa", icon="🔎")
+                if st.button("Desativar", key="btn_desativar_integral", use_container_width=True):
+                    if st.session_state.db.desmarcar_analise_integral(processo_ativo):
+                        st.rerun()
+                    else:
+                        st.error("Erro ao desativar Análise Integral.")
+            else:
+                if st.button(
+                    "🔎 Marcar como Análise Integral", key="btn_marcar_integral", use_container_width=True,
+                    help=(
+                        "Alguns prestadores de análise de risco precisam ter TODAS as guias revisadas, "
+                        "inclusive as já liberadas pela IA. Ativa isso pra esse processo: soma as guias "
+                        "liberadas (S) às pendentes (N) em todas as tabelas abaixo, sem aplicar % de "
+                        "amostragem -- fica marcado permanentemente pra esse processo."
+                    ),
+                ):
+                    marcado_por = st.session_state.get("auditor_nome", "")
+                    if st.session_state.db.marcar_analise_integral(processo_ativo, marcado_por=marcado_por):
+                        st.rerun()
+                    else:
+                        st.error("Erro ao marcar Análise Integral.")
+
+        if analise_integral:
+            st.caption(
+                f"{len(guias)} item(ns) sem liberação + {len(guias_liberadas)} já liberado(s) pela IA "
+                f"(Análise Integral) — {texto_total_guias} guia(s) no total do processo"
+            )
+        else:
+            st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
 
         if info_status is None:
             st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
@@ -749,7 +797,11 @@ with aba_busca:
         total_procs = int(df_esp_total["Qtde"].sum())
         total_guias = len(df_esp_guias)
 
-        if _norm(esp) in REGRAS_AMOSTRAGEM:
+        if analise_integral:
+            # Análise Integral: sem sorteio, tudo (N + liberadas) precisa ser
+            # revisado -- "Amostra sugerida" = 100% das guias.
+            n_sugerido = total_guias
+        elif _norm(esp) in REGRAS_AMOSTRAGEM:
             n_sugerido = len(marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO))
         else:
             n_sugerido = len(guias_com_proc_critico(df_esp_guias, procedimentos_criticos))
@@ -822,26 +874,31 @@ with aba_busca:
         df_amostra_especial = None
         titulo_amostra = None
 
-        if _norm(esp) in REGRAS_AMOSTRAGEM:
-            df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
-            # Regra "todas" (auditar 100% das guias, ex.: Implante, Prótese,
-            # Prótese Especial) — a "Sugestão de amostra" ficaria idêntica à
-            # "Tabela completa", então não ganha aba própria pra nenhuma
-            # especialidade com essa regra (checa o TIPO da regra, não o
-            # nome -- antes só "PROTESE" era tratado, deixando a mesma aba
-            # redundante aparecer pras outras especialidades "todas").
-            if REGRAS_AMOSTRAGEM.get(_norm(esp), {}).get("tipo") != "todas":
-                df_amostra_especial = df_amostra.drop(columns=["Motivo"], errors="ignore")
-                titulo_amostra = f"Sugestão de amostra ({len(df_amostra_especial)})"
-        elif especialidade_tem_critico.get(esp):
-            # Especialidade fora das regras de amostragem, mas com
-            # procedimento crítico presente: a "Sugestão de amostra" mostra
-            # só as guias com esse procedimento, não as 100% da especialidade.
-            df_amostra_especial = guias_com_proc_critico(df_esp_guias, procedimentos_criticos)
-            titulo_amostra = f"Sugestão de amostra ({len(df_amostra_especial)} — proc. crítico)"
-        # Sem regra de amostragem e sem procedimento crítico presente: sem
-        # aba de "Sugestão de amostra" (hoje mostraria 100% das guias, igual
-        # à Tabela completa, sem utilidade nenhuma).
+        # Análise Integral: sem sorteio nenhum -- tudo precisa ser revisado,
+        # então não faz sentido nenhuma aba "Sugestão de amostra" (seria
+        # sempre 100%, igual à Tabela completa). Fica só a Tabela completa
+        # (e "Sem Imagem", se houver) pra essas especialidades.
+        if not analise_integral:
+            if _norm(esp) in REGRAS_AMOSTRAGEM:
+                df_amostra = marcar_amostra(df_esp_guias, esp, df_esp_total, seed=SEED_PADRAO)
+                # Regra "todas" (auditar 100% das guias, ex.: Implante, Prótese,
+                # Prótese Especial) — a "Sugestão de amostra" ficaria idêntica à
+                # "Tabela completa", então não ganha aba própria pra nenhuma
+                # especialidade com essa regra (checa o TIPO da regra, não o
+                # nome -- antes só "PROTESE" era tratado, deixando a mesma aba
+                # redundante aparecer pras outras especialidades "todas").
+                if REGRAS_AMOSTRAGEM.get(_norm(esp), {}).get("tipo") != "todas":
+                    df_amostra_especial = df_amostra.drop(columns=["Motivo"], errors="ignore")
+                    titulo_amostra = f"Sugestão de amostra ({len(df_amostra_especial)})"
+            elif especialidade_tem_critico.get(esp):
+                # Especialidade fora das regras de amostragem, mas com
+                # procedimento crítico presente: a "Sugestão de amostra" mostra
+                # só as guias com esse procedimento, não as 100% da especialidade.
+                df_amostra_especial = guias_com_proc_critico(df_esp_guias, procedimentos_criticos)
+                titulo_amostra = f"Sugestão de amostra ({len(df_amostra_especial)} — proc. crítico)"
+            # Sem regra de amostragem e sem procedimento crítico presente: sem
+            # aba de "Sugestão de amostra" (hoje mostraria 100% das guias, igual
+            # à Tabela completa, sem utilidade nenhuma).
 
         guias_sugeridas_agora = set()
         if df_amostra_especial is not None:
