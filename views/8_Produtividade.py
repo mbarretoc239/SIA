@@ -53,7 +53,7 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("Total", _fmt_num(total_procedimentos))
             with m2:
-                st.metric("Analisado", _fmt_num(grupos_procedimentos["analisado"]), help="Fechado + Calculado")
+                st.metric("Analisado", _fmt_num(grupos_procedimentos["analisado"]), help="Fechado + Calculado + Aut. Pagto")
                 pct_analisado = _pct(grupos_procedimentos["analisado"], total_procedimentos)
                 st.markdown(pilula(pct_analisado), unsafe_allow_html=True)
             m3.metric("Cancelado/Glosado", _fmt_num(grupos_procedimentos["cancelado_glosado"]))

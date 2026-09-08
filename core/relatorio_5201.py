@@ -44,6 +44,7 @@ STATUS_LABELS = {
     "CALCULADO": "Calculado",
     "CANCELADO": "Cancelado",
     "DIGITADO": "Digitado",
+    "AUT.PAGTO": "Aut. Pagto",
 }
 
 # Mesmos tokens de cor já usados no resto do app (core/settings.py::TEMA) —
@@ -56,6 +57,7 @@ STATUS_CORES = {
     "CALCULADO": "#6F84A5",
     "CANCELADO": "#B91C1C",
     "DIGITADO": "#8B5CF6",
+    "AUT.PAGTO": "#22C55E",
     "_outro": "#6F84A5",
 }
 
@@ -63,7 +65,10 @@ STATUS_CORES = {
 # final (processo/procedimento já passou pelo auditor); "cancelado/glosado"
 # é o que não vai gerar pagamento; "consistido/digitado" é o que ainda está
 # em algum ponto do fluxo antes da analise final.
-STATUS_ANALISADO = {"FECHADO", "CALCULADO"}
+# AUT.PAGTO entra em "analisado" -- já passou pelo auditor e está autorizado
+# pra pagamento, só falta o passo administrativo (pedido do usuário em
+# 2026-09-08: o dashboard de referência conta AUT.PAGTO dentro do Analisado).
+STATUS_ANALISADO = {"FECHADO", "CALCULADO", "AUT.PAGTO"}
 STATUS_CANCELADO_GLOSADO = {"CANCELADO", "GLOSADO"}
 STATUS_CONSISTIDO_DIGITADO = {"CONSISTIDO", "DIGITADO"}
 
