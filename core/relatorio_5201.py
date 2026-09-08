@@ -341,11 +341,13 @@ def _fmt_pct_glosa(pct) -> str:
     return f"{pct:.1f}".replace(".", ",") + "%"
 
 
-COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Total", "% Glosa"]
+COLUNAS_PRODUTIVIDADE = ["Auditor", "Fechados", "Calculados", "Aut. Pagto", "Total", "% Glosa"]
 
 # Só processos num estado final contam como produtividade — CONSISTIDO ainda
-# está em aberto e GLOSADO não é uma ação do auditor.
-STATUS_PRODUTIVOS = {"FECHADO", "CALCULADO"}
+# está em aberto e GLOSADO não é uma ação do auditor. AUT.PAGTO entra junto
+# (mesmo grupo "analisado" do resumo geral, ver STATUS_ANALISADO) -- já
+# passou pelo auditor, LOGIN_FECHAMENTO/DATA_FECHAMENTO já vêm preenchidos.
+STATUS_PRODUTIVOS = {"FECHADO", "CALCULADO", "AUT.PAGTO"}
 
 
 def _produtivos_com_auditor_e_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -410,6 +412,7 @@ def produtividade_por_auditor(df: pd.DataFrame, dia=None, auditor: str = None) -
             "Auditor": nome_auditor,
             "Fechados": int(grupo.loc[grupo["STATUS"] == "FECHADO", "QT_PROCEDIMENTO"].sum()),
             "Calculados": int(grupo.loc[grupo["STATUS"] == "CALCULADO", "QT_PROCEDIMENTO"].sum()),
+            "Aut. Pagto": int(grupo.loc[grupo["STATUS"] == "AUT.PAGTO", "QT_PROCEDIMENTO"].sum()),
             "Total": int(grupo["QT_PROCEDIMENTO"].sum()),
             "% Glosa": _fmt_pct_glosa(_pct_glosa_grupo(grupo)),
         })

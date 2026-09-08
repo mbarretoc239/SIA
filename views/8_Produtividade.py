@@ -135,17 +135,18 @@ def _secao_produtividade_individual(
     auditor vaze pro de outro ao trocar a escolha (mesmo problema que já
     tivemos com a seleção do Vega-Lite persistindo entre reruns)."""
     st.markdown(f"### {titulo}")
-    st.caption("Só conta processos em estado final (Fechado ou Calculado) — Consistido ainda está em aberto e não entra na contagem.")
+    st.caption("Só conta processos em estado final (Fechado, Calculado ou Aut. Pagto) — Consistido ainda está em aberto e não entra na contagem.")
     tabela = produtividade_por_auditor(df, dia=dia_filtro, auditor=auditor)
     if tabela.empty:
         st.info("Nenhum processo fechado/calculado" + (f" em {escolha_dia}." if dia_filtro else " neste mês."))
     else:
         linha = tabela.iloc[0]
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Fechados", _fmt_num(int(linha["Fechados"])))
         c2.metric("Calculados", _fmt_num(int(linha["Calculados"])))
-        c3.metric("Total", _fmt_num(int(linha["Total"])))
-        c4.metric(
+        c3.metric("Aut. Pagto", _fmt_num(int(linha["Aut. Pagto"])))
+        c4.metric("Total", _fmt_num(int(linha["Total"])))
+        c5.metric(
             "% Glosa (média)", linha["% Glosa"],
             help=(
                 "Média ponderada pelo valor cobrado de cada processo "
@@ -171,6 +172,7 @@ def _secao_produtividade_individual(
                 "Dia_fmt": d.strftime("%d/%m/%Y"),
                 "Fechados": int(linha["Fechados"]),
                 "Calculados": int(linha["Calculados"]),
+                "Aut. Pagto": int(linha["Aut. Pagto"]),
                 "Total": int(linha["Total"]),
             })
 
@@ -195,8 +197,8 @@ def _secao_produtividade_individual(
             "Dia_fmt:N", sort=None, title=None,
             axis=alt.Axis(labelAngle=-45, labelOverlap=False), scale=escala_x_dia,
         ),
-        y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)"),
-        tooltip=["Dia_fmt", "Fechados", "Calculados", "Total"],
+        y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado + Aut. Pagto)"),
+        tooltip=["Dia_fmt", "Fechados", "Calculados", "Aut. Pagto", "Total"],
         opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
     ).add_params(selecao_dia)
     evento_grafico = st.altair_chart(
@@ -295,7 +297,7 @@ if _ve_geral:
     st.divider()
 
     st.markdown("### Produtividade por Auditor")
-    st.caption("Só conta processos em estado final (Fechado ou Calculado) — Consistido ainda está em aberto e não entra na contagem.")
+    st.caption("Só conta processos em estado final (Fechado, Calculado ou Aut. Pagto) — Consistido ainda está em aberto e não entra na contagem.")
     tabela_auditores = produtividade_por_auditor(df, dia=dia_filtro)
     if tabela_auditores.empty:
         st.info("Nenhum processo com auditor (consistência/fechamento) registrado nesse período.")
@@ -324,10 +326,10 @@ if _ve_geral:
                 axis=alt.Axis(labelAngle=-45, labelOverlap=False),
                 scale=escala_x_auditores,
             ),
-            y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado)", scale=escala_y_auditores),
+            y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado + Aut. Pagto)", scale=escala_y_auditores),
             color=alt.value("#4F8CFF"),
             opacity=alt.condition(selecao_auditor, alt.value(1), alt.value(0.65)),
-            tooltip=["Auditor", "Fechados", "Calculados", "Total"],
+            tooltip=["Auditor", "Fechados", "Calculados", "Aut. Pagto", "Total"],
         ).add_params(selecao_auditor)
         rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=11).encode(
             x=alt.X("Auditor:N", sort="-y", scale=escala_x_auditores),
