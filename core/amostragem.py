@@ -1169,7 +1169,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         }}
         .pbi-table th {{
             background: #f0f2f6; font-weight: 600;
-            position: sticky; top: 0; z-index: 1;
+            position: sticky; top: 28px; z-index: 1;
             box-shadow: 0 1px 0 rgba(125,125,125,0.35);
         }}
         .copy-btn {{
@@ -1191,9 +1191,20 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         .copy-btn.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
         .pbi-counter {{
             font-size: 12.5px;
+            line-height: 16px;
             color: rgba(120,120,120,0.95);
-            margin: 0 0 8px 2px;
+            margin: 0;
+            padding: 6px 2px 6px 4px;
             font-family: 'Source Sans Pro', sans-serif;
+            /* Sticky junto com o cabeçalho da tabela logo abaixo (que fica em
+               top: 28px -- a altura desta linha) -- os dois formam um bloco
+               fixo contínuo ao rolar, mesmo efeito de "linha congelada" do
+               Excel. Fundo opaco (mesma cor do cabeçalho) pra cobrir as
+               linhas da tabela que passam por baixo ao rolar. */
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f0f2f6;
         }}
         .pbi-counter strong {{ color: rgba(76, 175, 80, 1); font-weight: 600; }}
         .pbi-counter.atingido strong {{ color: rgba(46, 125, 50, 1); }}
@@ -1228,6 +1239,7 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
         @media (prefers-color-scheme: dark) {{
             body {{ color: #e6ecf5; }}
             .pbi-table th {{ background: #1c2230; box-shadow: 0 1px 0 rgba(255,255,255,0.15); }}
+            .pbi-counter {{ background: #1c2230; }}
             .copy-btn {{ border-color: rgba(255,255,255,0.25); }}
             .copy-btn:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
             .copy-btn.vista {{
