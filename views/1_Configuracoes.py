@@ -6,6 +6,7 @@ import io
 from shared.database import DatabaseManager
 
 from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem, preparar_registros_5310
+from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cluster
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
 from core.settings import carregar_excecoes_modulos_cache, carregar_permissoes_modulos_cache
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
@@ -1437,5 +1438,29 @@ if "importar_planilhas" in abas_por_id:
                                 f"Mês {mes_referencia_5310}: {total_inserido_5310} glosa(s) administrativa(s) "
                                 f"importada(s) (de {total_bruto_5310} linha(s) no arquivo).{msg_cruzamento}"
                             )
+                    except Exception as erro:
+                        st.error(f"Falha na importação: {erro}")
+
+            with st.expander("Planilha de Clusterização de Município (A/B/C/D)", expanded=False):
+                st.caption(
+                    "Sobe a planilha 'cluster BI.xlsx' (aba 'Cluster') pra mostrar o cluster do "
+                    "município do processo no cabeçalho da Amostragem. Substitui o catálogo "
+                    "inteiro a cada import — não é um dado mensal, é a lista completa de "
+                    "município x cluster mantida pelo BI. Cruza com o REL5201 pelo par "
+                    "cidade/UF, então CIDADE/UF precisam estar no REL5201 importado."
+                )
+                arquivo_cluster = st.file_uploader(
+                    "Planilha de clusterização (.xlsx)", type=["xlsx"], key="upload_cluster"
+                )
+                if arquivo_cluster and st.button("Importar clusterização", key="btn_importar_cluster"):
+                    try:
+                        with st.spinner("Lendo planilha..."):
+                            registros_cluster = preparar_registros_cluster(arquivo_cluster)
+                        if not registros_cluster:
+                            st.warning("Nenhum município válido encontrado na aba 'Cluster' desse arquivo.")
+                        else:
+                            total_cluster = db.importar_cluster_municipios(registros_cluster)
+                            carregar_mapa_cluster.clear()
+                            st.success(f"{total_cluster} município(s) importado(s) com sucesso.")
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")

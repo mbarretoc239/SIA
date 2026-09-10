@@ -30,10 +30,14 @@ COLUNAS_NECESSARIAS = {
 # processo (glosado = cobrado - calculado, recalculado aqui em vez de usar
 # a coluna VALOR_GLOSA do relatório -- por pedido explícito do time,
 # receio de a coluna vir inconsistente).
+# CIDADE/UF: pra cruzar com a planilha de clusterização de município (A/B/C/D
+# por porte) e mostrar o cluster do prestador no cabeçalho do processo na
+# Amostragem -- ver core/cluster_municipios.py e tabela cluster_municipios.
 COLUNAS_OPCIONAIS = {
     "EXECUCAO", "MODALIDADE", "DATA_RECEBIMENTO_PROCESSO_FISICO",
     "QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
     "PRESTADOR", "VALOR_COBRADO", "VALOR_CALCULADO",
+    "CIDADE", "UF",
 }
 CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
@@ -192,6 +196,14 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
         df["PRESTADOR"] = df["PRESTADOR"].fillna("").astype(str).str.strip()
     else:
         df["PRESTADOR"] = ""
+
+    # CIDADE/UF: com _norm() (uppercase, sem acento) -- precisa bater
+    # exatamente com a planilha de clusterização (ver core/cluster_municipios.py).
+    for col in ("CIDADE", "UF"):
+        if col in df.columns:
+            df[col] = df[col].fillna("").apply(_norm)
+        else:
+            df[col] = ""
 
     return df[CAMPOS_REGISTRO]
 
@@ -565,6 +577,11 @@ def formatar_status_processo(registro: dict) -> dict:
         # Nome do prestador -- chave pra cruzar com o histórico de glosas
         # (ver DatabaseManager.obter_risco_prestador).
         "prestador": (registro.get("PRESTADOR") or "").strip() or None,
+        # Cidade/UF do processo -- chave pra cruzar com o cluster de
+        # município (ver core/cluster_municipios.py). Já normalizado
+        # (uppercase, sem acento) na importação.
+        "cidade": (registro.get("CIDADE") or "").strip() or None,
+        "uf": (registro.get("UF") or "").strip() or None,
     }
 
 

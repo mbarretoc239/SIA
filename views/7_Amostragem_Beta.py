@@ -30,6 +30,7 @@ from core.relatorio_5201 import (
     obter_risco_prestador_cacheado,
     status_processo,
 )
+from core.cluster_municipios import cluster_do_processo
 from core.settings import (
     carregar_excecoes_modulos_cache,
     carregar_permissoes_modulos_cache,
@@ -442,7 +443,7 @@ with aba_busca:
         if info_status is None:
             st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
         else:
-            col_status, col_auditor, col_tipo, col_pct = st.columns(4)
+            col_status, col_auditor, col_tipo, col_pct, col_cluster = st.columns(5)
 
             cor_status = STATUS_CORES.get(info_status["status"], STATUS_CORES["_outro"])
             with col_status:
@@ -460,6 +461,14 @@ with aba_busca:
                 pct_ia = info_status.get("pct_liberacao_ia")
                 texto_pct = f"{pct_ia}%".replace(".", ",") if pct_ia is not None else "—"
                 st.markdown(f"**Porcentagem de IA:** {texto_pct}")
+            with col_cluster:
+                # Cluster de município (A/B/C/D, planilha do BI) -- cruza
+                # pelo par cidade/UF do REL5201 (ver
+                # core/cluster_municipios.py). "—" tanto se o REL5201 não
+                # trouxer cidade/UF quanto se o município não estiver na
+                # planilha de clusterização importada.
+                info_cluster = cluster_do_processo(info_status.get("cidade"), info_status.get("uf"))
+                st.markdown(f"**Cluster:** {info_cluster['cluster'] if info_cluster else '—'}")
 
             if info_status["situacao"] == "em_analise":
                 st.caption("⚠️ Confira antes de duplicar o trabalho — processo já em análise.")

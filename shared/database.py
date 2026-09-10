@@ -1667,3 +1667,33 @@ class DatabaseManager:
             registro["_mes_referencia"] = item.get("mes_referencia")
             registros.append(registro)
         return registros
+
+    # --- Clusterização de município (A/B/C/D) -- ver core/cluster_municipios.py ---
+    def importar_cluster_municipios(self, registros: list, lote: int = 2000) -> int:
+        """Substitui TODO o conteúdo de cluster_municipios pelos `registros`
+        informados -- não é um dado mensal, é um catálogo de município que a
+        planilha do BI reenvia por completo a cada atualização (sem chave de
+        período pra fazer reimportação incremental)."""
+        url = f"{self.supabase_url}/rest/v1/cluster_municipios"
+        headers_admin = self._admin_headers()
+        headers_insert = {**headers_admin, "Prefer": "return=minimal"}
+
+        r_delete = requests.delete(f"{url}?cidade=not.is.null", headers=headers_admin)
+        if not r_delete.ok:
+            raise RuntimeError(f"Falha ao limpar cluster_municipios: HTTP {r_delete.status_code} — {r_delete.text[:500]}")
+
+        total = 0
+        for i in range(0, len(registros), lote):
+            pedaco = registros[i:i + lote]
+            r_insert = requests.post(url, headers=headers_insert, json=pedaco)
+            if not r_insert.ok:
+                raise RuntimeError(f"Falha ao inserir lote {i}-{i + len(pedaco)} em cluster_municipios: HTTP {r_insert.status_code} — {r_insert.text[:500]}")
+            total += len(pedaco)
+        return total
+
+    def buscar_cluster_municipios(self) -> list:
+        """Lista crua {cidade, uf, cluster, regiao} de todo o catálogo --
+        quem chama monta o dict de lookup (ver core/cluster_municipios.py,
+        cacheado lá como carregar_mapa_cluster)."""
+        url = f"{self.supabase_url}/rest/v1/cluster_municipios?select=cidade,uf,cluster,regiao"
+        return self._get_paginado(url)
