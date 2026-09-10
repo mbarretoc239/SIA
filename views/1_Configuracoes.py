@@ -73,13 +73,27 @@ if role == "Admin":
     abas_definidas.append(("debug_testes", "Debug/Testes"))
 
 nomes_abas = [rotulo for _, rotulo in abas_definidas]
-abas = st.tabs(nomes_abas)
-abas_por_id = dict(zip((id_aba for id_aba, _ in abas_definidas), abas))
+abas_por_id = dict(abas_definidas)
+
+# st.tabs() perde a aba selecionada a cada rerun disparado por um widget de
+# fora dele (upload de arquivo, clique em "Importar") -- qualquer ação
+# dentro de uma aba jogava a tela de volta pra "Meu Perfil" (limitação
+# conhecida do Streamlit: st.tabs não guarda estado entre reruns).
+# segmented_control é um widget normal, guarda a seleção sozinho via `key`.
+if st.session_state.get("config_aba_ativa") not in nomes_abas:
+    st.session_state["config_aba_ativa"] = nomes_abas[0]
+aba_selecionada = st.segmented_control(
+    "Seção", nomes_abas, key="config_aba_ativa", label_visibility="collapsed",
+)
+if aba_selecionada is None:
+    # Só acontece se clicar de novo na aba já ativa (desmarca) -- volta pra
+    # primeira em vez de deixar a tela sem nenhuma seção visível.
+    aba_selecionada = st.session_state["config_aba_ativa"] = nomes_abas[0]
 
 # ==========================================
 # ABA 1: MEU PERFIL (TODOS)
 # ==========================================
-with abas[0]:
+if aba_selecionada == "Meu Perfil":
     st.subheader("Informações da Conta")
     st.info(f"**Nome:** {nome}\n\n**Equipe:** {st.session_state.get('equipe', 'N/A')}\n\n**Nível de Acesso (Role):** {role}")
 
@@ -87,7 +101,7 @@ with abas[0]:
 # ABA 2: LINKS ÚTEIS (TODOS)
 # ==========================================
 if "meus_links" in abas_por_id:
-    with abas_por_id["meus_links"]:
+    if aba_selecionada == abas_por_id["meus_links"]:
         st.subheader("Meus Links")
         st.markdown("Cadastre aqui os links que você mais usa. Eles aparecerão na barra lateral para acesso rápido!")
         
@@ -168,7 +182,7 @@ if "meus_links" in abas_por_id:
 # ABA 3: APROVAÇÃO DE EQUIPE (ADMIN)
 # ==========================================
 if "aprovacao_equipe" in abas_por_id:
-    with abas_por_id["aprovacao_equipe"]:
+    if aba_selecionada == abas_por_id["aprovacao_equipe"]:
         st.subheader("Fila de Moderação de Cadastros")
         
         usuarios = db.listar_usuarios()
@@ -293,7 +307,7 @@ if "aprovacao_equipe" in abas_por_id:
 # ABA: DEBUG/TESTES (ADMIN)
 # ==========================================
 if "debug_testes" in abas_por_id:
-    with abas_por_id["debug_testes"]:
+    if aba_selecionada == abas_por_id["debug_testes"]:
         st.subheader("Ferramentas de Teste")
         st.caption("Disponível apenas para Admin. Use para validar alinhamentos, popups de ciência e notificações ao vivo.")
 
@@ -366,7 +380,7 @@ if "debug_testes" in abas_por_id:
 # ABA 3: TABELAS BASE E GLOSAS (ADMIN/GESTOR)
 # ==========================================
 if "tabelas_base" in abas_por_id:
-    with abas_por_id["tabelas_base"]:
+    if aba_selecionada == abas_por_id["tabelas_base"]:
         st.subheader("Base de Conhecimento do Sistema")
         
         tab_interna1, tab_interna2, tab_interna3 = st.tabs(["Procedimentos", "Classificação de Glosas", "Edição de Glosas"])
@@ -623,7 +637,7 @@ if "tabelas_base" in abas_por_id:
 # ABA 4: TEXTOS DOS PRESTADORES (GESTOR/ADMIN)
 # ==========================================
 if "textos_prestadores" in abas_por_id:
-    with abas_por_id["textos_prestadores"]:
+    if aba_selecionada == abas_por_id["textos_prestadores"]:
         st.subheader("Textos para os Prestadores")
         st.markdown("Cadastre os textos descritivos que aparecerão para as glosas no final do relatório.")
         
@@ -785,7 +799,7 @@ if "textos_prestadores" in abas_por_id:
 # ABA 5: PERMISSÕES DE ACESSO (ADMIN/GESTOR)
 # ==========================================
 if "permissoes" in abas_por_id:
-    with abas_por_id["permissoes"]:
+    if aba_selecionada == abas_por_id["permissoes"]:
         from core.settings import MODULOS_CONTROLADOS, ROLES_PERMISSAO
 
         st.subheader("Acesso aos Módulos por Função")
@@ -899,7 +913,7 @@ if "permissoes" in abas_por_id:
 # ABA: REGRAS DE AMOSTRAGEM (ADMIN/GESTOR)
 # ==========================================
 if "regras_amostragem" in abas_por_id:
-    with abas_por_id["regras_amostragem"]:
+    if aba_selecionada == abas_por_id["regras_amostragem"]:
         from core.amostragem import carregar_regras_amostragem_cache
 
         st.subheader("Especialidades críticas e regra de amostragem")
@@ -1160,7 +1174,7 @@ if "regras_amostragem" in abas_por_id:
 # ABA: LINKS PADRÃO (ADMIN/GESTOR)
 # ==========================================
 if "links_home" in abas_por_id:
-    with abas_por_id["links_home"]:
+    if aba_selecionada == abas_por_id["links_home"]:
         st.subheader("Links institucionais exibidos na Home")
         st.caption("Todos os usuários logados enxergam esses links no Painel Principal, agrupados por categoria.")
 
@@ -1266,7 +1280,7 @@ if "links_home" in abas_por_id:
 # Produtividade) -- um só lugar pra quem sobe planilha, em vez de caçar o
 # botão em cada módulo.
 if "importar_planilhas" in abas_por_id:
-    with abas_por_id["importar_planilhas"]:
+    if aba_selecionada == abas_por_id["importar_planilhas"]:
         st.caption(
             "Upload centralizado das planilhas mensais que alimentam o sistema. "
             "Cada uma substitui só os dados do mês detectado, sem afetar outros meses já importados."
