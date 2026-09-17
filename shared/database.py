@@ -1648,6 +1648,63 @@ class DatabaseManager:
         registro["_mes_referencia"] = linhas[0].get("mes_referencia")
         return registro
 
+    def marcar_status_manual_5201(self, nu_ordem: str, novo_status: str, marcado_por: str = "MATHBC") -> bool:
+        """Marca manualmente um processo do REL5201 como FECHADO ou
+        CALCULADO -- uso interno do Admin pra registrar progresso de
+        produtividade antes do próximo import do REL5201 trazer o status
+        oficial (ex.: já terminou de auditar hoje, mas o arquivo só é
+        importado amanhã). Atualiza LOGIN/DATA do campo correspondente ao
+        status (FECHAMENTO pra FECHADO, CONSISTENCIA pra CALCULADO -- mesmo
+        par que Produtividade usa pra achar o auditor responsável, ver
+        core/relatorio_5201.py::_produtivos_com_auditor_e_data).
+
+        Atua só no registro do mês mais recente pra esse processo (mesmo
+        escopo de buscar_status_processo). Sem persistência própria: se um
+        REL5201 novo for reimportado depois com status diferente pra esse
+        processo, a importação substitui a tabela inteira (ver
+        importar_relatorio_5201/_importar_por_mes) e essa marcação manual
+        se perde -- proposital, o REL5201 real sempre tem a palavra final."""
+        if novo_status not in ("FECHADO", "CALCULADO"):
+            raise ValueError(f"Status manual inválido: {novo_status!r} (só FECHADO ou CALCULADO)")
+
+        ordem = str(nu_ordem).strip()
+        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos"
+        params = {
+            "ordem": f"eq.{ordem}",
+            "select": "id,payload_cifrado",
+            "order": "mes_referencia.desc",
+            "limit": "1",
+        }
+        # nao-paginado: limit=1 explicito (edita 1 processo so)
+        response = requests.get(url, headers=self.headers, params=params)
+        if not response.ok:
+            return False
+        linhas = response.json()
+        if not linhas:
+            return False
+
+        try:
+            registro = json.loads(self.descriptografar(linhas[0]["payload_cifrado"]))
+        except (ValueError, TypeError):
+            return False
+
+        agora = datetime.now().isoformat()
+        registro["STATUS"] = novo_status
+        if novo_status == "FECHADO":
+            registro["LOGIN_FECHAMENTO"] = marcado_por
+            registro["DATA_FECHAMENTO"] = agora
+        else:
+            registro["LOGIN_CONSISTENCIA"] = marcado_por
+            registro["DATA_CONSISTENCIA"] = agora
+
+        novo_payload = self.criptografar(json.dumps(registro, ensure_ascii=False))
+        r_update = requests.patch(
+            f"{url}?id=eq.{linhas[0]['id']}",
+            headers=self._admin_headers(),
+            json={"payload_cifrado": novo_payload},
+        )
+        return r_update.ok
+
     def carregar_relatorio_5201(self) -> list:
         """Busca e decifra o snapshot atual do REL5201. Cada item retornado
         é o dict original (ORDEM, STATUS, LOGIN_FECHAMENTO etc.) gravado no

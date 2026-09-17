@@ -458,6 +458,29 @@ with aba_busca:
                 "📋 Se houver mensagem de reversão, copiar guias (731)",
             )
 
+            # Uso interno do Admin: marca status manualmente enquanto o
+            # REL5201 oficial não pega esse processo -- se o próximo import
+            # trouxer status diferente, ele sobrescreve isso (proposital).
+            if _role_pagina == "Admin":
+                with st.popover("⚙️ Marcar status manualmente", use_container_width=True):
+                    st.caption(
+                        "Marca esse processo como Fechado ou Calculado na Produtividade, "
+                        "sempre creditado a MATHBC. Some ao progresso agora; se o próximo "
+                        "import do REL5201 trouxer outro status pra esse processo, ele "
+                        "sobrescreve essa marcação."
+                    )
+                    col_fechado, col_calculado = st.columns(2)
+                    if col_fechado.button("Fechado", key="btn_marcar_fechado_manual", use_container_width=True):
+                        if st.session_state.db.marcar_status_manual_5201(processo_ativo, "FECHADO"):
+                            st.rerun()
+                        else:
+                            st.error("Erro ao marcar status.")
+                    if col_calculado.button("Calculado", key="btn_marcar_calculado_manual", use_container_width=True):
+                        if st.session_state.db.marcar_status_manual_5201(processo_ativo, "CALCULADO"):
+                            st.rerun()
+                        else:
+                            st.error("Erro ao marcar status.")
+
         if analise_integral:
             st.caption(
                 f"{len(guias)} item(ns) sem liberação + {len(guias_liberadas)} já liberado(s) pela IA "
