@@ -472,11 +472,17 @@ with aba_busca:
                     col_fechado, col_calculado = st.columns(2)
                     if col_fechado.button("Fechado", key="btn_marcar_fechado_manual", use_container_width=True):
                         if st.session_state.db.marcar_status_manual_5201(processo_ativo, "FECHADO"):
+                            # carregar_dados_atuais() é cacheado 5min (ver
+                            # core/relatorio_5201.py) -- sem limpar aqui, a
+                            # Produtividade continuaria mostrando o status
+                            # antigo por até 5min depois de marcar.
+                            carregar_dados_atuais.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
                     if col_calculado.button("Calculado", key="btn_marcar_calculado_manual", use_container_width=True):
                         if st.session_state.db.marcar_status_manual_5201(processo_ativo, "CALCULADO"):
+                            carregar_dados_atuais.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
