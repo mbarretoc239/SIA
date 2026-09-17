@@ -448,13 +448,14 @@ with aba_busca:
                     else:
                         st.error("Erro ao marcar Análise Integral.")
 
-        # Reversão (procedimento 731) não é automático -- confirmação é
-        # manual pelo auditor, olhando a capa do processo. O botão só
-        # aparece se houver ao menos uma guia 731 (liberada ou não) nesse
-        # processo; clique copia os NU_GUIA, um por linha.
-        renderizar_botao_copiar_guias_procedimento(
-            guias + guias_liberadas, PROCEDIMENTO_REVERSAO, "📋 Copiar guias reversão (731)",
-        )
+            # Reversão (procedimento 731) não é automático -- confirmação é
+            # manual pelo auditor, olhando a capa do processo. Só aparece se
+            # houver ao menos uma guia 731 (liberada ou não) nesse processo;
+            # clique copia os NU_GUIA, um por linha. Abaixo do botão de
+            # Análise Integral, mesma coluna/largura.
+            renderizar_botao_copiar_guias_procedimento(
+                guias + guias_liberadas, PROCEDIMENTO_REVERSAO, "📋 Copiar guias reversão (731)",
+            )
 
         if analise_integral:
             st.caption(

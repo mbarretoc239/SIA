@@ -1440,25 +1440,27 @@ def renderizar_botao_copiar_guias_procedimento(guias_todas: list, cd_procediment
     html_botao = f"""
     <style>
         body {{
-            margin: 0; padding: 4px 0; background: transparent; color: #1f2937;
+            margin: 0; padding: 0; background: transparent; color: #31333F;
             font-family: 'Source Sans Pro', sans-serif;
         }}
         .copy-btn-reversao {{
+            width: 100%;
+            box-sizing: border-box;
             background: transparent;
-            border: 1px solid rgba(125,125,125,0.5);
-            border-radius: 4px;
-            padding: 3px 10px;
+            border: 1px solid rgba(49, 51, 63, 0.2);
+            border-radius: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            min-height: 2.5rem;
             cursor: pointer;
             font-family: 'Source Sans Pro', sans-serif;
-            font-size: 13px;
+            font-size: 1rem;
             color: inherit;
         }}
-        .copy-btn-reversao:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
+        .copy-btn-reversao:hover {{ border-color: #FF4B4B; color: #FF4B4B; }}
         .copy-btn-reversao.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
         @media (prefers-color-scheme: dark) {{
-            body {{ color: #e6ecf5; }}
-            .copy-btn-reversao {{ border-color: rgba(255,255,255,0.25); }}
-            .copy-btn-reversao:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
+            body {{ color: #FAFAFA; }}
+            .copy-btn-reversao {{ border-color: rgba(250, 250, 250, 0.2); }}
         }}
     </style>
     <button class="copy-btn-reversao" id="btn-reversao" title="Copia {len(numeros)} guia(s), uma por linha">
@@ -1479,7 +1481,7 @@ def renderizar_botao_copiar_guias_procedimento(guias_todas: list, cd_procediment
         }});
     </script>
     """
-    components.html(html_botao, height=34)
+    components.html(html_botao, height=45)
 
 
 def renderizar_resumo_especialidades(resumo: list, df: pd.DataFrame) -> None:
