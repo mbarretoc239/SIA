@@ -38,7 +38,7 @@ from core.settings import (
 )
 from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 from shared.database import DatabaseManager
-from shared.ui import aplicar_filtro_numerico, filtro_numerico, pilula
+from shared.ui import aplicar_filtro_numerico, filtro_numerico, persistir_entre_paginas, pilula, valor_persistido
 
 st.set_page_config(page_title="Amostragem", page_icon="🦷", layout="wide")
 
@@ -248,24 +248,43 @@ with aba_busca:
             if df_processos.empty:
                 st.info("Nenhum processo encontrado na base do mês.")
             else:
+                # default/index lido de valor_persistido() + on_change=persistir_entre_paginas
+                # em cada widget abaixo -- sem isso, o filtro reseta toda vez que sai da
+                # Amostragem e volta (st.navigation só guarda estado de widget dentro da
+                # mesma página, ver shared/ui.py::persistir_entre_paginas).
                 col_filtro_critica, col_filtro_status, col_filtro_execucao = st.columns(3)
                 with col_filtro_critica:
                     filtro_critica = st.segmented_control(
                         "Crítica", ["Todos", "Somente críticas", "Sem críticas"],
-                        default="Todos", key="lista_proc_filtro_critica",
+                        default=valor_persistido("lista_proc_filtro_critica", "Todos"),
+                        key="lista_proc_filtro_critica",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_critica",),
                     )
                 with col_filtro_status:
                     todos_status = sorted(df_processos["Status"].dropna().unique())
-                    filtro_status = st.multiselect("Status", todos_status, key="lista_proc_filtro_status")
+                    filtro_status = st.multiselect(
+                        "Status", todos_status,
+                        default=[v for v in valor_persistido("lista_proc_filtro_status", []) if v in todos_status],
+                        key="lista_proc_filtro_status",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_status",),
+                    )
                 with col_filtro_execucao:
                     todas_execucoes = sorted(df_processos["Execução"].dropna().unique())
-                    filtro_execucao = st.multiselect("Execução", todas_execucoes, key="lista_proc_filtro_execucao")
+                    filtro_execucao = st.multiselect(
+                        "Execução", todas_execucoes,
+                        default=[v for v in valor_persistido("lista_proc_filtro_execucao", []) if v in todas_execucoes],
+                        key="lista_proc_filtro_execucao",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_execucao",),
+                    )
 
                 todas_especialidades = sorted({
                     e for lista in df_processos["Especialidades"].str.split(", ") for e in lista if e
                 })
                 filtro_especialidades = st.multiselect(
-                    "Especialidade", todas_especialidades, key="lista_proc_filtro_esp",
+                    "Especialidade", todas_especialidades,
+                    default=[v for v in valor_persistido("lista_proc_filtro_esp", []) if v in todas_especialidades],
+                    key="lista_proc_filtro_esp",
+                    on_change=persistir_entre_paginas, args=("lista_proc_filtro_esp",),
                 )
 
                 col_filtro_pct, col_filtro_bio, col_filtro_guias, col_filtro_proc = st.columns(4)

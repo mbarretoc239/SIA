@@ -44,19 +44,48 @@ _OPERADORES_NUMERICOS = {
 }
 
 
+def persistir_entre_paginas(chave: str):
+    """Callback (on_change=persistir_entre_paginas, args=(chave,)) pra
+    filtro sobreviver a trocar de página. st.navigation só preserva o valor
+    de um widget com `key` enquanto você fica na MESMA página -- ao navegar
+    pra outra e voltar, o Streamlit recria o widget do zero e o valor
+    volta pro padrão (confirmado com teste isolado em 2026-09-17, não é
+    limitação deste app). Copia o valor pra uma chave-sombra que não é
+    gerenciada por nenhum widget, então sobrevive -- quem cria o widget lê
+    de volta com valor_persistido() como default/value/index."""
+    st.session_state[f"_persist_{chave}"] = st.session_state[chave]
+
+
+def valor_persistido(chave: str, padrao=None):
+    return st.session_state.get(f"_persist_{chave}", padrao)
+
+
 def filtro_numerico(label: str, key_prefix: str):
     """Filtro 'operador + valor' (>, >=, <, <=, =) pra coluna numérica --
     devolve (operador, valor) ou None quando "Todos" (sem filtro). Passar
-    pra aplicar_filtro_numerico() junto com o DataFrame e a coluna alvo."""
+    pra aplicar_filtro_numerico() junto com o DataFrame e a coluna alvo.
+
+    Sobrevive a trocar de página (ver persistir_entre_paginas) -- só reseta
+    numa sessão nova (login de novo)."""
+    chave_op = f"{key_prefix}_operador"
+    chave_val = f"{key_prefix}_valor"
+    opcoes_operador = ["Todos", *_OPERADORES_NUMERICOS.keys()]
+    operador_persistido = valor_persistido(chave_op, "Todos")
+    index_op = opcoes_operador.index(operador_persistido) if operador_persistido in opcoes_operador else 0
+
     col_op, col_val = st.columns([1, 1])
     with col_op:
         operador = st.selectbox(
-            label, ["Todos", *_OPERADORES_NUMERICOS.keys()], key=f"{key_prefix}_operador", width=140,
+            label, opcoes_operador, index=index_op, key=chave_op, width=140,
+            on_change=persistir_entre_paginas, args=(chave_op,),
         )
     if operador == "Todos":
         return None
     with col_val:
-        valor = st.number_input("Valor", key=f"{key_prefix}_valor", label_visibility="collapsed", width=140)
+        valor = st.number_input(
+            "Valor", value=valor_persistido(chave_val, 0.0), key=chave_val, label_visibility="collapsed", width=140,
+            on_change=persistir_entre_paginas, args=(chave_val,),
+        )
     return (operador, valor)
 
 
