@@ -4,6 +4,7 @@ import math
 import re
 import unicodedata
 import zipfile
+from datetime import date, timedelta
 
 import openpyxl
 import pandas as pd
@@ -202,6 +203,25 @@ def _norm(texto: str) -> str:
     return sem_acento.strip().upper()
 
 
+def _mes_referencia_de_data(valor) -> str:
+    """Converte uma célula de data (DT_PRODUCAO/DATA DE PAGAMENTO) pra
+    "AAAA-MM". openpyxl normalmente devolve um `datetime` pra célula
+    formatada como data, mas se a célula da planilha não tiver essa
+    formatação (mesmo contendo uma data), devolve o número serial cru do
+    Excel (int/float) -- sem tratar isso, `str(valor)[:7]` grava lixo tipo
+    "46235" como mês (bug real encontrado em 2026-09: uma planilha da base
+    IA tinha DT_PRODUCAO sem formatação de data na primeira linha, e essa
+    string virou o mes_referencia de 590 mil linhas na base). Serial do
+    Excel conta a partir de 1899-12-30 (inclui o bug histórico do "ano
+    bissexto 1900" do Lotus 1-2-3, que o Excel herdou de propósito)."""
+    if hasattr(valor, "strftime"):
+        return valor.strftime("%Y-%m")
+    try:
+        return (date(1899, 12, 30) + timedelta(days=int(valor))).strftime("%Y-%m")
+    except (TypeError, ValueError):
+        return str(valor)[:7]
+
+
 def _abrir_planilha_normalizada(arquivo, colunas_necessarias: set):
     """Abre a planilha via openpyxl (read_only, linha a linha -- as planilhas
     mensais têm centenas de milhares de linhas, carregar tudo de uma vez num
@@ -274,8 +294,7 @@ def preparar_registros_base_ia(arquivo) -> tuple[list, str, int]:
             continue
         total_bruto += 1
         if mes_referencia is None and linha[i_dt] is not None:
-            dt = linha[i_dt]
-            mes_referencia = dt.strftime("%Y-%m") if hasattr(dt, "strftime") else str(dt)[:7]
+            mes_referencia = _mes_referencia_de_data(linha[i_dt])
 
         nu_ordem = str(int(linha[i_ordem]))
         nu_guia = str(linha[i_guia]).strip()
@@ -451,11 +470,7 @@ def preparar_registros_5310(arquivo) -> tuple[list, str, int, int]:
             continue
 
         if mes_referencia is None and linha[i_dt_pagamento] is not None:
-            dt_pagamento = linha[i_dt_pagamento]
-            mes_referencia = (
-                dt_pagamento.strftime("%Y-%m") if hasattr(dt_pagamento, "strftime")
-                else str(dt_pagamento)[:7]
-            )
+            mes_referencia = _mes_referencia_de_data(linha[i_dt_pagamento])
 
         cd_procedimento_tuss = _texto_numerico(linha[i_cod_proc_glosado]) or _texto_numerico(linha[i_cod_proc])
         nomenclatura = _preenchido(linha[i_nomenc_glosado]) or _preenchido(linha[i_nomenc_proc])
