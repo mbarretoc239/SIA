@@ -291,6 +291,43 @@ def test_resumido_funde_420_e_430_contagens_assimetricas():
     assert "2 glosas 420 e 1 glosa 430 (guia G1)" in txt
 
 
+def test_resumido_nao_funde_420_e_430_entre_guias_diferentes():
+    # G1 tem 420 e 430 juntos (funde na mesma frase, ver
+    # test_resumido_funde_420_e_430); G2 só tem 420, G3 só tem 430. Cada
+    # código deve somar TODAS as guias que o têm, numa frase só por código
+    # -- não pode sobrar um "420" solto de G2 numa cláusula separada do "420"
+    # fundido com G1 (era o bug reportado: mesmo código espalhado em várias
+    # cláusulas conforme a combinação por guia).
+    rows = [
+        _row("G1", "2015", "endodontia", "420", "Técnica"),
+        _row("G1", "2015", "endodontia", "430", "Técnica"),
+        _row("G2", "2015", "endodontia", "420", "Técnica"),
+        _row("G3", "2015", "endodontia", "430", "Técnica"),
+    ]
+    txt = _gerar_resumido(rows)
+    assert "2 glosas 420" in txt
+    assert "2 glosas 430" in txt
+    # Não pode haver um "1 glosa 420" nem "1 glosa 430" soltos (indicaria
+    # que ainda ficou uma cláusula separada por código+guia).
+    assert "1 glosa 420" not in txt
+    assert "1 glosa 430" not in txt
+
+
+def test_resumido_com_justificativa_nao_funde_420_e_430_entre_guias_diferentes():
+    rows = [
+        _row("G1", "2015", "endodontia", "420", "Técnica", just="falta rx inicial e final"),
+        _row("G1", "2015", "endodontia", "430", "Técnica", just="falta rx inicial e final"),
+        _row("G2", "2015", "endodontia", "420", "Técnica", just="falta rx inicial e final"),
+        _row("G3", "2015", "endodontia", "430", "Técnica", just="falta rx inicial e final"),
+    ]
+    df = pd.DataFrame(rows)
+    txt = text_engine.gerar_texto(df, "Resumido com Justificativa", META_BASE)
+    assert "2 glosas 420" in txt
+    assert "2 glosas 430" in txt
+    assert "1 glosa 420" not in txt
+    assert "1 glosa 430" not in txt
+
+
 def test_resumido_com_justificativa_conta_ocorrencias():
     # Mesmo cuidado do modo Resumido puro (ver
     # test_resumido_conta_ocorrencias_nao_guias_distintas), mas no modo que
