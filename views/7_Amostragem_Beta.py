@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 
 from core.amostragem import (
     _norm,
+    PROCEDIMENTO_REVERSAO,
     carregar_regras_amostragem_cache,
     calcular_imagens_esperadas_guia,
     carregar_procedimentos_criticos,
@@ -16,6 +17,7 @@ from core.amostragem import (
     guias_com_proc_critico,
     marcar_amostra,
     montar_lista_processos_mes,
+    renderizar_botao_copiar_guias_procedimento,
     renderizar_botao_copiar_processo,
     renderizar_resumo_especialidades,
     renderizar_tabela_guias,
@@ -353,11 +355,13 @@ with aba_busca:
 
     with st.spinner("Buscando guias..."):
         guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
-        guias_liberadas = (
-            st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
-            if analise_integral else []
-        )
-    df = _guias_para_df(guias + guias_liberadas)
+        # Sempre busca (não só quando Análise Integral) -- o botão de copiar
+        # guias de reversão (ver renderizar_botao_copiar_guias_procedimento)
+        # precisa das liberadas independente desse modo, e a consulta abaixo
+        # ("Guias já liberadas pela IA") também usava isso antes só que numa
+        # busca separada e redundante.
+        guias_liberadas = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
+    df = _guias_para_df(guias + guias_liberadas if analise_integral else guias)
 
     # Consulta à parte (só quando NÃO é Análise Integral -- nesse caso as
     # liberadas já estão dentro das tabelas principais acima, mostrar de
@@ -366,14 +370,13 @@ with aba_busca:
     # vale poder consultar essa lista.
     if not analise_integral:
         with st.expander("Guias já liberadas pela IA (consulta)"):
-            guias_liberadas_consulta = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
-            if not guias_liberadas_consulta:
+            if not guias_liberadas:
                 st.caption("Nenhuma guia liberada pela IA encontrada pra esse processo.")
             else:
                 df_liberadas = pd.DataFrame({
-                    "Especialidade": [g["ds_grupo"] for g in guias_liberadas_consulta],
-                    "NU_GUIA": [g["nu_guia"] for g in guias_liberadas_consulta],
-                    "Cód. Procedimento": [g["cd_procedimento"] for g in guias_liberadas_consulta],
+                    "Especialidade": [g["ds_grupo"] for g in guias_liberadas],
+                    "NU_GUIA": [g["nu_guia"] for g in guias_liberadas],
+                    "Cód. Procedimento": [g["cd_procedimento"] for g in guias_liberadas],
                 })
                 st.caption(
                     f"{df_liberadas['NU_GUIA'].nunique()} guia(s) única(s), "
@@ -444,6 +447,14 @@ with aba_busca:
                         st.rerun()
                     else:
                         st.error("Erro ao marcar Análise Integral.")
+
+        # Reversão (procedimento 731) não é automático -- confirmação é
+        # manual pelo auditor, olhando a capa do processo. O botão só
+        # aparece se houver ao menos uma guia 731 (liberada ou não) nesse
+        # processo; clique copia os NU_GUIA, um por linha.
+        renderizar_botao_copiar_guias_procedimento(
+            guias + guias_liberadas, PROCEDIMENTO_REVERSAO, "📋 Copiar guias reversão (731)",
+        )
 
         if analise_integral:
             st.caption(

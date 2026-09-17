@@ -384,6 +384,13 @@ COLUNAS_NECESSARIAS_5310 = {
 }
 LIMITE_GLOSA_5310 = 400
 
+# Código do procedimento que marca processo de reversão -- não é
+# automático (nem todo processo com esse procedimento é reversão de fato,
+# a confirmação é manual pelo auditor olhando a capa), só usado pra montar
+# a lista de guias a copiar quando o auditor confirma que é (ver
+# renderizar_botao_copiar_guias_procedimento).
+PROCEDIMENTO_REVERSAO = "731"
+
 
 def preparar_registros_5310(arquivo) -> tuple[list, str, int, int]:
     """Lê o REL5310 (.xlsx, já reduzido pelo usuário) e devolve
@@ -1398,6 +1405,69 @@ def renderizar_botao_copiar_processo(processo) -> None:
         document.getElementById('btn-processo').addEventListener('click', () => {{
             navigator.clipboard.writeText('{processo_esc}').then(() => {{
                 const btn = document.getElementById('btn-processo');
+                const orig = btn.innerText;
+                btn.innerText = '✓ copiado';
+                btn.classList.add('copied');
+                setTimeout(() => {{
+                    btn.innerText = orig;
+                    btn.classList.remove('copied');
+                }}, 1100);
+            }});
+        }});
+    </script>
+    """
+    components.html(html_botao, height=34)
+
+
+def renderizar_botao_copiar_guias_procedimento(guias_todas: list, cd_procedimento: str, rotulo: str) -> None:
+    """Botão que copia, uma por linha, o NU_GUIA de toda guia do processo com
+    o `cd_procedimento` informado -- pensado pro fluxo de reversão (ver
+    PROCEDIMENTO_REVERSAO): o auditor confirma manualmente (pela capa) que o
+    processo é reversão e usa isso pra levantar rápido a lista de guias 731
+    a conferir, sem digitar cada uma. `guias_todas` precisa incluir liberada
+    (S) e não liberada (N) -- reversão não distingue liberação da IA, é
+    sobre o procedimento em si.
+
+    Não desenha nada se não houver nenhuma guia com esse procedimento nesse
+    processo (evita botão pra copiar lista vazia)."""
+    numeros = sorted({str(g["nu_guia"]).strip() for g in guias_todas if str(g.get("cd_procedimento", "")).strip() == cd_procedimento})
+    if not numeros:
+        return
+
+    texto = "\n".join(numeros)
+    texto_js = json.dumps(texto)
+    rotulo_esc = html.escape(rotulo)
+    html_botao = f"""
+    <style>
+        body {{
+            margin: 0; padding: 4px 0; background: transparent; color: #1f2937;
+            font-family: 'Source Sans Pro', sans-serif;
+        }}
+        .copy-btn-reversao {{
+            background: transparent;
+            border: 1px solid rgba(125,125,125,0.5);
+            border-radius: 4px;
+            padding: 3px 10px;
+            cursor: pointer;
+            font-family: 'Source Sans Pro', sans-serif;
+            font-size: 13px;
+            color: inherit;
+        }}
+        .copy-btn-reversao:hover {{ background: rgba(125,125,125,0.15); border-color: rgba(125,125,125,0.8); }}
+        .copy-btn-reversao.copied {{ background: #2e7d32; color: #fff; border-color: #43a047; }}
+        @media (prefers-color-scheme: dark) {{
+            body {{ color: #e6ecf5; }}
+            .copy-btn-reversao {{ border-color: rgba(255,255,255,0.25); }}
+            .copy-btn-reversao:hover {{ background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }}
+        }}
+    </style>
+    <button class="copy-btn-reversao" id="btn-reversao" title="Copia {len(numeros)} guia(s), uma por linha">
+        {rotulo_esc} ({len(numeros)})
+    </button>
+    <script>
+        document.getElementById('btn-reversao').addEventListener('click', () => {{
+            navigator.clipboard.writeText({texto_js}).then(() => {{
+                const btn = document.getElementById('btn-reversao');
                 const orig = btn.innerText;
                 btn.innerText = '✓ copiado';
                 btn.classList.add('copied');
