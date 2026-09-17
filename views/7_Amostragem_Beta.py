@@ -454,7 +454,7 @@ with aba_busca:
             # clique copia os NU_GUIA, um por linha. Abaixo do botão de
             # Análise Integral, mesma coluna/largura.
             renderizar_botao_copiar_guias_procedimento(
-                guias + guias_liberadas, PROCEDIMENTO_REVERSAO, "📋 Copiar guias reversão (731)",
+                processo_ativo, guias + guias_liberadas, PROCEDIMENTO_REVERSAO, "📋 Copiar guias reversão (731)",
             )
 
         if analise_integral:

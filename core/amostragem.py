@@ -1419,14 +1419,15 @@ def renderizar_botao_copiar_processo(processo) -> None:
     components.html(html_botao, height=34)
 
 
-def renderizar_botao_copiar_guias_procedimento(guias_todas: list, cd_procedimento: str, rotulo: str) -> None:
-    """Botão que copia, uma por linha, o NU_GUIA de toda guia do processo com
-    o `cd_procedimento` informado -- pensado pro fluxo de reversão (ver
-    PROCEDIMENTO_REVERSAO): o auditor confirma manualmente (pela capa) que o
-    processo é reversão e usa isso pra levantar rápido a lista de guias 731
-    a conferir, sem digitar cada uma. `guias_todas` precisa incluir liberada
-    (S) e não liberada (N) -- reversão não distingue liberação da IA, é
-    sobre o procedimento em si.
+def renderizar_botao_copiar_guias_procedimento(processo, guias_todas: list, cd_procedimento: str, rotulo: str) -> None:
+    """Botão que copia o NU_GUIA de toda guia do processo com o
+    `cd_procedimento` informado, uma por linha, com um cabeçalho
+    "[processo] - Reversão" na primeira linha -- pensado pro fluxo de
+    reversão (ver PROCEDIMENTO_REVERSAO): o auditor confirma manualmente
+    (pela capa) que o processo é reversão e usa isso pra levantar rápido a
+    lista de guias 731 a conferir, já identificada, sem digitar cada uma.
+    `guias_todas` precisa incluir liberada (S) e não liberada (N) --
+    reversão não distingue liberação da IA, é sobre o procedimento em si.
 
     Não desenha nada se não houver nenhuma guia com esse procedimento nesse
     processo (evita botão pra copiar lista vazia)."""
@@ -1434,7 +1435,7 @@ def renderizar_botao_copiar_guias_procedimento(guias_todas: list, cd_procediment
     if not numeros:
         return
 
-    texto = "\n".join(numeros)
+    texto = "\n".join([f"{processo} - Reversão", *numeros])
     texto_js = json.dumps(texto)
     rotulo_esc = html.escape(rotulo)
     html_botao = f"""
