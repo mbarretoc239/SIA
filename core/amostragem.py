@@ -1454,7 +1454,8 @@ def renderizar_botao_copiar_guias_procedimento(processo, guias_todas: list, cd_p
             min-height: 2.5rem;
             cursor: pointer;
             font-family: 'Source Sans Pro', sans-serif;
-            font-size: 1rem;
+            font-size: 0.8rem;
+            line-height: 1.2;
             color: inherit;
         }}
         .copy-btn-reversao:hover {{ border-color: #FF4B4B; color: #FF4B4B; }}
