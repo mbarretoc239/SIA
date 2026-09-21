@@ -1,3 +1,4 @@
+import re
 import unicodedata
 import zipfile
 from datetime import date, datetime
@@ -33,11 +34,21 @@ COLUNAS_NECESSARIAS = {
 # CIDADE/UF: pra cruzar com a planilha de clusterização de município (A/B/C/D
 # por porte) e mostrar o cluster do prestador no cabeçalho do processo na
 # Amostragem -- ver core/cluster_municipios.py e tabela cluster_municipios.
+# OP_ENC_DIGITACAO/QUANTIDADE_NAO_AVALIADO_IA: usadas pelo Farol Mensal
+# (views/9_Farol_Mensal.py). OP_ENC_DIGITACAO é o login de quem encerrou a
+# digitação do processo -- preenchido = processo digitado, independente do
+# STATUS (filtro "tem login de digitador"). QUANTIDADE_NAO_AVALIADO_IA são os
+# procedimentos que a IA não avaliou (por PROCEDIMENTO, como as outras duas
+# quantidades da IA): a regra dos 100% liberados só vale com ela zerada.
+# Arquivos importados antes dessas colunas serem capturadas ficam sem elas --
+# a tela do Farol avisa e desativa o filtro/regra em vez de tratar "não sei"
+# como "zero".
 COLUNAS_OPCIONAIS = {
     "EXECUCAO", "MODALIDADE", "DATA_RECEBIMENTO_PROCESSO_FISICO",
     "QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
     "PRESTADOR", "VALOR_COBRADO", "VALOR_CALCULADO",
     "CIDADE", "UF",
+    "OP_ENC_DIGITACAO", "QUANTIDADE_NAO_AVALIADO_IA",
 }
 CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
@@ -137,11 +148,33 @@ def _ler_bruto(arquivo) -> pd.DataFrame:
     return pd.read_csv(arquivo, sep=separador, encoding=codificacao, thousands=".", decimal=",")
 
 
+# Cabeçalhos com acento que o WPS às vezes corrompe ao abrir o CSV (o "Ç"/"Ã"
+# vira um caractere de Área de Uso Privado que o _norm() descarta -- ver
+# wps_bug_encoding_csv.md): OP_ENC_DIGITAÇÃO -> OP_ENC_DIGITAO,
+# QUANTIDADE_NÃO_AVALIADO_IA -> QUANTIDADE_NO_AVALIADO_IA. Reconhece as duas
+# grafias pra essas colunas não sumirem em silêncio.
+_CABECALHOS_TOLERANTES = {
+    "OP_ENC_DIGITACAO": re.compile(r"OP_ENC_DIGITA(CA)?O"),
+    "QUANTIDADE_NAO_AVALIADO_IA": re.compile(r"QUANTIDADE_N(A)?O_AVALIADO_IA"),
+}
+
+
+def _alinhar_cabecalhos(colunas) -> dict:
+    """{nome_lido: nome_canonico} pros cabeçalhos de _CABECALHOS_TOLERANTES."""
+    renomear = {}
+    for coluna in colunas:
+        for canonico, padrao in _CABECALHOS_TOLERANTES.items():
+            if coluna != canonico and padrao.fullmatch(coluna) and canonico not in colunas:
+                renomear[coluna] = canonico
+    return renomear
+
+
 def ler_relatorio_5201(arquivo) -> pd.DataFrame:
     """Lê o REL5201 (.xlsx ou .csv) via pandas e devolve um DataFrame só com
     as colunas usadas pelo painel de status/produtividade, já normalizadas."""
     df = _ler_bruto(arquivo)
     df.columns = [_norm(c) for c in df.columns]
+    df = df.rename(columns=_alinhar_cabecalhos(list(df.columns)))
 
     faltantes = COLUNAS_NECESSARIAS - set(df.columns)
     if faltantes:
@@ -175,7 +208,7 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
 
     # Numéricos opcionais: None (não 0) quando o arquivo não tem a coluna --
     # "não sei" é diferente de "zero guias".
-    for col in ("QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA"):
+    for col in ("QT_GUIAS", "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA", "QUANTIDADE_NAO_AVALIADO_IA"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
         else:
@@ -204,6 +237,15 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
             df[col] = df[col].fillna("").apply(_norm)
         else:
             df[col] = ""
+
+    # Login de quem encerrou a digitação: "" quando o processo não foi
+    # digitado, None (não "") quando o arquivo nem tem a coluna -- "não sei" é
+    # diferente de "não foi digitado". Só o login (mesmo tipo de dado de
+    # LOGIN_CONSISTENCIA/LOGIN_FECHAMENTO), sem nome de ninguém.
+    if "OP_ENC_DIGITACAO" in df.columns:
+        df["OP_ENC_DIGITACAO"] = df["OP_ENC_DIGITACAO"].fillna("").astype(str).str.strip()
+    else:
+        df["OP_ENC_DIGITACAO"] = pd.Series([None] * len(df), index=df.index, dtype=object)
 
     return df[CAMPOS_REGISTRO]
 

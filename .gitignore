@@ -94,3 +94,6 @@ CHANGELOG_GLOSAS.md
 # --- Planilhas mensais reais da base IA (dados de guias/processos) ---
 IA *.xlsx
 .~lock.*#
+
+# Testes do Farol Mensal: rodam só local (a paridade lê arquivos reais do Desktop) -- não vão pro GitHub
+tests/test_farol_mensal_*.py

@@ -74,6 +74,9 @@ MODULOS_CONTROLADOS = {
     # podem virar entradas aqui do mesmo jeito, se precisar de exceção por
     # usuário no futuro.
     "amostragem_lista_processos": "Amostragem — Lista de processos do mês",
+    # Sem linha em permissoes_modulos só o Admin acessa (ver tem_acesso_modulo);
+    # liberar pra outra role/usuário é em Configurações > Permissões.
+    "farol_mensal": "Farol Mensal",
 }
 
 # Roles cujo acesso aos módulos acima é configurável

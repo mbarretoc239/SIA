@@ -361,6 +361,8 @@ else:
         paginas.append(st.Page("views/3_Calculadora.py", title="Percentual de Glosa"))
     if tem_acesso_modulo(permissoes, role, "producao", usuario_id_atual, excecoes_acesso):
         paginas.append(st.Page("views/4_Producao.py", title="Análise de Produção"))
+    if tem_acesso_modulo(permissoes, role, "farol_mensal", usuario_id_atual, excecoes_acesso):
+        paginas.append(st.Page("views/9_Farol_Mensal.py", title="Farol Mensal"))
 
     # Produtividade (Relatório 5201): visível pra todos — Gestor/Admin veem a
     # visão geral (todos os auditores), os demais só a própria produtividade.

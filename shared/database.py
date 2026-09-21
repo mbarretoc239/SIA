@@ -422,6 +422,45 @@ class DatabaseManager:
             linha["itens_com_operador"] = aux.get("itens_com_operador", 0)
         return linhas_critica
 
+    def listar_processos_farol_agregado(self) -> list:
+        """Um registro por NU_ORDEM do mês mais recente em base_ia_guias,
+        considerando TODAS as guias (liberadas e não liberadas) -- usado pelo
+        Farol Mensal. Diferente de listar_processos_agregado (lista da
+        Amostragem), que só conta especialidades/procedimentos das guias SEM
+        liberação: aqui a "crítica" do processo olha o processo inteiro.
+        Uma consulta só, agregada em SQL (não puxa as linhas cruas).
+
+        Cada registro: nu_ordem, especialidades/procedimentos (distintos,
+        separados por vírgula), total_itens, itens_biometria (operador
+        CONN_APPOD_NEW = biometria facial, mesma regra da Amostragem),
+        itens_com_operador (só > 0 quando há operador gravado -- import
+        antigo fica sem) e mes_referencia."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_ordem, "
+                   "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
+                   "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos, "
+                   "COUNT(*) AS total_itens, "
+                   "SUM(CASE WHEN cd_operador_atend = 'CONN_APPOD_NEW' THEN 1 ELSE 0 END) AS itens_biometria, "
+                   "SUM(CASE WHEN cd_operador_atend IS NOT NULL AND cd_operador_atend != '' THEN 1 ELSE 0 END) AS itens_com_operador, "
+                   "MAX(mes_referencia) AS mes_referencia "
+                   "FROM base_ia_guias "
+                   "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
+                   "GROUP BY nu_ordem",
+        }], self._turso_token_leitura)[0]
+        return self._turso_linhas(resultado)
+
+    def listar_glosas_5310_agregado(self) -> list:
+        """Glosas do REL5310 agregadas por processo e código de glosa: uma
+        linha por (nu_ordem, glosa) com a quantidade de guias distintas
+        afetadas. Usado pela coluna OBS do Farol Mensal (uma consulta pra
+        lista inteira, em vez de buscar_glosas_5310_por_processo um por um)."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_ordem, glosa, COUNT(DISTINCT nu_guia) AS qtd_guias "
+                   "FROM base_5310_glosas "
+                   "GROUP BY nu_ordem, glosa",
+        }], self._turso_token_leitura)[0]
+        return self._turso_linhas(resultado)
+
     def _importar_por_mes(
         self, tabela: str, registros: list, mes_referencia: str, lote: int = 2000, manter_meses: int = 2
     ) -> int:
