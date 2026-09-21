@@ -204,14 +204,15 @@ with col_critica:
 with col_extras:
     todas_especialidades = opcoes_especialidades(df_base)
     filtro_extras = st.multiselect(
-        "Incluir também processos que tenham SOMENTE estas especialidades",
+        "Aceitar também estas especialidades críticas",
         todas_especialidades,
         default=[v for v in valor_persistido("farol_filtro_extras", []) if v in todas_especialidades],
         key="farol_filtro_extras", on_change=persistir_entre_paginas, args=("farol_filtro_extras",),
         disabled=filtro_critica != CRITICA_SEM,
         help=(
-            "Só vale em 'Sem críticas'. Além dos processos sem crítica, entram os que têm APENAS as especialidades "
-            "escolhidas aqui (ex.: cirurgia). Processo com cirurgia + outra especialidade não entra."
+            "Só vale em 'Sem críticas'. Entram os processos sem nenhuma crítica e, além deles, os processos cujas "
+            "ÚNICAS críticas são as escolhidas aqui. Ex.: escolhendo cirurgia entram processos com cirurgia + consulta "
+            "+ dentística, mas não cirurgia + endodontia (endodontia é crítica e não foi escolhida)."
         ),
     )
 

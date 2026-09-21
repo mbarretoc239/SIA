@@ -35,7 +35,7 @@ DIGITADOR_SIM = "Sim"
 DIGITADOR_NAO = "Não"
 
 COLUNAS_IA = [
-    "nu_ordem", "especialidades", "procedimentos", "total_itens",
+    "nu_ordem", "especialidades", "procedimentos", "pares", "total_itens",
     "itens_biometria", "itens_com_operador", "mes_referencia",
 ]
 
@@ -63,7 +63,7 @@ class BaseFarol:
 COLUNAS_BASE = [
     "ORDEM", "PRESTADOR", "QT_PROCEDIMENTO", "STATUS", "EXECUCAO", "MODALIDADE", "DIGITADO",
     "PCT_LIBERACAO_IA", "PCT_BIOMETRIA", "ESPECIALIDADES", "CRITICA", "SEM_DADO_IA",
-    "LIBERADO_100_IA", "OBS", "_ESPECIALIDADES_SET",
+    "LIBERADO_100_IA", "OBS", "_ESPECIALIDADES_CRITICAS",
 ]
 
 
@@ -83,6 +83,21 @@ def _conjunto(texto) -> frozenset:
     if texto is None or (isinstance(texto, float) and pd.isna(texto)):
         return frozenset()
     return frozenset(p.strip() for p in str(texto).split(",") if p.strip())
+
+
+def _pares(texto, especialidades: frozenset, procedimentos: frozenset) -> frozenset:
+    """{(especialidade, procedimento)} do processo a partir de "ESP|COD,ESP|COD".
+    Sem o campo `pares` (dado sem essa informação), atribui cada procedimento
+    a TODAS as especialidades do processo -- conservador: só pode tornar o
+    processo mais "crítico", nunca menos."""
+    if texto is None or (isinstance(texto, float) and pd.isna(texto)) or not str(texto).strip():
+        return frozenset((e, p) for e in especialidades for p in procedimentos)
+    pares = set()
+    for item in str(texto).split(","):
+        especialidade, _, procedimento = item.strip().rpartition("|")
+        if especialidade or procedimento:
+            pares.add((especialidade.strip(), procedimento.strip()))
+    return frozenset(pares)
 
 
 def formatar_glosas_5310(linhas: list) -> dict:
@@ -151,11 +166,24 @@ def montar_base_farol(
 
     especialidades = df["especialidades"].apply(_conjunto)
     procedimentos = df["procedimentos"].apply(_conjunto)
-    ordem_criticas = set(ordem_criticas)
-    critica = (
-        especialidades.apply(lambda esps: any(_norm(e) in ordem_criticas for e in esps))
-        | procedimentos.apply(lambda procs: bool(procs & procedimentos_criticos))
+    pares = pd.Series(
+        [_pares(t, e, p) for t, e, p in zip(df["pares"], especialidades, procedimentos)], index=df.index,
     )
+    ordem_criticas = set(ordem_criticas)
+    # Especialidades que tornam o processo "crítico": as críticas pela regra
+    # do SIA + as que têm algum procedimento crítico. Guardadas POR
+    # ESPECIALIDADE (não só um bool) pra exceção do filtro: escolher CIRURGIA
+    # em "Sem críticas" libera o processo cujas únicas críticas são as
+    # escolhidas, seja pela especialidade ou por procedimento dela.
+    especialidades_criticas = pd.Series(
+        [
+            frozenset(e for e in esps if _norm(e) in ordem_criticas)
+            | frozenset(e for e, p in ps if p in procedimentos_criticos)
+            for esps, ps in zip(especialidades, pares)
+        ],
+        index=df.index,
+    )
+    critica = especialidades_criticas.apply(bool)
 
     itens_biometria = _numerica(df, "itens_biometria")
     itens_com_operador = _numerica(df, "itens_com_operador")
@@ -192,7 +220,7 @@ def montar_base_farol(
         "SEM_DADO_IA": df["nu_ordem"].isna(),
         "LIBERADO_100_IA": liberado_100,
         "OBS": df["ORDEM"].map(lambda o: (glosas_5310 or {}).get(o, "")),
-        "_ESPECIALIDADES_SET": especialidades,
+        "_ESPECIALIDADES_CRITICAS": especialidades_criticas,
     })[COLUNAS_BASE].sort_values("ORDEM").reset_index(drop=True)
 
     return BaseFarol(
@@ -233,8 +261,9 @@ def _filtro_numerico(df: pd.DataFrame, coluna: str, filtro) -> pd.DataFrame:
 
 
 def opcoes_especialidades(df: pd.DataFrame) -> list:
-    """Especialidades que existem na base do mês (pro botão de exceção)."""
-    return sorted({e for conjunto in df["_ESPECIALIDADES_SET"] for e in conjunto})
+    """Especialidades críticas que existem na base do mês (pro botão de
+    exceção) -- escolher uma não crítica não mudaria nada."""
+    return sorted({e for conjunto in df["_ESPECIALIDADES_CRITICAS"] for e in conjunto})
 
 
 def aplicar_filtros(df: pd.DataFrame, filtros: FiltrosFarol) -> pd.DataFrame:
@@ -245,9 +274,11 @@ def aplicar_filtros(df: pd.DataFrame, filtros: FiltrosFarol) -> pd.DataFrame:
     (status, execução, modalidade, digitador).
 
     Exceção de especialidade (só em "Sem críticas"): além dos processos sem
-    crítica entram os que têm crítica mas cujas especialidades são TODAS
-    subconjunto das escolhidas -- ex.: escolher CIRURGIA traz quem tem só
-    cirurgia, nunca quem tem cirurgia + endodontia."""
+    nenhuma crítica entram os cujas ÚNICAS críticas são as escolhidas -- as
+    demais especialidades (consulta, dentística etc.) não importam. Ex.:
+    escolher CIRURGIA traz quem tem cirurgia + consulta + dentística e quem
+    tem só cirurgia, mas nunca quem tem cirurgia + endodontia (endodontia é
+    crítica e não foi escolhida)."""
     if df.empty:
         return df
     df = df[df["MODALIDADE"] != MODALIDADE_SEMPRE_EXCLUIDA]
@@ -268,11 +299,10 @@ def aplicar_filtros(df: pd.DataFrame, filtros: FiltrosFarol) -> pd.DataFrame:
     if filtros.critica == CRITICA_COM:
         com_dado = com_dado[com_dado["CRITICA"]]
     elif filtros.critica == CRITICA_SEM:
-        manter = ~com_dado["CRITICA"]
-        if filtros.especialidades_extras:
-            alvo = frozenset(filtros.especialidades_extras)
-            manter = manter | com_dado["_ESPECIALIDADES_SET"].apply(lambda s: bool(s) and s <= alvo)
-        com_dado = com_dado[manter]
+        alvo = frozenset(filtros.especialidades_extras)
+        # sem exceção, alvo é vazio e sobra "nenhuma crítica" (= ~CRITICA)
+        sobra_critica = com_dado["_ESPECIALIDADES_CRITICAS"].apply(lambda criticas: bool(criticas - alvo))
+        com_dado = com_dado[~sobra_critica.astype(bool)]
     com_dado = _filtro_numerico(com_dado, "PCT_LIBERACAO_IA", filtros.liberacao_ia)
     com_dado = _filtro_numerico(com_dado, "PCT_BIOMETRIA", filtros.biometria)
 

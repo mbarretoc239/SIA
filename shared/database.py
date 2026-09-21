@@ -431,7 +431,9 @@ class DatabaseManager:
         Uma consulta só, agregada em SQL (não puxa as linhas cruas).
 
         Cada registro: nu_ordem, especialidades/procedimentos (distintos,
-        separados por vírgula), total_itens, itens_biometria (operador
+        separados por vírgula), pares (especialidade|procedimento distintos,
+        separados por vírgula -- pra saber a qual especialidade pertence um
+        procedimento crítico), total_itens, itens_biometria (operador
         CONN_APPOD_NEW = biometria facial, mesma regra da Amostragem),
         itens_com_operador (só > 0 quando há operador gravado -- import
         antigo fica sem) e mes_referencia."""
@@ -439,6 +441,7 @@ class DatabaseManager:
             "sql": "SELECT nu_ordem, "
                    "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
                    "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos, "
+                   "GROUP_CONCAT(DISTINCT COALESCE(ds_grupo, '') || '|' || COALESCE(cd_procedimento, '')) AS pares, "
                    "COUNT(*) AS total_itens, "
                    "SUM(CASE WHEN cd_operador_atend = 'CONN_APPOD_NEW' THEN 1 ELSE 0 END) AS itens_biometria, "
                    "SUM(CASE WHEN cd_operador_atend IS NOT NULL AND cd_operador_atend != '' THEN 1 ELSE 0 END) AS itens_com_operador, "
