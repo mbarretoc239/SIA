@@ -254,7 +254,8 @@ with aba_busca:
                 # em cada widget abaixo -- sem isso, o filtro reseta toda vez que sai da
                 # Amostragem e volta (st.navigation só guarda estado de widget dentro da
                 # mesma página, ver shared/ui.py::persistir_entre_paginas).
-                col_filtro_critica, col_filtro_status, col_filtro_execucao = st.columns(3)
+                # Crítica maior que as outras: o segmented control tem 3 botões de texto e corta o "Sem críticas" quando divide a linha em partes iguais
+                col_filtro_critica, col_filtro_status, col_filtro_execucao = st.columns([3, 2, 2])
                 with col_filtro_critica:
                     filtro_critica = st.segmented_control(
                         "Crítica", ["Todos", "Somente críticas", "Sem críticas"],
