@@ -837,7 +837,7 @@ def montar_lista_processos_mes(
     from core.relatorio_5201 import STATUS_LABELS
 
     colunas_finais = [
-        "Processo", "Status", "Execução", "% Liberação IA", "% Biometria", "Total de Guias",
+        "Processo", "Status", "Execução", "Login de digitador", "% Liberação IA", "% Biometria", "Total de Guias",
         "Procedimentos", "Especialidades", "Crítica",
     ]
     if not processos_turso:
@@ -871,7 +871,7 @@ def montar_lista_processos_mes(
 
     campos_rel5201 = [
         "ORDEM", "STATUS", "EXECUCAO", "QT_GUIAS", "QT_PROCEDIMENTO",
-        "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA",
+        "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA", "OP_ENC_DIGITACAO",
     ]
     campos_disponiveis = [c for c in campos_rel5201 if c in df_rel5201.columns]
     if "ORDEM" in campos_disponiveis:
@@ -909,6 +909,17 @@ def montar_lista_processos_mes(
         df_final["Execução"] = df_final["EXECUCAO"].replace("", None)
     else:
         df_final["Execução"] = None
+
+    # Login de digitador (OP_ENC_DIGITACAO do REL5201): "Sim" = processo
+    # digitado, "Não" = coluna presente e sem login. Em branco (None) = sem
+    # dado -- REL5201 importado antes dessa coluna ser capturada, ou processo
+    # que não bateu com o REL5201 --, pra não aparentar "não foi digitado".
+    if "OP_ENC_DIGITACAO" in df_final.columns:
+        df_final["Login de digitador"] = df_final["OP_ENC_DIGITACAO"].map(
+            lambda v: None if pd.isna(v) else ("Sim" if str(v).strip() else "Não")
+        )
+    else:
+        df_final["Login de digitador"] = None
 
     # Processos sem nenhum match no REL5201 (Status vazio) vão pro fim da
     # lista -- não têm status/auditor/% pra mostrar, então atrapalham menos

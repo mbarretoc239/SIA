@@ -254,7 +254,7 @@ with aba_busca:
                 # em cada widget abaixo -- sem isso, o filtro reseta toda vez que sai da
                 # Amostragem e volta (st.navigation só guarda estado de widget dentro da
                 # mesma página, ver shared/ui.py::persistir_entre_paginas).
-                col_filtro_critica, col_filtro_status, col_filtro_execucao = st.columns(3)
+                col_filtro_critica, col_filtro_status, col_filtro_execucao, col_filtro_digitador = st.columns(4)
                 with col_filtro_critica:
                     filtro_critica = st.segmented_control(
                         "Crítica", ["Todos", "Somente críticas", "Sem críticas"],
@@ -278,6 +278,18 @@ with aba_busca:
                         key="lista_proc_filtro_execucao",
                         on_change=persistir_entre_paginas, args=("lista_proc_filtro_execucao",),
                     )
+                with col_filtro_digitador:
+                    filtro_digitador = st.segmented_control(
+                        "Login de digitador", ["Todos", "Sim", "Não"],
+                        default=valor_persistido("lista_proc_filtro_digitador", "Todos"),
+                        key="lista_proc_filtro_digitador",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_digitador",),
+                        help=(
+                            "Sim = o processo tem login de digitação no REL5201 (OP_ENC_DIGITAÇÃO). "
+                            "Processos sem essa informação (REL5201 importado antes da coluna existir) "
+                            "não aparecem em Sim nem em Não."
+                        ),
+                    ) or "Todos"
 
                 todas_especialidades = sorted({
                     e for lista in df_processos["Especialidades"].str.split(", ") for e in lista if e
@@ -308,6 +320,8 @@ with aba_busca:
                     df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Status"].isin(filtro_status)]
                 if filtro_execucao:
                     df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Execução"].isin(filtro_execucao)]
+                if filtro_digitador != "Todos":
+                    df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Login de digitador"] == filtro_digitador]
                 if filtro_especialidades:
                     alvo = set(filtro_especialidades)
                     df_lista_filtrada = df_lista_filtrada[
