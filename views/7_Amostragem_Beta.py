@@ -254,7 +254,7 @@ with aba_busca:
                 # em cada widget abaixo -- sem isso, o filtro reseta toda vez que sai da
                 # Amostragem e volta (st.navigation só guarda estado de widget dentro da
                 # mesma página, ver shared/ui.py::persistir_entre_paginas).
-                col_filtro_critica, col_filtro_status, col_filtro_execucao, col_filtro_digitador = st.columns(4)
+                col_filtro_critica, col_filtro_status, col_filtro_execucao = st.columns(3)
                 with col_filtro_critica:
                     filtro_critica = st.segmented_control(
                         "Crítica", ["Todos", "Somente críticas", "Sem críticas"],
@@ -278,6 +278,18 @@ with aba_busca:
                         key="lista_proc_filtro_execucao",
                         on_change=persistir_entre_paginas, args=("lista_proc_filtro_execucao",),
                     )
+
+                todas_especialidades = sorted({
+                    e for lista in df_processos["Especialidades"].str.split(", ") for e in lista if e
+                })
+                col_filtro_esp, col_filtro_digitador = st.columns([3, 1])
+                with col_filtro_esp:
+                    filtro_especialidades = st.multiselect(
+                        "Especialidade", todas_especialidades,
+                        default=[v for v in valor_persistido("lista_proc_filtro_esp", []) if v in todas_especialidades],
+                        key="lista_proc_filtro_esp",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_esp",),
+                    )
                 with col_filtro_digitador:
                     filtro_digitador = st.segmented_control(
                         "Login de digitador", ["Todos", "Sim", "Não"],
@@ -290,16 +302,6 @@ with aba_busca:
                             "não aparecem em Sim nem em Não."
                         ),
                     ) or "Todos"
-
-                todas_especialidades = sorted({
-                    e for lista in df_processos["Especialidades"].str.split(", ") for e in lista if e
-                })
-                filtro_especialidades = st.multiselect(
-                    "Especialidade", todas_especialidades,
-                    default=[v for v in valor_persistido("lista_proc_filtro_esp", []) if v in todas_especialidades],
-                    key="lista_proc_filtro_esp",
-                    on_change=persistir_entre_paginas, args=("lista_proc_filtro_esp",),
-                )
 
                 col_filtro_pct, col_filtro_bio, col_filtro_guias, col_filtro_proc = st.columns(4)
                 with col_filtro_pct:
