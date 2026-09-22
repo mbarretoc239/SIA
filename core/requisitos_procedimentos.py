@@ -135,6 +135,7 @@ REQUISITOS_POR_PROCEDIMENTO = {
     "3250": "RXIF",
     "4040": "RXIF",
     "4080": "RXIF",
+    "4081": "RXIF",
     "4090": "RXI/FI",
     "4091": "RXI/FI",
     "4092": "RXI/FIF",
