@@ -198,7 +198,13 @@ def _secao_produtividade_individual(
             axis=alt.Axis(labelAngle=-45, labelOverlap=False), scale=escala_x_dia,
         ),
         y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado + Aut. Pagto)"),
-        tooltip=["Dia_fmt", "Fechados", "Calculados", "Aut. Pagto", "Total"],
+        # "Aut. Pagto" tem ponto no nome -- o Vega-Lite interpreta "." em
+        # nome de campo como acesso a propriedade aninhada (ex: "a.b" =
+        # campo "b" dentro de "a"), então sem escapar o ponto ele nunca acha
+        # o valor e mostra NaN no tooltip (só ali -- Total/Y não usa esse
+        # campo, então o resto do gráfico fica correto). \\. escapa o ponto.
+        tooltip=["Dia_fmt", "Fechados", "Calculados",
+                 alt.Tooltip("Aut\\. Pagto", type="quantitative", title="Aut. Pagto"), "Total"],
         opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
     ).add_params(selecao_dia)
     evento_grafico = st.altair_chart(
@@ -329,7 +335,11 @@ if _ve_geral:
             y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado + Aut. Pagto)", scale=escala_y_auditores),
             color=alt.value("#4F8CFF"),
             opacity=alt.condition(selecao_auditor, alt.value(1), alt.value(0.65)),
-            tooltip=["Auditor", "Fechados", "Calculados", "Aut. Pagto", "Total"],
+            # Mesmo escape de ponto explicado no gráfico "Produtividade ao
+            # longo do mês" acima -- sem \\. o Vega-Lite lê "Aut. Pagto"
+            # como campo aninhado e mostra NaN no tooltip.
+            tooltip=["Auditor", "Fechados", "Calculados",
+                     alt.Tooltip("Aut\\. Pagto", type="quantitative", title="Aut. Pagto"), "Total"],
         ).add_params(selecao_auditor)
         rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=11).encode(
             x=alt.X("Auditor:N", sort="-y", scale=escala_x_auditores),
