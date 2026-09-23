@@ -99,6 +99,24 @@ def aplicar_filtro_numerico(df: pd.DataFrame, coluna: str, filtro) -> pd.DataFra
     return df[_OPERADORES_NUMERICOS[operador](df[coluna], valor)]
 
 
+# Mensagem única pro bloqueio de leitura do Turso (ver
+# shared.database.TursoIndisponivelError) -- usada em toda tela que depende
+# de base_ia_guias/base_imagem_procedimentos/base_5310_glosas (Amostragem,
+# Farol Mensal, upload dessas 3 planilhas em Configurações), pra sempre dar
+# a mesma explicação em vez de cada tela inventar um texto diferente pro
+# mesmo problema.
+TURSO_INDISPONIVEL_MSG = (
+    "⚠️ Base de guias (Turso) temporariamente indisponível: a conta atingiu o limite de "
+    "leitura do plano. Deve normalizar sozinho na virada do mês. As demais telas do SIA "
+    "(Relatório 5302, Calculadora, Produtividade, Configurações) continuam funcionando "
+    "normalmente -- só o que depende da base IA/imagem/REL5310 fica fora do ar até lá."
+)
+
+
+def alerta_turso_indisponivel():
+    st.warning(TURSO_INDISPONIVEL_MSG)
+
+
 def estilizar_botoes_exclusao():
     """Dá cor de perigo (vermelho) a qualquer st.button cuja key comece com
     'btn_excluir_' -- st.button só tem type primary/secondary/tertiary

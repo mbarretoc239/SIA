@@ -405,10 +405,22 @@ STATUS_PRODUTIVOS = {"FECHADO", "CALCULADO", "AUT.PAGTO"}
 
 
 def _produtivos_com_auditor_e_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Filtra pra só FECHADO/CALCULADO com auditor identificável, e adiciona
-    as colunas auxiliares `_auditor` (LOGIN_FECHAMENTO ou LOGIN_CONSISTENCIA)
-    e `_data` (a data correspondente a esse mesmo login) — base compartilhada
-    por produtividade_por_auditor e dias_disponiveis."""
+    """Filtra pra só FECHADO/CALCULADO/AUT.PAGTO com auditor identificável, e
+    adiciona as colunas auxiliares `_auditor` (LOGIN_FECHAMENTO ou
+    LOGIN_CONSISTENCIA) e `_data` (a data correspondente a esse mesmo login)
+    — base compartilhada por produtividade_por_auditor e dias_disponiveis.
+
+    Usa o par FECHAMENTO só quando TANTO o login QUANTO a data estiverem
+    presentes -- já aconteceu do REL5201 trazer AUT.PAGTO com
+    LOGIN_FECHAMENTO preenchido mas DATA_FECHAMENTO vazia (aparentemente o
+    sistema de origem preenche esse campo com atraso, ver conversa
+    2026-09-22). Testar só a presença do login (como antes) fazia esses
+    processos ficarem com `_data` nula: continuavam entrando no TOTAL
+    agregado (que não depende de `_data`), mas sumiam da quebra por dia
+    (dias_disponiveis/gráfico "ao longo do mês") -- o total da tela batia,
+    mas os dias pareciam mostrar bem menos trabalho do que o auditor
+    realmente fez naquele mês. Caindo pra CONSISTENCIA nesse caso, o
+    processo aparece no dia em que o auditor de fato mexeu nele."""
     if df.empty or "STATUS" not in df.columns:
         return pd.DataFrame(columns=list(df.columns) + ["_auditor", "_data"])
 
@@ -416,7 +428,7 @@ def _produtivos_com_auditor_e_data(df: pd.DataFrame) -> pd.DataFrame:
     if produtivos.empty:
         return produtivos.assign(_auditor=None, _data=None)
 
-    tem_fechamento = produtivos["LOGIN_FECHAMENTO"].apply(_presente)
+    tem_fechamento = produtivos["LOGIN_FECHAMENTO"].apply(_presente) & produtivos["DATA_FECHAMENTO"].notna()
     produtivos["_auditor"] = produtivos["LOGIN_FECHAMENTO"].where(tem_fechamento, produtivos["LOGIN_CONSISTENCIA"])
     produtivos["_data"] = produtivos["DATA_FECHAMENTO"].where(tem_fechamento, produtivos["DATA_CONSISTENCIA"])
     return produtivos[produtivos["_auditor"].apply(_presente)]

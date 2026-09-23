@@ -3,14 +3,14 @@ from datetime import date
 import streamlit as st
 import pandas as pd
 import io
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, TursoIndisponivelError
 
 from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem, preparar_registros_5310
 from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cluster
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
 from core.settings import carregar_excecoes_modulos_cache, carregar_permissoes_modulos_cache
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
-from shared.ui import estilizar_botoes_exclusao
+from shared.ui import alerta_turso_indisponivel, estilizar_botoes_exclusao
 
 st.set_page_config(page_title="Configurações", page_icon="🦷", layout="wide")
 estilizar_botoes_exclusao()
@@ -1370,6 +1370,8 @@ if "importar_planilhas" in abas_por_id:
                                 f"Mês {mes_referencia_ia}: {total_inserido_ia} de {total_bruto_ia} linha(s) "
                                 f"importadas com sucesso."
                             )
+                    except TursoIndisponivelError:
+                        alerta_turso_indisponivel()
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")
 
@@ -1406,6 +1408,8 @@ if "importar_planilhas" in abas_por_id:
                                 f"Mês {mes_referencia_img}: {total_inserido_img} de {total_bruto_img} "
                                 f"linha(s) importadas com sucesso."
                             )
+                    except TursoIndisponivelError:
+                        alerta_turso_indisponivel()
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")
 
@@ -1452,6 +1456,8 @@ if "importar_planilhas" in abas_por_id:
                                 f"Mês {mes_referencia_5310}: {total_inserido_5310} glosa(s) administrativa(s) "
                                 f"importada(s) (de {total_bruto_5310} linha(s) no arquivo).{msg_cruzamento}"
                             )
+                    except TursoIndisponivelError:
+                        alerta_turso_indisponivel()
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")
 

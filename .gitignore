@@ -79,6 +79,7 @@ bridge_test.py
 find_*.py
 inativar_*.py
 parse_excel.py
+popular_fallback_turso.py
 
 # --- Arquivos de dados locais que não devem ir pro repo ---
 CHANGELOG_GLOSAS.md

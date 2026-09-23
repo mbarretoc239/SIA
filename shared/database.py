@@ -32,6 +32,15 @@ TURSO_CAMPOS_5310 = (
 )
 
 
+class TursoIndisponivelError(RuntimeError):
+    """Turso recusou a operação por limite do PLANO (code "BLOCKED", ex.:
+    cota de leitura mensal estourada) -- não é bug de query nem de dado.
+    Views que dependem de Turso (Amostragem, Farol Mensal, upload de base
+    IA/imagem/5310 em Configurações) capturam isso pra mostrar um aviso
+    amigável em vez de deixar a tela inteira quebrar com traceback (ver
+    shared.ui.alerta_turso_indisponivel)."""
+
+
 class DatabaseManager:
     def __init__(self):
         # Acessa os segredos do Streamlit
@@ -171,7 +180,17 @@ class DatabaseManager:
         resultados = []
         for item in data["results"][:-1]:  # último item é sempre o "close"
             if item["type"] == "error":
-                raise RuntimeError(f"Falha no Turso (SQL): {item.get('error')}")
+                erro = item.get("error") or {}
+                mensagem = f"Falha no Turso (SQL): {erro}"
+                # code "BLOCKED" -- limite do plano estourado (ex.: leitura
+                # mensal), não bug de query nem de dado (visto em produção
+                # 2026-09-23: "SQL read operations are forbidden ... do you
+                # need to upgrade your plan?"). Sinaliza com um tipo próprio
+                # pra UI mostrar um aviso amigável em vez de deixar a página
+                # inteira quebrar com traceback -- ver TursoIndisponivelError.
+                if isinstance(erro, dict) and erro.get("code") == "BLOCKED":
+                    raise TursoIndisponivelError(mensagem)
+                raise RuntimeError(mensagem)
             resultados.append(item["response"]["result"])
         return resultados
 
@@ -322,12 +341,15 @@ class DatabaseManager:
         (NU_ORDEM) -- é só isso que a tela de Amostragem audita, mesmo a
         tabela guardando liberadas também (pro cálculo de % Biometria da
         lista de processos)."""
-        resultado = self._turso_pipeline([{
-            "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, total_guias_processo, cd_operador_atend "
-                   "FROM base_ia_guias WHERE nu_ordem = ? AND liberacao = 'N'",
-            "args": [self._turso_arg(str(nu_ordem))],
-        }], self._turso_token_leitura)[0]
-        return self._turso_linhas(resultado)
+        try:
+            resultado = self._turso_pipeline([{
+                "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, total_guias_processo, cd_operador_atend "
+                       "FROM base_ia_guias WHERE nu_ordem = ? AND liberacao = 'N'",
+                "args": [self._turso_arg(str(nu_ordem))],
+            }], self._turso_token_leitura)[0]
+            return self._turso_linhas(resultado)
+        except TursoIndisponivelError:
+            return self._fallback_guias_ia_por_processo(nu_ordem, "N")
 
     def buscar_guias_liberadas_ia_por_processo(self, nu_ordem: str) -> list:
         """Guias com LIBERACAO=S (já liberadas pela IA) pra um processo. Por
@@ -335,12 +357,34 @@ class DatabaseManager:
         exceto quando o processo está marcado como "Análise Integral" (ver
         buscar_analise_integral), caso em que a tela soma essas guias às
         pendentes (N) na análise principal."""
-        resultado = self._turso_pipeline([{
-            "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, cd_operador_atend "
-                   "FROM base_ia_guias WHERE nu_ordem = ? AND liberacao = 'S'",
-            "args": [self._turso_arg(str(nu_ordem))],
-        }], self._turso_token_leitura)[0]
-        return self._turso_linhas(resultado)
+        try:
+            resultado = self._turso_pipeline([{
+                "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, cd_operador_atend "
+                       "FROM base_ia_guias WHERE nu_ordem = ? AND liberacao = 'S'",
+                "args": [self._turso_arg(str(nu_ordem))],
+            }], self._turso_token_leitura)[0]
+            return self._turso_linhas(resultado)
+        except TursoIndisponivelError:
+            return self._fallback_guias_ia_por_processo(nu_ordem, "S")
+
+    def _fallback_guias_ia_por_processo(self, nu_ordem: str, liberacao: str) -> list:
+        """GAMBIARRA TEMPORÁRIA (ver docs/turso_bloqueado_2026-09-23.md):
+        mesma consulta de buscar_guias_ia_por_processo/
+        buscar_guias_liberadas_ia_por_processo, só que em
+        turso_fallback_base_ia_guias no Supabase -- só tem o mês populado
+        manualmente enquanto o Turso está bloqueado por limite do plano
+        (ver scripts/popular_fallback_turso.py). Apagar esta função e a
+        tabela quando o Turso normalizar."""
+        ordem = str(nu_ordem).strip()
+        campos = (
+            "nu_guia,cd_procedimento,ds_grupo,cd_operador_atend" if liberacao == "S"
+            else "nu_guia,cd_procedimento,ds_grupo,total_guias_processo,cd_operador_atend"
+        )
+        url = (
+            f"{self.supabase_url}/rest/v1/turso_fallback_base_ia_guias"
+            f"?nu_ordem=eq.{ordem}&liberacao=eq.{liberacao}&select={campos}"
+        )
+        return self._get_paginado(url)
 
     # --- Análise Integral (prestadores de risco: analisa também as guias já liberadas pela IA) ---
     def buscar_analise_integral(self, processo) -> dict | None:
@@ -387,29 +431,42 @@ class DatabaseManager:
            revisão. % = biometria/total, mas só quando `itens_com_operador
            > 0` -- processo sem nenhum operador gravado (import antigo)
            fica em branco em vez de aparentar 0%."""
-        resultado_critica, resultado_biometria = self._turso_pipeline([
-            {
-                "sql": "SELECT nu_ordem, "
-                       "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
-                       "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos "
-                       "FROM base_ia_guias "
-                       "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
-                       "AND liberacao = 'N' "
-                       "GROUP BY nu_ordem",
-            },
-            {
-                "sql": "SELECT nu_ordem, "
-                       "COUNT(*) AS total_itens, "
-                       "SUM(CASE WHEN cd_operador_atend = 'CONN_APPOD_NEW' THEN 1 ELSE 0 END) AS itens_biometria, "
-                       "SUM(CASE WHEN cd_operador_atend IS NOT NULL AND cd_operador_atend != '' THEN 1 ELSE 0 END) AS itens_com_operador "
-                       "FROM base_ia_guias "
-                       "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
-                       "GROUP BY nu_ordem",
-            },
-        ], self._turso_token_leitura)
-
-        linhas_critica = self._turso_linhas(resultado_critica)
-        linhas_biometria = {l["nu_ordem"]: l for l in self._turso_linhas(resultado_biometria)}
+        try:
+            resultado_critica, resultado_biometria = self._turso_pipeline([
+                {
+                    "sql": "SELECT nu_ordem, "
+                           "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
+                           "GROUP_CONCAT(DISTINCT cd_procedimento) AS procedimentos "
+                           "FROM base_ia_guias "
+                           "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
+                           "AND liberacao = 'N' "
+                           "GROUP BY nu_ordem",
+                },
+                {
+                    "sql": "SELECT nu_ordem, "
+                           "COUNT(*) AS total_itens, "
+                           "SUM(CASE WHEN cd_operador_atend = 'CONN_APPOD_NEW' THEN 1 ELSE 0 END) AS itens_biometria, "
+                           "SUM(CASE WHEN cd_operador_atend IS NOT NULL AND cd_operador_atend != '' THEN 1 ELSE 0 END) AS itens_com_operador "
+                           "FROM base_ia_guias "
+                           "WHERE mes_referencia = (SELECT MAX(mes_referencia) FROM base_ia_guias) "
+                           "GROUP BY nu_ordem",
+                },
+            ], self._turso_token_leitura)
+            linhas_critica = self._turso_linhas(resultado_critica)
+            linhas_biometria = {l["nu_ordem"]: l for l in self._turso_linhas(resultado_biometria)}
+        except TursoIndisponivelError:
+            # GAMBIARRA TEMPORÁRIA (ver docs/turso_bloqueado_2026-09-23.md):
+            # mesmas 2 consultas, só que via views no Supabase
+            # (turso_fallback_ia_criticas/turso_fallback_ia_biometria) --
+            # fazem a mesma agregação (GROUP_CONCAT vira string_agg) dentro
+            # do próprio Postgres, não precisa puxar as linhas cruas pro
+            # Python. Ver scripts/popular_fallback_turso.py. Apagar as
+            # views e este bloco quando o Turso normalizar.
+            linhas_critica = self._get_paginado(f"{self.supabase_url}/rest/v1/turso_fallback_ia_criticas?select=*")
+            linhas_biometria = {
+                l["nu_ordem"]: l
+                for l in self._get_paginado(f"{self.supabase_url}/rest/v1/turso_fallback_ia_biometria?select=*")
+            }
 
         # Uma linha por nu_ordem que TEM guia pendente de revisão (é isso
         # que a lista de processos mostra) -- os campos de biometria vêm do
@@ -595,13 +652,25 @@ class DatabaseManager:
         pra sinalizar na Amostragem, sem depender de especialidade nenhuma
         (a Amostragem agrupa essas guias por código de glosa, não por
         DS_GRUPO como o resto da tela)."""
-        resultado = self._turso_pipeline([{
-            "sql": "SELECT nu_guia, cd_procedimento, nomenclatura_procedimento, glosa, "
-                   "tipo_glosa, justificativa_glosa "
-                   "FROM base_5310_glosas WHERE nu_ordem = ?",
-            "args": [self._turso_arg(str(nu_ordem))],
-        }], self._turso_token_leitura)[0]
-        return self._turso_linhas(resultado)
+        try:
+            resultado = self._turso_pipeline([{
+                "sql": "SELECT nu_guia, cd_procedimento, nomenclatura_procedimento, glosa, "
+                       "tipo_glosa, justificativa_glosa "
+                       "FROM base_5310_glosas WHERE nu_ordem = ?",
+                "args": [self._turso_arg(str(nu_ordem))],
+            }], self._turso_token_leitura)[0]
+            return self._turso_linhas(resultado)
+        except TursoIndisponivelError:
+            # GAMBIARRA TEMPORÁRIA (ver docs/turso_bloqueado_2026-09-23.md):
+            # mesma consulta em turso_fallback_base_5310_glosas no Supabase.
+            # Apagar quando o Turso normalizar.
+            ordem = str(nu_ordem).strip()
+            url = (
+                f"{self.supabase_url}/rest/v1/turso_fallback_base_5310_glosas"
+                f"?nu_ordem=eq.{ordem}&select=nu_guia,cd_procedimento,nomenclatura_procedimento,"
+                f"glosa,tipo_glosa,justificativa_glosa"
+            )
+            return self._get_paginado(url)
 
     def buscar_imagem_por_guias(self, nu_guias: list) -> list:
         """Registros de imagem (guia, procedimento, dente, status, tem_imagem)

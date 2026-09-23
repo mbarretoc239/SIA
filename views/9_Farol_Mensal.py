@@ -34,9 +34,10 @@ from services.farol_mensal.processamento import (
     cruzar,
     para_bytes,
 )
-from shared.database import DatabaseManager
+from shared.database import DatabaseManager, TursoIndisponivelError
 from shared.ui import (
     COR_SUCESSO,
+    alerta_turso_indisponivel,
     filtro_numerico,
     fmt_num,
     persistir_entre_paginas,
@@ -102,6 +103,9 @@ st.caption(
 try:
     with st.spinner("Carregando processos do mês..."):
         base = _carregar_base()
+except TursoIndisponivelError:
+    alerta_turso_indisponivel()
+    st.stop()
 except Exception as erro:
     st.error(f"Não foi possível carregar os dados do mês: {erro}")
     st.stop()

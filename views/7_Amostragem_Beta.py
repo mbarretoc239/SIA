@@ -39,8 +39,15 @@ from core.settings import (
     tem_acesso_modulo,
 )
 from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
-from shared.database import DatabaseManager
-from shared.ui import aplicar_filtro_numerico, filtro_numerico, persistir_entre_paginas, pilula, valor_persistido
+from shared.database import DatabaseManager, TursoIndisponivelError
+from shared.ui import (
+    alerta_turso_indisponivel,
+    aplicar_filtro_numerico,
+    filtro_numerico,
+    persistir_entre_paginas,
+    pilula,
+    valor_persistido,
+)
 
 st.set_page_config(page_title="Amostragem", page_icon="🦷", layout="wide")
 
@@ -242,12 +249,18 @@ with aba_busca:
     # pra um usuário específico sem precisar mudar a role dele.
     if tem_acesso_modulo(_permissoes_pagina, _role_pagina, "amostragem_lista_processos", _usuario_id_pagina, _excecoes_pagina):
         with st.expander("Lista de processos do mês"):
-            with st.spinner("Carregando processos..."):
-                df_processos = montar_lista_processos_mes(
-                    carregar_processos_turso(), carregar_dados_atuais(), carregar_procedimentos_criticos()
-                )
+            try:
+                with st.spinner("Carregando processos..."):
+                    df_processos = montar_lista_processos_mes(
+                        carregar_processos_turso(), carregar_dados_atuais(), carregar_procedimentos_criticos()
+                    )
+            except TursoIndisponivelError:
+                alerta_turso_indisponivel()
+                df_processos = None
 
-            if df_processos.empty:
+            if df_processos is None:
+                pass  # aviso já mostrado acima
+            elif df_processos.empty:
                 st.info("Nenhum processo encontrado na base do mês.")
             else:
                 # default/index lido de valor_persistido() + on_change=persistir_entre_paginas
@@ -368,16 +381,25 @@ with aba_busca:
     # glosada. Fonte totalmente separada de `guias`/`df` abaixo; vira uma
     # ou mais seções próprias no Detalhamento (ver mais abaixo), sempre no
     # topo, sem depender de especialidade nem de sorteio.
-    glosas_5310 = st.session_state.db.buscar_glosas_5310_por_processo(processo_ativo)
-
-    with st.spinner("Buscando guias..."):
-        guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
-        # Sempre busca (não só quando Análise Integral) -- o botão de copiar
-        # guias de reversão (ver renderizar_botao_copiar_guias_procedimento)
-        # precisa das liberadas independente desse modo, e a consulta abaixo
-        # ("Guias já liberadas pela IA") também usava isso antes só que numa
-        # busca separada e redundante.
-        guias_liberadas = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
+    #
+    # As 3 buscas abaixo são Turso -- se a conta estiver bloqueada por limite
+    # de plano (TursoIndisponivelError), nada do resto desta tela (guias,
+    # biometria, imagem, sugestão de amostra) tem como renderizar de
+    # verdade, então avisa e para aqui em vez de deixar a tela quebrar mais
+    # à frente com uma sequência de outros erros.
+    try:
+        glosas_5310 = st.session_state.db.buscar_glosas_5310_por_processo(processo_ativo)
+        with st.spinner("Buscando guias..."):
+            guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
+            # Sempre busca (não só quando Análise Integral) -- o botão de copiar
+            # guias de reversão (ver renderizar_botao_copiar_guias_procedimento)
+            # precisa das liberadas independente desse modo, e a consulta abaixo
+            # ("Guias já liberadas pela IA") também usava isso antes só que numa
+            # busca separada e redundante.
+            guias_liberadas = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
+    except TursoIndisponivelError:
+        alerta_turso_indisponivel()
+        st.stop()
     df = _guias_para_df(guias + guias_liberadas if analise_integral else guias)
 
     # Consulta à parte (só quando NÃO é Análise Integral -- nesse caso as
