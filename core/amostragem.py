@@ -198,6 +198,23 @@ def carregar_procedimentos_criticos() -> set:
     return {str(row["codigo_tuss"]).strip() for row in db.listar_procedimentos_criticos()}
 
 
+@st.cache_data(ttl=86400)
+def carregar_procs_ignorados_cache() -> dict:
+    """Cache de 24h sobre DatabaseManager.carregar_procs_ignorados --
+    catálogo pequeno e global (não muda por processo nem por usuário, só
+    quando alguém ignora/reativa um procedimento pela tela de gerenciar).
+    Sem cache, era chamado 1x por ESPECIALIDADE renderizada no Detalhamento
+    (selecionar_procedimentos_ignorados) -- um processo com 5 especialidades
+    já disparava 5 consultas iguais, repetidas a cada rerun (achado em
+    2026-09-23 via log de requisições, amostragem_procs_ignorados apareceu
+    entre as mais lidas do dia -- ver docs/turso_bloqueado_2026-09-23.md).
+    Precisa de `.clear()` sempre que salvar_procs_ignorados/
+    remover_procs_ignorados for chamado (gerenciar_procedimentos_ignorados e
+    selecionar_procedimentos_ignorados, ambas em core/amostragem.py)."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_procs_ignorados()
+
+
 def _norm(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("ASCII")
     return sem_acento.strip().upper()
@@ -543,7 +560,7 @@ def gerenciar_procedimentos_ignorados(db, key_prefix: str):
     from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 
     with st.expander("Gerenciar procedimentos ignorados (todas as especialidades)"):
-        salvos = db.carregar_procs_ignorados()
+        salvos = carregar_procs_ignorados_cache()
         mapa_procedimentos = carregar_mapa_procedimentos()
 
         if any(salvos.values()):
@@ -573,6 +590,7 @@ def gerenciar_procedimentos_ignorados(db, key_prefix: str):
                 ]
                 if db.remover_procs_ignorados(pares):
                     st.toast(f"Removido(s) {len(pares)} procedimento(s).")
+                    carregar_procs_ignorados_cache.clear()
                     st.rerun()
                 else:
                     st.error("Erro ao remover.")
@@ -607,6 +625,7 @@ def gerenciar_procedimentos_ignorados(db, key_prefix: str):
                     sucesso = db.salvar_procs_ignorados(pares)
                 if sucesso:
                     st.toast(f"Adicionado(s) a {especialidade_nova}.")
+                    carregar_procs_ignorados_cache.clear()
                     st.rerun()
                 else:
                     st.error("Erro ao adicionar.")
@@ -647,7 +666,7 @@ def selecionar_procedimentos_ignorados(df: pd.DataFrame, db, key_prefix: str) ->
         for cod in codigos_presentes
     }
 
-    salvos = db.carregar_procs_ignorados()  # {especialidade: set(codigos)}
+    salvos = carregar_procs_ignorados_cache()  # {especialidade: set(codigos)}
     default_labels = [
         lbl for lbl, cod in opcoes.items()
         if cod in salvos.get(cod_para_especialidade[cod], set())
@@ -688,6 +707,7 @@ def selecionar_procedimentos_ignorados(df: pd.DataFrame, db, key_prefix: str) ->
                 ok = ok and db.remover_procs_ignorados(pares_para_remover)
             if ok:
                 st.toast("Padrão salvo — aplicado automaticamente nas próximas análises.")
+                carregar_procs_ignorados_cache.clear()
             else:
                 st.error("Erro ao salvar o padrão.")
 

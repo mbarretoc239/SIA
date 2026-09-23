@@ -18,7 +18,7 @@ from core.amostragem import (
 from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cluster
 from core.farol_mensal import carregar_glosas_5310, carregar_processos_ia
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
-from core.settings import carregar_excecoes_modulos_cache, carregar_permissoes_modulos_cache
+from core.settings import carregar_excecoes_modulos_cache, carregar_meus_links_cache, carregar_permissoes_modulos_cache
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 from shared.ui import alerta_turso_indisponivel, estilizar_botoes_exclusao
 
@@ -138,6 +138,7 @@ if "meus_links" in abas_por_id:
                         if db.inserir_link_util(st.session_state.get("usuario_id", ""), link_titulo, link_url):
                             _flash("Link salvo com sucesso!")
                             st.session_state["meu_link_em_edicao"] = None
+                            carregar_meus_links_cache.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao salvar link.")
@@ -150,7 +151,7 @@ if "meus_links" in abas_por_id:
         st.divider()
         st.markdown("### Links Cadastrados")
         
-        meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
+        meus_links = carregar_meus_links_cache(st.session_state.get("usuario_id", ""))
         
         em_edicao_id = st.session_state.get("meu_link_editando_id", None)
         if em_edicao_id:
@@ -165,6 +166,7 @@ if "meus_links" in abas_por_id:
                         if novo_tit:
                             if db.atualizar_titulo_link_util(link_alvo.get("id"), novo_tit):
                                 st.session_state["meu_link_editando_id"] = None
+                                carregar_meus_links_cache.clear()
                                 st.rerun()
                     if c2.button("Cancelar", use_container_width=True):
                         st.session_state["meu_link_editando_id"] = None
@@ -186,6 +188,7 @@ if "meus_links" in abas_por_id:
                     with col_del:
                         if st.button("Excluir", key=f"btn_excluir_link_{link.get('id')}", use_container_width=True):
                             if db.deletar_link_util(link.get('id')):
+                                carregar_meus_links_cache.clear()
                                 st.rerun()
 
 # ==========================================

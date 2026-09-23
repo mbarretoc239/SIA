@@ -79,6 +79,21 @@ def carregar_alinhamentos_pendentes_cache(usuario_id, role):
     return DatabaseManager().carregar_alinhamentos_pendentes(usuario_id, role)
 
 
+@st.cache_data(ttl=300)
+def carregar_meus_links_cache(usuario_id):
+    """Cache de 5min sobre DatabaseManager.carregar_meus_links --
+    app.py::398 chama isso no sidebar, SEM cache nenhum, em TODO rerun do
+    app inteiro (não é um timer, é literalmente qualquer clique em
+    qualquer tela, de qualquer usuário -- ainda mais frequente que o
+    polling de alinhamentos que rodava a cada 15s). Achado em 2026-09-23
+    via log de requisições (usuario_links foi a 4ª tabela mais lida do
+    dia), ver docs/turso_bloqueado_2026-09-23.md. Precisa de `.clear()`
+    depois de adicionar/editar/excluir um link (app.py e
+    views/1_Configuracoes.py), senão a pessoa não veria a mudança na hora."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_meus_links(usuario_id)
+
+
 # Módulos com acesso configurável por role (ver views/1_Configuracoes.py)
 # Admin sempre tem acesso a todos, independente da configuração.
 MODULOS_CONTROLADOS = {

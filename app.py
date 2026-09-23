@@ -1,7 +1,7 @@
 import streamlit as st
 import re
 import time
-from core.settings import carregar_alinhamentos_pendentes_cache
+from core.settings import carregar_alinhamentos_pendentes_cache, carregar_meus_links_cache
 from shared.database import DatabaseManager
 from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro, notificar_esqueci_senha, pode_notificar_esqueci_senha
 from shared.ui import COR_SUBTITULO, COR_TITULO
@@ -395,7 +395,7 @@ else:
     
     # Expansível de Links Úteis (Disponível para todos)
     with st.sidebar.expander("Links", expanded=False):
-        meus_links = db.carregar_meus_links(st.session_state.get("usuario_id", ""))
+        meus_links = carregar_meus_links_cache(st.session_state.get("usuario_id", ""))
         
         if meus_links:
             for link in meus_links:
