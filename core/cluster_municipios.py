@@ -83,11 +83,12 @@ def preparar_registros_cluster(arquivo) -> list:
     return list(vistos.values())
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=86400)
 def carregar_mapa_cluster() -> dict:
-    """{(cidade, uf): {"cluster": ..., "regiao": ...}} -- cacheado 30min,
+    """{(cidade, uf): {"cluster": ..., "regiao": ...}} -- cacheado 24h
+    (aumentado de 30min em 2026-09-23, ver docs/turso_bloqueado_2026-09-23.md),
     catálogo estático que só muda quando alguém reimporta a planilha em
-    Configurações."""
+    Configurações (import já chama .clear())."""
     from shared.database import DatabaseManager
     db = DatabaseManager()
     linhas = db.buscar_cluster_municipios()

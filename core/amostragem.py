@@ -803,34 +803,36 @@ def guias_com_proc_critico(df_esp_guias: pd.DataFrame, procedimentos_criticos: s
     return df_esp_guias[tem_critico]
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=86400)
 def buscar_guias_ia_por_processo_cache(nu_ordem: str) -> list:
-    """Cache de 30min sobre DatabaseManager.buscar_guias_ia_por_processo --
-    dado da base IA só muda com reimport mensal (nenhum risco real de
-    desatualização dentro dessa janela). Sem isso, abrir um processo na
-    Amostragem consultava o Turso do zero a CADA clique (marcar guia vista,
-    trocar filtro, mudar de aba etc. -- o Streamlit reroda a tela inteira a
-    cada interação), multiplicando leituras redundantes do mesmo processo
-    (visto em produção 2026-09-23, ver docs/turso_bloqueado_2026-09-23.md)."""
+    """Cache de 24h sobre DatabaseManager.buscar_guias_ia_por_processo --
+    dado da base IA só muda com reimport mensal, e o import já chama
+    .clear() nas 4 funções desse grupo (ver views/1_Configuracoes.py), então
+    não há risco real de desatualização. Sem cache nenhum, abrir um processo
+    na Amostragem consultava o Turso do zero a CADA clique (marcar guia
+    vista, trocar filtro, mudar de aba etc. -- o Streamlit reroda a tela
+    inteira a cada interação), multiplicando leituras redundantes do mesmo
+    processo (visto em produção 2026-09-23, ver
+    docs/turso_bloqueado_2026-09-23.md)."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_guias_ia_por_processo(nu_ordem)
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=86400)
 def buscar_guias_liberadas_ia_por_processo_cache(nu_ordem: str) -> list:
     """Mesmo motivo/janela de buscar_guias_ia_por_processo_cache."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_guias_liberadas_ia_por_processo(nu_ordem)
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=86400)
 def buscar_glosas_5310_por_processo_cache(nu_ordem: str) -> list:
     """Mesmo motivo/janela de buscar_guias_ia_por_processo_cache."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_glosas_5310_por_processo(nu_ordem)
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=86400)
 def buscar_imagem_por_guias_cache(nu_guias: tuple) -> list:
     """Mesmo motivo/janela de buscar_guias_ia_por_processo_cache. `nu_guias`
     precisa ser tupla (não lista) -- chave de cache do st.cache_data exige
@@ -839,13 +841,15 @@ def buscar_imagem_por_guias_cache(nu_guias: tuple) -> list:
     return DatabaseManager().buscar_imagem_por_guias(list(nu_guias))
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def carregar_processos_turso() -> list:
     """Lista agregada de processos do mês (Turso, ou fallback Supabase se
-    bloqueado) -- cacheada por 1h (era 5min; ver core/relatorio_5201.py::
-    carregar_dados_atuais pro mesmo motivo -- essa consulta re-lê uma tabela
-    grande, e refazer isso a cada 5min contribuiu pro estouro de cota de
-    2026-09-23). Import de base IA já chama .clear() (views/1_Configuracoes.py)."""
+    bloqueado) -- cacheada por 24h (era 5min, depois 1h; ver
+    core/relatorio_5201.py::carregar_dados_atuais pro mesmo motivo -- essa
+    consulta re-lê uma tabela grande, e refazer isso a cada 5min contribuiu
+    pro estouro de cota de 2026-09-23). Import de base IA só acontece
+    manualmente (1x/mês) e já chama .clear() na hora
+    (views/1_Configuracoes.py) -- não há janela real de desatualização."""
     from shared.database import DatabaseManager
     db = DatabaseManager()
     return db.listar_processos_agregado()
