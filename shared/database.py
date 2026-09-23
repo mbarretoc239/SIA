@@ -1216,7 +1216,13 @@ class DatabaseManager:
         return user
 
     def listar_usuarios(self):
-        return self._get_paginado(f"{self.supabase_url}/rest/v1/usuarios?select=*")
+        # select= restrito (sem senha_hash/senha_algo) -- nenhum dos 3
+        # chamadores (Configuracoes.py, Alinhamentos.py) usa esses campos,
+        # e nao ha motivo pra fazer o hash de senha de todo mundo trafegar
+        # ate uma tela que so mostra nome/status/equipe (achado na auditoria
+        # de egress de 2026-09-23, ver docs/turso_bloqueado_2026-09-23.md).
+        campos = "id,nome_completo,usuario_sigo,equipe,role_interno,status,created_at"
+        return self._get_paginado(f"{self.supabase_url}/rest/v1/usuarios?select={campos}")
         
     def atualizar_usuario_admin(self, usuario_id, status, role_interno, equipe):
         url = f"{self.supabase_url}/rest/v1/usuarios?id=eq.{usuario_id}"
@@ -1498,12 +1504,20 @@ class DatabaseManager:
         niveis_visiveis = [n for n, v in NIVEL_HIERARQUIA.items() if v <= nivel_usuario]
         niveis_filtro = ",".join(niveis_visiveis)
 
-        url = (
+        # 1ª consulta: só os campos usados pra DECIDIR quem é pendente --
+        # não `select=*` (achado na auditoria de egress de 2026-09-23, ver
+        # docs/turso_bloqueado_2026-09-23.md). Essa era a query mais chamada
+        # da história do banco (>93 mil vezes no pg_stat_statements) e
+        # trazia `conteudo` (texto inteiro do aviso) de TODO alinhamento
+        # visível, inclusive os que o usuário já leu há meses -- só pros
+        # poucos que sobram pendentes o conteúdo completo importa.
+        url_filtro = (
             f"{self.supabase_url}/rest/v1/alinhamentos"
-            f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false&select=*&order=created_at.asc"
+            f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false"
+            f"&select=id,ativo,justificativa_inativacao&order=created_at.asc"
         )
-        todos_visiveis = self._get_paginado(url)
-        if not todos_visiveis:
+        candidatos = self._get_paginado(url_filtro)
+        if not candidatos:
             return []
 
         url_lidos = f"{self.supabase_url}/rest/v1/alinhamentos_lidos?usuario_id=eq.{usuario_id}&select=alinhamento_id"
@@ -1512,16 +1526,26 @@ class DatabaseManager:
         url_inativacoes = f"{self.supabase_url}/rest/v1/alinhamentos_inativacoes_lidas?usuario_id=eq.{usuario_id}&select=alinhamento_id"
         inativacoes_lidas_ids = {item["alinhamento_id"] for item in self._get_paginado(url_inativacoes)}
 
-        pendentes = []
-        for a in todos_visiveis:
+        ids_pendentes = []
+        for a in candidatos:
             if a.get("ativo", True):
                 if a["id"] not in lidos_ids:
-                    pendentes.append(a)
+                    ids_pendentes.append(a["id"])
             else:
                 if a.get("justificativa_inativacao") and a["id"] not in inativacoes_lidas_ids:
-                    pendentes.append(a)
+                    ids_pendentes.append(a["id"])
 
-        return pendentes
+        if not ids_pendentes:
+            return []
+
+        # 2ª consulta: só agora busca o conteúdo completo, e só dos IDs que
+        # realmente estão pendentes -- mantém a ordem por created_at.asc
+        # (a query em si não garante ordem com `id=in.(...)`, então ordena
+        # em Python pela posição em `ids_pendentes`, que já veio ordenado).
+        ids_filtro = ",".join(str(i) for i in ids_pendentes)
+        url_completo = f"{self.supabase_url}/rest/v1/alinhamentos?id=in.({ids_filtro})&select=*"
+        completos_por_id = {a["id"]: a for a in self._get_paginado(url_completo)}
+        return [completos_por_id[i] for i in ids_pendentes if i in completos_por_id]
 
     def inserir_alinhamento(self, titulo, conteudo, categoria, nivel_minimo, autor_id, anexo_url=""):
         url = f"{self.supabase_url}/rest/v1/alinhamentos"
