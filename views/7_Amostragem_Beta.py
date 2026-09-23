@@ -716,7 +716,18 @@ with aba_busca:
     # aqui não existe "dado legado nulo" como na biometria (tem_imagem é
     # sempre um booleano real desde a importação), então guia ausente do
     # dict = sem nenhum registro de imagem ainda (célula em branco).
-    imagem_registros = st.session_state.db.buscar_imagem_por_guias(df["NU_GUIA"].unique().tolist())
+    # Base de imagem não tem fallback (ao contrário de guias/glosas 5310) --
+    # ver docs/turso_bloqueado_2026-09-23.md, prioridade foi só guias+5310.
+    # Sem capturar aqui, TursoIndisponivelError propagava sem tratamento
+    # (essa chamada ficou de fora da blindagem original) e derrubava a tela
+    # inteira em produção -- degrada pra "sem dado de imagem" em vez disso.
+    turso_bloqueado_imagem = False
+    try:
+        imagem_registros = st.session_state.db.buscar_imagem_por_guias(df["NU_GUIA"].unique().tolist())
+    except TursoIndisponivelError:
+        imagem_registros = []
+        turso_bloqueado_imagem = True
+
     imagem_por_guia = {}
     for reg in imagem_registros:
         n_ok, n_total = imagem_por_guia.get(reg["nu_guia"], (0, 0))
@@ -725,11 +736,13 @@ with aba_busca:
             n_ok += 1
         imagem_por_guia[reg["nu_guia"]] = (n_ok, n_total)
 
+    if turso_bloqueado_imagem:
+        alerta_turso_indisponivel()
     # Nenhuma guia do processo tem registro de imagem -- sinal forte de que
     # a planilha de imagem (4016R) do mês não foi importada ainda, não que
     # o processo inteiro realmente não tem imagem nenhuma. Avisa antes de
     # qualquer filtro/aba "Sem Imagem" poder confundir as duas coisas.
-    if df["NU_GUIA"].nunique() > 0 and not imagem_por_guia:
+    elif df["NU_GUIA"].nunique() > 0 and not imagem_por_guia:
         st.warning(
             "⚠️ Nenhuma guia deste processo tem dado de imagem registrado. Pode ser que a "
             "planilha de imagem (4016R) do mês ainda não tenha sido importada em "
