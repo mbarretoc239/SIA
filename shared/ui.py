@@ -106,10 +106,8 @@ def aplicar_filtro_numerico(df: pd.DataFrame, coluna: str, filtro) -> pd.DataFra
 # a mesma explicação em vez de cada tela inventar um texto diferente pro
 # mesmo problema.
 TURSO_INDISPONIVEL_MSG = (
-    "⚠️ Base de guias (Turso) temporariamente indisponível: a conta atingiu o limite de "
-    "leitura do plano. Deve normalizar sozinho na virada do mês. As demais telas do SIA "
-    "(Relatório 5302, Calculadora, Produtividade, Configurações) continuam funcionando "
-    "normalmente -- só o que depende da base IA/imagem/REL5310 fica fora do ar até lá."
+    "⚠️ Alguns dados desta seção estão temporariamente indisponíveis. Tente novamente em "
+    "alguns instantes -- as demais telas do SIA continuam funcionando normalmente."
 )
 
 
