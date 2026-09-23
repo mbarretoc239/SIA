@@ -199,19 +199,22 @@ Tudo commitado e em produção (`dc46e3d`):
 3. Linhas de recurso: não chegou a ser necessário decidir — o arquivo
    `5310TRATADA.xlsx` já é o reduzido/tratado pelo usuário, sem essa
    discussão pendente.
-4. **Tabelas + views de fallback criadas no Supabase** (projeto `SIA` /
-   `eixmuuvwilchidaqbxqy`):
+4. **4 tabelas de fallback criadas no Supabase** (projeto `SIA` /
+   `eixmuuvwilchidaqbxqy`), todas populadas via
+   `scripts/popular_fallback_turso.py` (gitignored, caminho hardcoded do
+   Desktop) usando os mesmos parsers reais:
    - `turso_fallback_base_ia_guias`, `turso_fallback_base_5310_glosas` —
-     espelham as colunas do Turso, populadas via
-     `scripts/popular_fallback_turso.py` (gitignored, caminho hardcoded do
-     Desktop) usando os mesmos parsers reais.
-   - `turso_fallback_ia_criticas`, `turso_fallback_ia_biometria` — views
-     que fazem a agregação (GROUP_CONCAT→string_agg, SUM/COUNT) dentro do
-     Postgres, equivalente às 2 queries que `listar_processos_agregado()`
-     roda no Turso. Precisou de um índice composto
-     (`mes_referencia, liberacao, nu_ordem`) pra não estourar o timeout de
-     3s do PostgREST — sem o índice, a agregação sobre 590 mil linhas
-     demorava mais que isso.
+     espelham as colunas cruas do Turso.
+   - `turso_fallback_ia_criticas`, `turso_fallback_ia_biometria` —
+     **pré-agregadas em Python (pandas)**, equivalente às 2 queries
+     GROUP_CONCAT/SUM que `listar_processos_agregado()` roda no Turso.
+     Começaram como *views* SQL calculando a agregação a cada leitura (com
+     um índice composto pra acelerar), mas isso ocasionalmente estourava o
+     timeout de 3s do PostgREST pra role anon **em produção** (erro real no
+     Streamlit Cloud, capturado e corrigido no mesmo dia — commit
+     `42ed4d5`). Viraram tabelas de verdade, calculadas uma única vez no
+     script; a leitura em runtime é só um `SELECT *` em ~5,9 mil linhas
+     já prontas, testado 5x seguidas sem timeout.
 5. **Fallback automático nas 4 funções de leitura** (`shared/database.py`):
    `buscar_guias_ia_por_processo`, `buscar_guias_liberadas_ia_por_processo`,
    `buscar_glosas_5310_por_processo`, `listar_processos_agregado` — tentam
@@ -225,6 +228,12 @@ Tudo commitado e em produção (`dc46e3d`):
 **Pendente (não é código, é decisão de infraestrutura)**: resolver o
 bloqueio de verdade no Turso (upgrade de plano ou reduzir uso de leitura) —
 o fallback é só um remendo pra este mês. Quando o Turso normalizar, apagar
-as 4 tabelas/views `turso_fallback_*` no Supabase e os blocos `except
+as 4 tabelas `turso_fallback_*` no Supabase e os blocos `except
 TursoIndisponivelError` que chamam elas (a blindagem contra crash em si
 pode continuar — é defesa de boa prática, não gambiarra).
+
+**Nota pra reimportar** (ex.: mês virou): `_popular()` faz um `DELETE`
+sem filtro antes de reinserir. Numa tabela já com ~590 mil linhas isso
+pode estourar o timeout até do `service_role` (visto ao rodar o script
+2x seguidas) — mais seguro apagar a tabela manualmente (`TRUNCATE`) pelo
+SQL Editor do Supabase antes de rodar o script de novo.
