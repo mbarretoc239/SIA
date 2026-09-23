@@ -184,14 +184,47 @@ Lido (só cabeçalho/estrutura, nada processado ainda):
   meses retidos), então isso pode não ser bloqueante — não verificado a
   fundo ainda.
 
-## 6. Estado atual — o que falta decidir/fazer
+## 6. Estado atual — RESOLVIDO (2026-09-23, mesmo dia)
 
-1. Confirmar em definitivo a fonte do REL5310 (usuário decide).
-2. Responder objetivamente: quais colunas excluir do arquivo bruto (dá pra
-   responder já, ver §5.3).
-3. Decidir como excluir linhas de recurso (falta saber que coluna identifica
-   isso nesse arquivo).
-4. Só depois disso: implementar as tabelas temporárias no Supabase + o
-   fallback nas 4 funções de leitura da Amostragem (ainda não escrito).
-5. Commitar e dar push da blindagem contra crash (item 3 deste documento),
-   que já está pronta e testada, independente do resto.
+Tudo commitado e em produção (`dc46e3d`):
+
+1. **Fonte do REL5310 confirmada**: não era `202610_5310-.xlsx` (bruto,
+   597 mil linhas, nunca usado) — o usuário encontrou o arquivo real,
+   `C:\Users\matheus.cardoso\Desktop\PLANILHAS\5310TRATADA.xlsx`. Verificado
+   contra `preparar_registros_5310`: 7.526 registros, `mes_referencia =
+   "2026-10"` — bate exatamente com o que já estava importado no Turso
+   antes do bloqueio.
+2. Base IA confirmada de novo com `C:\Users\matheus.cardoso\Desktop\IA 09
+   2026.xlsx`: 590.907 linhas, 5.876 processos, `mes_referencia = "2026-08"`.
+3. Linhas de recurso: não chegou a ser necessário decidir — o arquivo
+   `5310TRATADA.xlsx` já é o reduzido/tratado pelo usuário, sem essa
+   discussão pendente.
+4. **Tabelas + views de fallback criadas no Supabase** (projeto `SIA` /
+   `eixmuuvwilchidaqbxqy`):
+   - `turso_fallback_base_ia_guias`, `turso_fallback_base_5310_glosas` —
+     espelham as colunas do Turso, populadas via
+     `scripts/popular_fallback_turso.py` (gitignored, caminho hardcoded do
+     Desktop) usando os mesmos parsers reais.
+   - `turso_fallback_ia_criticas`, `turso_fallback_ia_biometria` — views
+     que fazem a agregação (GROUP_CONCAT→string_agg, SUM/COUNT) dentro do
+     Postgres, equivalente às 2 queries que `listar_processos_agregado()`
+     roda no Turso. Precisou de um índice composto
+     (`mes_referencia, liberacao, nu_ordem`) pra não estourar o timeout de
+     3s do PostgREST — sem o índice, a agregação sobre 590 mil linhas
+     demorava mais que isso.
+5. **Fallback automático nas 4 funções de leitura** (`shared/database.py`):
+   `buscar_guias_ia_por_processo`, `buscar_guias_liberadas_ia_por_processo`,
+   `buscar_glosas_5310_por_processo`, `listar_processos_agregado` — tentam
+   o Turso primeiro, caem pro Supabase só em `TursoIndisponivelError`. Sem
+   flag manual, sem mudança nas views que chamam essas funções.
+6. Testado ponta a ponta contra o bloqueio real (não só teoria): os 4
+   caminhos e o pipeline completo (`montar_lista_processos_mes`) devolvem
+   dado correto. 144 testes passando.
+7. Blindagem contra crash (item 3 acima) commitada junto.
+
+**Pendente (não é código, é decisão de infraestrutura)**: resolver o
+bloqueio de verdade no Turso (upgrade de plano ou reduzir uso de leitura) —
+o fallback é só um remendo pra este mês. Quando o Turso normalizar, apagar
+as 4 tabelas/views `turso_fallback_*` no Supabase e os blocos `except
+TursoIndisponivelError` que chamam elas (a blindagem contra crash em si
+pode continuar — é defesa de boa prática, não gambiarra).
