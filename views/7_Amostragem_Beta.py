@@ -8,6 +8,10 @@ import streamlit.components.v1 as components
 from core.amostragem import (
     _norm,
     PROCEDIMENTO_REVERSAO,
+    buscar_glosas_5310_por_processo_cache,
+    buscar_guias_ia_por_processo_cache,
+    buscar_guias_liberadas_ia_por_processo_cache,
+    buscar_imagem_por_guias_cache,
     carregar_regras_amostragem_cache,
     calcular_imagens_esperadas_guia,
     carregar_procedimentos_criticos,
@@ -390,15 +394,15 @@ with aba_busca:
     # verdade, então avisa e para aqui em vez de deixar a tela quebrar mais
     # à frente com uma sequência de outros erros.
     try:
-        glosas_5310 = st.session_state.db.buscar_glosas_5310_por_processo(processo_ativo)
+        glosas_5310 = buscar_glosas_5310_por_processo_cache(processo_ativo)
         with st.spinner("Buscando guias..."):
-            guias = st.session_state.db.buscar_guias_ia_por_processo(processo_ativo)
+            guias = buscar_guias_ia_por_processo_cache(processo_ativo)
             # Sempre busca (não só quando Análise Integral) -- o botão de copiar
             # guias de reversão (ver renderizar_botao_copiar_guias_procedimento)
             # precisa das liberadas independente desse modo, e a consulta abaixo
             # ("Guias já liberadas pela IA") também usava isso antes só que numa
             # busca separada e redundante.
-            guias_liberadas = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
+            guias_liberadas = buscar_guias_liberadas_ia_por_processo_cache(processo_ativo)
     except TursoIndisponivelError:
         # Sem aviso de propósito (pedido do usuário) -- na prática só chega
         # aqui se o fallback do Supabase (ver buscar_guias_ia_por_processo
@@ -728,7 +732,7 @@ with aba_busca:
     # inteira em produção -- degrada pra "sem dado de imagem" em vez disso.
     turso_bloqueado_imagem = False
     try:
-        imagem_registros = st.session_state.db.buscar_imagem_por_guias(df["NU_GUIA"].unique().tolist())
+        imagem_registros = buscar_imagem_por_guias_cache(tuple(df["NU_GUIA"].unique().tolist()))
     except TursoIndisponivelError:
         imagem_registros = []
         turso_bloqueado_imagem = True

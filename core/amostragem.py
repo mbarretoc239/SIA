@@ -803,6 +803,42 @@ def guias_com_proc_critico(df_esp_guias: pd.DataFrame, procedimentos_criticos: s
     return df_esp_guias[tem_critico]
 
 
+@st.cache_data(ttl=1800)
+def buscar_guias_ia_por_processo_cache(nu_ordem: str) -> list:
+    """Cache de 30min sobre DatabaseManager.buscar_guias_ia_por_processo --
+    dado da base IA só muda com reimport mensal (nenhum risco real de
+    desatualização dentro dessa janela). Sem isso, abrir um processo na
+    Amostragem consultava o Turso do zero a CADA clique (marcar guia vista,
+    trocar filtro, mudar de aba etc. -- o Streamlit reroda a tela inteira a
+    cada interação), multiplicando leituras redundantes do mesmo processo
+    (visto em produção 2026-09-23, ver docs/turso_bloqueado_2026-09-23.md)."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_guias_ia_por_processo(nu_ordem)
+
+
+@st.cache_data(ttl=1800)
+def buscar_guias_liberadas_ia_por_processo_cache(nu_ordem: str) -> list:
+    """Mesmo motivo/janela de buscar_guias_ia_por_processo_cache."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_guias_liberadas_ia_por_processo(nu_ordem)
+
+
+@st.cache_data(ttl=1800)
+def buscar_glosas_5310_por_processo_cache(nu_ordem: str) -> list:
+    """Mesmo motivo/janela de buscar_guias_ia_por_processo_cache."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_glosas_5310_por_processo(nu_ordem)
+
+
+@st.cache_data(ttl=1800)
+def buscar_imagem_por_guias_cache(nu_guias: tuple) -> list:
+    """Mesmo motivo/janela de buscar_guias_ia_por_processo_cache. `nu_guias`
+    precisa ser tupla (não lista) -- chave de cache do st.cache_data exige
+    argumento hasheável; quem chama converte a lista de guias do processo."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_imagem_por_guias(list(nu_guias))
+
+
 @st.cache_data(ttl=300)
 def carregar_processos_turso() -> list:
     """Lista agregada de processos do mês (Turso) -- cacheada por 5min,
