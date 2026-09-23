@@ -280,10 +280,16 @@ def registros_para_df(registros: list) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def carregar_dados_atuais() -> pd.DataFrame:
-    """Busca e decifra o snapshot atual do REL5201 (cacheado por 5min —
-    evita decifrar todas as linhas a cada rerun de Amostragem/Produtividade)."""
+    """Busca e decifra o snapshot atual do REL5201 (cacheado por 1h —
+    evita decifrar todas as linhas a cada rerun de Amostragem/Produtividade).
+
+    1h (era 5min) -- essa tabela tem ~21MB no Supabase; refazer esse fetch a
+    cada 5min contribuiu bastante pro egress do Supabase estourar a cota do
+    plano Free (visto em 2026-09-23, ver docs/turso_bloqueado_2026-09-23.md).
+    Dado só muda com reimport do REL5201, que já chama .clear() explicitamente
+    (ver views/1_Configuracoes.py) -- não há janela real de desatualização."""
     from shared.database import DatabaseManager
     db = DatabaseManager()
     registros = db.carregar_relatorio_5201()

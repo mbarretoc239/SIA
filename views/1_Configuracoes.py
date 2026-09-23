@@ -5,8 +5,9 @@ import pandas as pd
 import io
 from shared.database import DatabaseManager, TursoIndisponivelError
 
-from core.amostragem import preparar_registros_base_ia, preparar_registros_imagem, preparar_registros_5310
+from core.amostragem import carregar_processos_turso, preparar_registros_base_ia, preparar_registros_imagem, preparar_registros_5310
 from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cluster
+from core.farol_mensal import carregar_glosas_5310, carregar_processos_ia
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
 from core.settings import carregar_excecoes_modulos_cache, carregar_permissoes_modulos_cache
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
@@ -1366,6 +1367,11 @@ if "importar_planilhas" in abas_por_id:
                                 registros_ia, mes_referencia_ia, ao_progredir=_atualizar_barra_ia, retomar=retomar_ia
                             )
                             barra_ia.empty()
+                            # Sem isso, a Lista de processos do mês (Amostragem) e o
+                            # Farol Mensal continuariam mostrando o mês anterior até o
+                            # cache (agora 1h, ver core/amostragem.py) expirar sozinho.
+                            carregar_processos_turso.clear()
+                            carregar_processos_ia.clear()
                             st.success(
                                 f"Mês {mes_referencia_ia}: {total_inserido_ia} de {total_bruto_ia} linha(s) "
                                 f"importadas com sucesso."
@@ -1447,6 +1453,7 @@ if "importar_planilhas" in abas_por_id:
                                 retomar=retomar_5310,
                             )
                             barra_5310.empty()
+                            carregar_glosas_5310.clear()
                             msg_cruzamento = (
                                 f" {nao_cruzados_5310} não bateram pelo nome do procedimento e ficaram "
                                 "com o código TUSS do arquivo." if nao_cruzados_5310 else " Todos os "

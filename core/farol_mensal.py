@@ -338,15 +338,21 @@ def resumo_farol(resultado, total_processos_mes: int, total_procedimentos_mes: i
     }
 
 
-# --- Carregadores (tocam banco; cacheados 5min, mesmo padrão de core.amostragem) ---
+# --- Carregadores (tocam banco; cacheados 1h -- eram 5min, aumentado depois
+# do estouro de cota de leitura/egress de 2026-09-23, ver
+# docs/turso_bloqueado_2026-09-23.md. Essas 2 consultas escaneiam a base IA/
+# 5310 inteira; o botão "Recarregar dados" (views/9_Farol_Mensal.py) já
+# ignora esse cache quando precisa de dado na hora, e o import de
+# base IA/REL5310 em Configurações já chama .clear() explicitamente --
+# não há necessidade real de expirar sozinho tão rápido.) ---
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def carregar_processos_ia() -> list:
     from shared.database import DatabaseManager
     return DatabaseManager().listar_processos_farol_agregado()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def carregar_glosas_5310() -> dict:
     from shared.database import DatabaseManager
     return formatar_glosas_5310(DatabaseManager().listar_glosas_5310_agregado())

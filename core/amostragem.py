@@ -839,11 +839,13 @@ def buscar_imagem_por_guias_cache(nu_guias: tuple) -> list:
     return DatabaseManager().buscar_imagem_por_guias(list(nu_guias))
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def carregar_processos_turso() -> list:
-    """Lista agregada de processos do mês (Turso) -- cacheada por 5min,
-    mesmo padrão de carregar_dados_atuais() (REL5201), pra não reconsultar
-    a cada rerun da tela."""
+    """Lista agregada de processos do mês (Turso, ou fallback Supabase se
+    bloqueado) -- cacheada por 1h (era 5min; ver core/relatorio_5201.py::
+    carregar_dados_atuais pro mesmo motivo -- essa consulta re-lê uma tabela
+    grande, e refazer isso a cada 5min contribuiu pro estouro de cota de
+    2026-09-23). Import de base IA já chama .clear() (views/1_Configuracoes.py)."""
     from shared.database import DatabaseManager
     db = DatabaseManager()
     return db.listar_processos_agregado()

@@ -122,7 +122,16 @@ with col_info:
         f"{fmt_num(base.total_processos_mes)} processos e {fmt_num(base.total_procedimentos_mes)} procedimentos no mês"
     )
 with col_recarregar:
-    if st.button("Recarregar dados", use_container_width=True, help="Ignora o cache de 5 minutos e busca tudo de novo."):
+    if st.button(
+        "Recarregar dados", use_container_width=True,
+        help=(
+            "Ignora o cache de 1h e busca tudo de novo -- só use se acabou de reimportar "
+            "REL5201/base IA/REL5310 em Configurações e quer ver o resultado na hora. "
+            "Cada clique relê a base inteira (Turso + Supabase); clicar repetido sem "
+            "necessidade contribui pro estouro de cota de leitura (já aconteceu em "
+            "2026-09-23)."
+        ),
+    ):
         for carregador in (_carregar_base, carregar_dados_atuais, carregar_processos_ia, carregar_glosas_5310):
             carregador.clear()
         st.rerun()
