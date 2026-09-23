@@ -456,12 +456,14 @@ class DatabaseManager:
             linhas_biometria = {l["nu_ordem"]: l for l in self._turso_linhas(resultado_biometria)}
         except TursoIndisponivelError:
             # GAMBIARRA TEMPORÁRIA (ver docs/turso_bloqueado_2026-09-23.md):
-            # mesmas 2 consultas, só que via views no Supabase
-            # (turso_fallback_ia_criticas/turso_fallback_ia_biometria) --
-            # fazem a mesma agregação (GROUP_CONCAT vira string_agg) dentro
-            # do próprio Postgres, não precisa puxar as linhas cruas pro
-            # Python. Ver scripts/popular_fallback_turso.py. Apagar as
-            # views e este bloco quando o Turso normalizar.
+            # mesmas 2 consultas, só que já pré-agregadas em 2 tabelas no
+            # Supabase (turso_fallback_ia_criticas/turso_fallback_ia_biometria).
+            # Chegaram a ser views calculando GROUP_CONCAT→string_agg na hora,
+            # mas agregar ~590 mil linhas a cada leitura estourava o timeout
+            # de 3s do PostgREST pra role anon de vez em quando (visto em
+            # produção); viraram tabelas, calculadas uma única vez em
+            # scripts/popular_fallback_turso.py. Apagar as tabelas e este
+            # bloco quando o Turso normalizar.
             linhas_critica = self._get_paginado(f"{self.supabase_url}/rest/v1/turso_fallback_ia_criticas?select=*")
             linhas_biometria = {
                 l["nu_ordem"]: l
