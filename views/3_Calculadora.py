@@ -1,6 +1,10 @@
 import streamlit as st
 
-from core.settings import tem_acesso_modulo
+from core.settings import (
+    carregar_excecoes_modulos_cache,
+    carregar_permissoes_modulos_cache,
+    tem_acesso_modulo,
+)
 from shared.database import DatabaseManager
 from shared.ui import COR_PERIGO, COR_SUCESSO
 
@@ -15,8 +19,8 @@ if "db" not in st.session_state:
 
 _role = st.session_state.get("role_interno", "Contas")
 _usuario_id = st.session_state.get("usuario_id")
-_permissoes = st.session_state.db.carregar_permissoes_modulos()
-_excecoes = st.session_state.db.carregar_excecoes_modulos()
+_permissoes = carregar_permissoes_modulos_cache()
+_excecoes = carregar_excecoes_modulos_cache()
 if not tem_acesso_modulo(_permissoes, _role, "calculadora_glosa", _usuario_id, _excecoes):
     st.error("Você não tem permissão para acessar este módulo.")
     st.stop()

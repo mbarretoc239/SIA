@@ -18,7 +18,12 @@ from core.amostragem import (
 from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cluster
 from core.farol_mensal import carregar_glosas_5310, carregar_processos_ia
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
-from core.settings import carregar_excecoes_modulos_cache, carregar_meus_links_cache, carregar_permissoes_modulos_cache
+from core.settings import (
+    carregar_excecoes_modulos_cache,
+    carregar_meus_links_cache,
+    carregar_permissoes_modulos_cache,
+    carregar_textos_prestador_cache,
+)
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 from shared.ui import alerta_turso_indisponivel, estilizar_botoes_exclusao
 
@@ -655,7 +660,7 @@ if "textos_prestadores" in abas_por_id:
         st.markdown("Cadastre os textos descritivos que aparecerão para as glosas no final do relatório.")
         
         # Carrega textos da base (não tem mais a gambiarra do link, mas por segurança filtramos)
-        textos_brutos = db.carregar_textos_prestador()
+        textos_brutos = carregar_textos_prestador_cache()
         textos = [t for t in textos_brutos if t.get("glosas_relacionadas") != "__LINK__"]
         
         # Controles Superiores
@@ -753,6 +758,7 @@ if "textos_prestadores" in abas_por_id:
                         f_proc = ",".join(label_to_valor_proc[lbl] for lbl in f_proc_labels)
                         if em_edicao == "NOVO":
                             if db.inserir_texto_prestador(f_tit, f_glo, f_txt, nome, f_sub, f_proc):
+                                carregar_textos_prestador_cache.clear()
                                 _flash("Texto cadastrado com sucesso!")
                                 st.session_state["texto_em_edicao"] = None
                                 st.rerun()
@@ -760,6 +766,7 @@ if "textos_prestadores" in abas_por_id:
                                 st.error("Erro ao salvar no banco.")
                         else:
                             if db.atualizar_texto_prestador(t_alvo['id'], f_tit, f_glo, f_txt, nome, f_sub, f_proc):
+                                carregar_textos_prestador_cache.clear()
                                 _flash("Texto atualizado com sucesso!")
                                 st.session_state["texto_em_edicao"] = None
                                 st.rerun()
@@ -806,6 +813,7 @@ if "textos_prestadores" in abas_por_id:
                         st.rerun()
                     if b_del.button("Excluir", key=f"btn_excluir_texto_{t['id']}", use_container_width=True):
                         if db.deletar_texto_prestador(t['id']):
+                            carregar_textos_prestador_cache.clear()
                             st.rerun()
 
 # ==========================================

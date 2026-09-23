@@ -153,3 +153,16 @@ def carregar_excecoes_modulos_cache():
     """Mesma ideia de carregar_permissoes_modulos_cache(), pra exceções."""
     from shared.database import DatabaseManager
     return DatabaseManager().carregar_excecoes_modulos()
+
+
+@st.cache_data(ttl=3600)
+def carregar_textos_prestador_cache():
+    """Cache de 1h sobre DatabaseManager.carregar_textos_prestador --
+    catálogo pequeno e global de "Textos Padrões ao Prestador", lido sem
+    cache toda vez que alguém gera um texto no Relatório 5302 (views/2_
+    Relatorio_5302.py), uma das ações mais comuns do app (10 pessoas,
+    várias vezes/dia cada). Só muda quando alguém edita em Configurações
+    (views/1_Configuracoes.py), que já chama `.clear()` logo após
+    inserir/atualizar/excluir."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_textos_prestador()

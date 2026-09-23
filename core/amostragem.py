@@ -861,6 +861,68 @@ def buscar_imagem_por_guias_cache(nu_guias: tuple) -> list:
     return DatabaseManager().buscar_imagem_por_guias(list(nu_guias))
 
 
+@st.cache_data(ttl=30)
+def buscar_analise_integral_cache(processo) -> dict | None:
+    """Cache de 30s sobre DatabaseManager.buscar_analise_integral --
+    rodava sem cache no corpo principal da tela de Amostragem
+    (views/7_Amostragem_Beta.py), ou seja, em TODO rerun do Streamlit
+    enquanto um processo está aberto (qualquer clique/checkbox na tela,
+    não só ao trocar de processo). `amostragem_analise_integral` foi a
+    tabela mais lida numa janela limpa medida em 2026-09-23 (142
+    requisições em 28min), ver docs/turso_bloqueado_2026-09-23.md.
+
+    TTL curto (não 24h como as buscas por processo da base IA) porque
+    esse dado muda por ação de qualquer auditor a qualquer momento
+    (marcar/desmarcar Análise Integral) -- quem clica already vê o
+    próprio clique refletido na hora via `.clear()` + `st.rerun()`
+    (views/7_Amostragem_Beta.py); o TTL só limita quanto tempo um OUTRO
+    usuário work numa aba já aberta demora a ver a marcação de alguém
+    mais."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_analise_integral(processo)
+
+
+@st.cache_data(ttl=30)
+def buscar_status_processo_cache(nu_ordem: str) -> dict | None:
+    """Cache de 30s sobre DatabaseManager.buscar_status_processo -- mesmo
+    motivo de buscar_analise_integral_cache (roda sem cache no corpo
+    principal da tela de Amostragem, em todo rerun enquanto um processo
+    está aberto). TTL curto pelo mesmo motivo: status pode mudar por
+    marcação manual (marcar_status_manual_5201) a qualquer momento;
+    quem marca já invalida e vê na hora via `.clear()` + `st.rerun()`."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_status_processo(nu_ordem)
+
+
+@st.cache_data(ttl=30)
+def buscar_guias_vistas_cache(nu_guias: tuple) -> set:
+    """Cache de 30s sobre DatabaseManager.buscar_guias_vistas -- rodava sem
+    cache no corpo principal da tela de Amostragem, em todo rerun. Seguro
+    cachear com TTL curto porque o "marcar vista" real (ver o <script> em
+    renderizar_tabela_guias) grava direto do navegador pro Supabase via
+    fetch() e atualiza o contador só no client-side -- o valor lido aqui em
+    Python já é só o estado inicial ao carregar/re-renderizar a tabela, não
+    algo que precise refletir o próprio clique do usuário na hora. `nu_guias`
+    precisa ser tupla (chave de cache hasheável); quem chama converte a
+    lista de guias do processo."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_guias_vistas(list(nu_guias))
+
+
+@st.cache_data(ttl=30)
+def buscar_snapshots_sugestao_amostra_cache(processo) -> dict:
+    """Cache de 30s sobre DatabaseManager.buscar_snapshots_sugestao_amostra
+    -- rodava sem cache no corpo principal da tela de Amostragem, em todo
+    rerun. Seguro cachear: salvar_snapshot_sugestao_amostra já usa
+    'resolution=ignore-duplicates' (grava só na 1ª vez por
+    processo+especialidade), então reler um snapshot levemente desatualizado
+    no máximo atrasa em até 30s a tela perceber que o snapshot já foi
+    criado -- pior caso é 1-2 POSTs a mais (ignorados pelo Postgres), nunca
+    dado incorreto."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_snapshots_sugestao_amostra(processo)
+
+
 @st.cache_data(ttl=86400)
 def carregar_processos_turso() -> list:
     """Lista agregada de processos do mês (Turso, ou fallback Supabase se

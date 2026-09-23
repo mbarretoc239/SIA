@@ -8,10 +8,14 @@ import streamlit.components.v1 as components
 from core.amostragem import (
     _norm,
     PROCEDIMENTO_REVERSAO,
+    buscar_analise_integral_cache,
     buscar_glosas_5310_por_processo_cache,
     buscar_guias_ia_por_processo_cache,
     buscar_guias_liberadas_ia_por_processo_cache,
+    buscar_guias_vistas_cache,
     buscar_imagem_por_guias_cache,
+    buscar_snapshots_sugestao_amostra_cache,
+    buscar_status_processo_cache,
     carregar_regras_amostragem_cache,
     calcular_imagens_esperadas_guia,
     carregar_procedimentos_criticos,
@@ -380,7 +384,7 @@ with aba_busca:
     # prestadores de análise de risco exigem cobertura de tudo, não só do
     # que a IA não liberou. Carregado aqui em cima porque decide se busca
     # também as liberadas antes de montar `df`.
-    analise_integral = st.session_state.db.buscar_analise_integral(processo_ativo)
+    analise_integral = buscar_analise_integral_cache(processo_ativo)
 
     # Glosas administrativas graves do REL5310 (046, 066 etc.) -- guias que
     # nem aparecem na base IA, porque o relatório da IA não traz guia já
@@ -451,7 +455,7 @@ with aba_busca:
     # se o processo ainda não tiver a coluna `ordem` preenchida -- meses
     # importados antes dessa otimização precisam ser reimportados pra
     # ganhar o caminho rápido.
-    registro_direto = st.session_state.db.buscar_status_processo(processo_ativo)
+    registro_direto = buscar_status_processo_cache(processo_ativo)
     if registro_direto is not None:
         info_status = formatar_status_processo(registro_direto)
     else:
@@ -477,6 +481,7 @@ with aba_busca:
                 st.success("Análise Integral ativa", icon="🔎")
                 if st.button("Desativar", key="btn_desativar_integral", use_container_width=True):
                     if st.session_state.db.desmarcar_analise_integral(processo_ativo):
+                        buscar_analise_integral_cache.clear()
                         st.rerun()
                     else:
                         st.error("Erro ao desativar Análise Integral.")
@@ -492,6 +497,7 @@ with aba_busca:
                 ):
                     marcado_por = st.session_state.get("auditor_nome", "")
                     if st.session_state.db.marcar_analise_integral(processo_ativo, marcado_por=marcado_por):
+                        buscar_analise_integral_cache.clear()
                         st.rerun()
                     else:
                         st.error("Erro ao marcar Análise Integral.")
@@ -520,17 +526,19 @@ with aba_busca:
                     col_fechado, col_calculado = st.columns(2)
                     if col_fechado.button("Fechado", key="btn_marcar_fechado_manual", use_container_width=True):
                         if st.session_state.db.marcar_status_manual_5201(processo_ativo, "FECHADO"):
-                            # carregar_dados_atuais() é cacheado 5min (ver
+                            # carregar_dados_atuais() é cacheado 24h (ver
                             # core/relatorio_5201.py) -- sem limpar aqui, a
                             # Produtividade continuaria mostrando o status
-                            # antigo por até 5min depois de marcar.
+                            # antigo por até 24h depois de marcar.
                             carregar_dados_atuais.clear()
+                            buscar_status_processo_cache.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
                     if col_calculado.button("Calculado", key="btn_marcar_calculado_manual", use_container_width=True):
                         if st.session_state.db.marcar_status_manual_5201(processo_ativo, "CALCULADO"):
                             carregar_dados_atuais.clear()
+                            buscar_status_processo_cache.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
@@ -887,7 +895,7 @@ with aba_busca:
     # guias que os filtros já tiraram da lista.
     df = df[df["NU_GUIA"].isin(df_guias["NU_GUIA"])]
 
-    guias_vistas = st.session_state.db.buscar_guias_vistas(df_guias["NU_GUIA"].unique().tolist())
+    guias_vistas = buscar_guias_vistas_cache(tuple(df_guias["NU_GUIA"].unique().tolist()))
 
     # Snapshot imutável da "Sugestão de amostra" no momento em que ela foi
     # calculada pela primeira vez pra cada especialidade deste processo --
@@ -895,7 +903,7 @@ with aba_busca:
     # o auditor revisou tudo que foi sugerido originalmente, mesmo que a
     # sugestão recalculada agora tenha mudado (config de regras ou base IA
     # diferentes de quando o auditor trabalhou).
-    snapshots_sugestao = st.session_state.db.buscar_snapshots_sugestao_amostra(processo_ativo)
+    snapshots_sugestao = buscar_snapshots_sugestao_amostra_cache(processo_ativo)
 
     # REGRAS_AMOSTRAGEM/ORDEM_CRITICAS já carregadas lá em cima (antes do
     # bloco de filtros), reaproveitadas aqui.

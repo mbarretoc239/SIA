@@ -504,11 +504,9 @@ if pdf_file is not None:
 
                         procedimentos_presentes = set(str(p) for p in df_final['Cód. Procedimento'].unique())
 
-                        from shared.database import DatabaseManager
-                        if "db" not in st.session_state:
-                            st.session_state.db = DatabaseManager()
+                        from core.settings import carregar_textos_prestador_cache
 
-                        textos_db = st.session_state.db.carregar_textos_prestador()
+                        textos_db = carregar_textos_prestador_cache()
 
                         candidatos = []
                         for txt in textos_db:
