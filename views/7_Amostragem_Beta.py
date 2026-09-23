@@ -41,7 +41,6 @@ from core.settings import (
 from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
 from shared.database import DatabaseManager, TursoIndisponivelError
 from shared.ui import (
-    alerta_turso_indisponivel,
     aplicar_filtro_numerico,
     filtro_numerico,
     persistir_entre_paginas,
@@ -255,11 +254,14 @@ with aba_busca:
                         carregar_processos_turso(), carregar_dados_atuais(), carregar_procedimentos_criticos()
                     )
             except TursoIndisponivelError:
-                alerta_turso_indisponivel()
+                # Sem aviso de propósito (pedido do usuário) -- só fica em
+                # branco, sem alarme pro auditor. Só chega aqui se o
+                # fallback do Supabase (ver listar_processos_agregado)
+                # também tiver falhado, o que não é o caminho normal.
                 df_processos = None
 
             if df_processos is None:
-                pass  # aviso já mostrado acima
+                pass
             elif df_processos.empty:
                 st.info("Nenhum processo encontrado na base do mês.")
             else:
@@ -398,7 +400,10 @@ with aba_busca:
             # busca separada e redundante.
             guias_liberadas = st.session_state.db.buscar_guias_liberadas_ia_por_processo(processo_ativo)
     except TursoIndisponivelError:
-        alerta_turso_indisponivel()
+        # Sem aviso de propósito (pedido do usuário) -- na prática só chega
+        # aqui se o fallback do Supabase (ver buscar_guias_ia_por_processo
+        # etc.) também tiver falhado, cenário raro; melhor parar em
+        # silêncio do que alarmar o auditor com detalhe de infra.
         st.stop()
     df = _guias_para_df(guias + guias_liberadas if analise_integral else guias)
 
@@ -737,7 +742,7 @@ with aba_busca:
         imagem_por_guia[reg["nu_guia"]] = (n_ok, n_total)
 
     if turso_bloqueado_imagem:
-        alerta_turso_indisponivel()
+        pass  # sem aviso de propósito (pedido do usuário) -- fica em branco
     # Nenhuma guia do processo tem registro de imagem -- sinal forte de que
     # a planilha de imagem (4016R) do mês não foi importada ainda, não que
     # o processo inteiro realmente não tem imagem nenhuma. Avisa antes de
