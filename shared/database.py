@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from shared.egress_metrics import supabase_get
 import hashlib
 import json
 import bcrypt
@@ -99,7 +100,7 @@ class DatabaseManager:
         while True:
             headers_paginado = {**base_headers, "Range-Unit": "items", "Range": f"{inicio}-{inicio + tamanho_pagina - 1}"}
             # nao-paginado: e a propria implementacao de _get_paginado
-            r = requests.get(url, headers=headers_paginado, params=params)
+            r = supabase_get(url, operation="get_paginado", headers=headers_paginado, params=params)
             if r.status_code not in (200, 206):
                 # Nunca devolver silenciosamente as paginas ja lidas como se
                 # fossem a tabela inteira -- uma falha transitoria no meio da
