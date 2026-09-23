@@ -23,6 +23,8 @@ from core.settings import (
     carregar_meus_links_cache,
     carregar_permissoes_modulos_cache,
     carregar_textos_prestador_cache,
+    listar_links_padrao_cache,
+    listar_usuarios_cache,
 )
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 from shared.ui import alerta_turso_indisponivel, estilizar_botoes_exclusao
@@ -203,7 +205,7 @@ if "aprovacao_equipe" in abas_por_id:
     if aba_selecionada == abas_por_id["aprovacao_equipe"]:
         st.subheader("Fila de Moderação de Cadastros")
         
-        usuarios = db.listar_usuarios()
+        usuarios = listar_usuarios_cache()
         if not usuarios:
             st.warning("Nenhum usuário cadastrado no banco de dados ainda.")
         else:
@@ -234,6 +236,7 @@ if "aprovacao_equipe" in abas_por_id:
                         with col_save:
                             if st.button("Salvar Alteração", key=f"btn_{row['id']}", type="primary", use_container_width=True):
                                 if db.atualizar_usuario_admin(row['id'], novo_status, novo_role, nova_equipe):
+                                    listar_usuarios_cache.clear()
                                     _flash("Usuário atualizado com sucesso!")
                                     st.rerun()
                                 else:
@@ -241,6 +244,7 @@ if "aprovacao_equipe" in abas_por_id:
                         with col_del:
                             if st.button("Excluir", key=f"btn_excluir_pendente_{row['id']}", use_container_width=True):
                                 if db.excluir_usuario(row['id'], role):
+                                    listar_usuarios_cache.clear()
                                     _flash("Usuário excluído.")
                                     st.rerun()
                                 else:
@@ -274,6 +278,7 @@ if "aprovacao_equipe" in abas_por_id:
                         st.markdown("Esta ação não pode ser desfeita.")
                         if st.button("Sim, excluir permanentemente", key="btn_excluir_usuario_confirmar", type="primary", use_container_width=True):
                             if db.excluir_usuario(uid, role):
+                                listar_usuarios_cache.clear()
                                 _flash("Usuário excluído com sucesso.")
                                 st.rerun()
                             else:
@@ -864,7 +869,7 @@ if "permissoes" in abas_por_id:
         st.subheader("Exceção por Usuário")
         st.markdown("Abra uma exceção para liberar ou bloquear um módulo específico para um login, independente da função dele.")
 
-        usuarios_ativos = [u for u in db.listar_usuarios() if u.get("status") == "Ativo"]
+        usuarios_ativos = [u for u in listar_usuarios_cache() if u.get("status") == "Ativo"]
         excecoes_atuais = db.carregar_excecoes_modulos()
 
         OPCOES_EXCECAO = ["Padrão (herda da função)", "Permitir", "Bloquear"]
@@ -1207,7 +1212,7 @@ if "links_home" in abas_por_id:
             if st.button("Adicionar Novo Link", type="primary", use_container_width=True, key="btn_add_link_padrao"):
                 st.session_state["link_padrao_em_edicao"] = "NOVO"
 
-        todos_links = db.listar_links_padrao(incluir_inativos=True)
+        todos_links = listar_links_padrao_cache(incluir_inativos=True)
 
         em_edicao = st.session_state.get("link_padrao_em_edicao", None)
         if em_edicao:
@@ -1252,6 +1257,7 @@ if "links_home" in abas_por_id:
                     else:
                         if em_edicao == "NOVO":
                             if db.inserir_link_padrao(lp_titulo, lp_url, lp_categoria, lp_ordem, atuante_role=role, niveis_visiveis=lp_niveis):
+                                listar_links_padrao_cache.clear()
                                 _flash("Link adicionado!")
                                 st.session_state["link_padrao_em_edicao"] = None
                                 st.rerun()
@@ -1259,6 +1265,7 @@ if "links_home" in abas_por_id:
                                 st.error("Erro ao salvar.")
                         else:
                             if db.atualizar_link_padrao(l_alvo["id"], lp_titulo, lp_url, lp_categoria, lp_ordem, lp_ativo, atuante_role=role, niveis_visiveis=lp_niveis):
+                                listar_links_padrao_cache.clear()
                                 _flash("Link atualizado!")
                                 st.session_state["link_padrao_em_edicao"] = None
                                 st.rerun()
@@ -1289,6 +1296,7 @@ if "links_home" in abas_por_id:
                         st.rerun()
                     if b_del.button("Excluir", key=f"btn_excluir_linkpadrao_{l['id']}", use_container_width=True):
                         if db.deletar_link_padrao(l["id"], atuante_role=role):
+                            listar_links_padrao_cache.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao excluir.")

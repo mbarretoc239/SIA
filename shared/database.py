@@ -1483,6 +1483,30 @@ class DatabaseManager:
         response = requests.patch(url, headers=self.headers, json=data)
         return response.status_code in (200, 204)
 
+    def buscar_ultimo_alinhamento_visivel(self, role):
+        """Só o alinhamento mais recente visível pro role -- usado na Home
+        (views/0_Dashboard.py), que antes chamava carregar_alinhamentos_visiveis
+        (sem cache, no topo do arquivo, em TODO rerun) e trazia a LISTA
+        INTEIRA de alinhamentos visíveis (com `conteudo` completo de cada
+        um) só pra usar `[0]` e descartar o resto (achado na auditoria de
+        egress de 2026-09-23, ver docs/turso_bloqueado_2026-09-23.md).
+        `limit=1` já na consulta -- não precisa paginar."""
+        from core.settings import NIVEL_HIERARQUIA
+        nivel_usuario = NIVEL_HIERARQUIA.get(role, 1)
+        niveis_visiveis = [n for n, v in NIVEL_HIERARQUIA.items() if v <= nivel_usuario]
+        niveis_filtro = ",".join(niveis_visiveis)
+        url = (
+            f"{self.supabase_url}/rest/v1/alinhamentos"
+            f"?nivel_minimo=in.({niveis_filtro})&excluido=eq.false"
+            f"&select=*&order=created_at.desc&limit=1"
+        )
+        # nao-paginado: limit=1 explicito, mesmo padrao de buscar_status_processo
+        response = requests.get(url, headers=self.headers)
+        if not response.ok:
+            return None
+        linhas = response.json()
+        return linhas[0] if linhas else None
+
     def carregar_alinhamentos_visiveis(self, role):
         from core.settings import NIVEL_HIERARQUIA
         nivel_usuario = NIVEL_HIERARQUIA.get(role, 1)

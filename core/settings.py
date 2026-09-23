@@ -155,6 +155,40 @@ def carregar_excecoes_modulos_cache():
     return DatabaseManager().carregar_excecoes_modulos()
 
 
+@st.cache_data(ttl=60)
+def buscar_ultimo_alinhamento_visivel_cache(role):
+    """Cache de 60s sobre DatabaseManager.buscar_ultimo_alinhamento_visivel
+    -- a Home (views/0_Dashboard.py) chamava a versão sem cache/sem limit
+    no topo do arquivo, em todo rerun (achado em 2026-09-23, ver
+    docs/turso_bloqueado_2026-09-23.md). TTL curto pelo mesmo motivo de
+    carregar_alinhamentos_pendentes_cache: um alinhamento novo precisa
+    aparecer rápido pra quem está com a Home aberta."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().buscar_ultimo_alinhamento_visivel(role)
+
+
+@st.cache_data(ttl=3600)
+def listar_links_padrao_cache(incluir_inativos=False, role=None):
+    """Cache de 1h sobre DatabaseManager.listar_links_padrao -- a Home
+    (views/0_Dashboard.py) chamava a versão sem cache no topo do arquivo,
+    em todo rerun da página mais visitada do app (achado em 2026-09-23,
+    ver docs/turso_bloqueado_2026-09-23.md). Só muda quando um link é
+    editado em Configurações, que já chama `.clear()` logo depois."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().listar_links_padrao(incluir_inativos, role)
+
+
+@st.cache_data(ttl=60)
+def listar_usuarios_cache():
+    """Cache de 60s sobre DatabaseManager.listar_usuarios -- usado em 3
+    lugares (Configurações, Alinhamentos) sem cache nenhum. TTL curto
+    porque a fila de aprovação de cadastro (Configurações) precisa
+    refletir rápido um novo usuário pendente; os pontos que mudam a
+    tabela já chamam `.clear()`."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().listar_usuarios()
+
+
 @st.cache_data(ttl=3600)
 def carregar_textos_prestador_cache():
     """Cache de 1h sobre DatabaseManager.carregar_textos_prestador --

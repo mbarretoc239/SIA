@@ -3,6 +3,7 @@ import re
 import pandas as pd
 import streamlit as st
 
+from core.settings import buscar_ultimo_alinhamento_visivel_cache, listar_links_padrao_cache
 from shared.database import DatabaseManager
 
 st.title("Início")
@@ -15,12 +16,11 @@ role = st.session_state.get("role_interno", "Contas")
 
 # Último alinhamento visível para o role do usuário logado
 st.markdown("### Último alinhamento")
-alinhamentos_visiveis = db.carregar_alinhamentos_visiveis(role)
-if not alinhamentos_visiveis:
+ultimo = buscar_ultimo_alinhamento_visivel_cache(role)
+if not ultimo:
     st.info("Nenhum alinhamento disponível para o seu nível de acesso.")
     st.page_link("views/5_Alinhamentos.py", label="Ver todos os alinhamentos")
 else:
-    ultimo = alinhamentos_visiveis[0]
     with st.container(border=True):
         titulo = ultimo.get("titulo", "")
         if not ultimo.get("ativo", True):
@@ -52,7 +52,7 @@ else:
 
 # Links úteis (institucionais) - agrupados por categoria, filtrados pela
 # equipe do usuário logado (Gestor e Admin sempre veem todos)
-links_padrao = db.listar_links_padrao(role=role)
+links_padrao = listar_links_padrao_cache(role=role)
 with st.expander("Links úteis", expanded=False):
     if not links_padrao:
         st.caption("Nenhum link cadastrado ainda.")

@@ -3,7 +3,12 @@ import re
 import pandas as pd
 import streamlit as st
 
-from core.settings import NIVEL_HIERARQUIA, ROLES_CIENCIA_OBRIGATORIA, carregar_alinhamentos_pendentes_cache
+from core.settings import (
+    NIVEL_HIERARQUIA,
+    ROLES_CIENCIA_OBRIGATORIA,
+    carregar_alinhamentos_pendentes_cache,
+    listar_usuarios_cache,
+)
 from shared.database import DatabaseManager
 from shared.ui import estilizar_botoes_exclusao
 
@@ -459,7 +464,7 @@ if pode_gerenciar:
         if not excluidos:
             st.info("Nenhum alinhamento excluído.")
         else:
-            usuarios_map = {u["id"]: u.get("nome_completo", "?") for u in db.listar_usuarios()}
+            usuarios_map = {u["id"]: u.get("nome_completo", "?") for u in listar_usuarios_cache()}
 
             for a in excluidos:
                 aid = a["id"]
