@@ -58,6 +58,27 @@ NIVEL_HIERARQUIA = {
 # Roles sujeitos ao pop-up obrigatório "Estou Ciente"
 ROLES_CIENCIA_OBRIGATORIA = {"Contas", "Auditor", "CISO"}
 
+
+@st.cache_data(ttl=60)
+def carregar_alinhamentos_pendentes_cache(usuario_id, role):
+    """Cache de 1min sobre DatabaseManager.carregar_alinhamentos_pendentes --
+    substitui um fragment(run_every=15) que rodava sozinho a cada 15s em
+    app.py, mesmo sem nenhuma interação do usuário (3 consultas por tick,
+    10 pessoas com aba aberta 8h = ~57 mil consultas/dia só nisso, visto em
+    2026-09-23 via pg_stat_user_tables, ver docs/turso_bloqueado_2026-09-23.md).
+    Agora só é chamada como parte do rerun normal do Streamlit -- não refaz
+    a consulta de novo antes de 1min, mesmo com vários reruns seguidos.
+
+    Precisa de `.clear()` sempre que a lista de pendentes de alguém pode ter
+    mudado: depois de marcar como lido/ciente (app.py::mostrar_alinhamento_dialog)
+    e depois de criar/inativar/resetar ciência de um alinhamento
+    (views/5_Alinhamentos.py) -- senão o próprio usuário veria o popup
+    reaparecer com a lista antiga, ou um alinhamento novo demoraria até 1min
+    pra aparecer pra quem já está com a tela aberta."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_alinhamentos_pendentes(usuario_id, role)
+
+
 # Módulos com acesso configurável por role (ver views/1_Configuracoes.py)
 # Admin sempre tem acesso a todos, independente da configuração.
 MODULOS_CONTROLADOS = {

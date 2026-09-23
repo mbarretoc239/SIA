@@ -1,6 +1,7 @@
 import streamlit as st
 import re
 import time
+from core.settings import carregar_alinhamentos_pendentes_cache
 from shared.database import DatabaseManager
 from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro, notificar_esqueci_senha, pode_notificar_esqueci_senha
 from shared.ui import COR_SUBTITULO, COR_TITULO
@@ -62,6 +63,7 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
             db.marcar_inativacao_lida(alinhamento["id"], usuario_id)
             st.session_state["alinhamentos_pendentes"].pop(0)
             st.session_state["_dialog_alinhamento_id"] = None
+            carregar_alinhamentos_pendentes_cache.clear()
             st.rerun()
     else:
         st.subheader(alinhamento["titulo"])
@@ -76,6 +78,7 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
             # pendente no banco mas o popup nunca reabre, porque o app acha
             # que já mostrou esse id nesta sessão.
             st.session_state["_dialog_alinhamento_id"] = None
+            carregar_alinhamentos_pendentes_cache.clear()
             st.rerun()
 
 
@@ -313,23 +316,23 @@ else:
     permissoes = carregar_permissoes_modulos_cache()
     excecoes_acesso = carregar_excecoes_modulos_cache()
 
-    # --- ALINHAMENTOS PENDENTES (pop-up obrigatório "Estou Ciente", com checagem ao vivo) ---
+    # --- ALINHAMENTOS PENDENTES (pop-up obrigatório "Estou Ciente") ---
     from core.settings import ROLES_CIENCIA_OBRIGATORIA
 
     if role in ROLES_CIENCIA_OBRIGATORIA:
-        # A checagem roda em fragment com run_every pra detectar alinhamento novo
-        # sem precisar de interação do usuário. O popup em si é aberto FORA do
-        # fragment: abri-lo de dentro de um fragment que se auto-atualiza sozinho
-        # faz o clique no botão "Estou Ciente" competir com o próximo auto-refresh
-        # e não ser processado (o popup fica preso, parecendo travado).
-        @st.fragment(run_every=15)
-        def _checar_alinhamentos_pendentes():
-            pendentes = db.carregar_alinhamentos_pendentes(st.session_state.get("usuario_id"), role)
-            st.session_state["alinhamentos_pendentes"] = pendentes
-
-        _checar_alinhamentos_pendentes()
-
-        pendentes_atuais = st.session_state.get("alinhamentos_pendentes") or []
+        # Checagem cacheada por 1min, na própria execução normal do script --
+        # SEM fragment/run_every. O run_every=15 rodava sozinho a cada 15s,
+        # em toda aba aberta, MESMO sem nenhuma interação do usuário --
+        # 3 consultas por tick, 10 pessoas, 8h de aba aberta = ~57 mil
+        # consultas/dia só nisso (visto em 2026-09-23 via pg_stat_user_tables,
+        # ver docs/turso_bloqueado_2026-09-23.md). Auditor ativo (clicando
+        # o dia todo, ver uso real do SIA) continua sendo avisado rápido --
+        # a checagem acontece a cada rerun normal, só não refaz a consulta
+        # de novo antes de 1min. Só quem fica com a aba aberta sem clicar em
+        # nada por minutos leva mais tempo pra ver um alinhamento novo --
+        # cenário raro num app que exige interação constante pra auditar.
+        pendentes_atuais = carregar_alinhamentos_pendentes_cache(st.session_state.get("usuario_id"), role)
+        st.session_state["alinhamentos_pendentes"] = pendentes_atuais
         if pendentes_atuais:
             # ciencia_disparada_em entra na chave do guard -- quando o admin
             # clica "Disparar ciência de novo" (views/5_Alinhamentos.py), essa

@@ -3,7 +3,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from core.settings import NIVEL_HIERARQUIA, ROLES_CIENCIA_OBRIGATORIA
+from core.settings import NIVEL_HIERARQUIA, ROLES_CIENCIA_OBRIGATORIA, carregar_alinhamentos_pendentes_cache
 from shared.database import DatabaseManager
 from shared.ui import estilizar_botoes_exclusao
 
@@ -258,6 +258,10 @@ if pode_gerenciar:
                         if db.inserir_alinhamento(e_titulo, e_conteudo, e_categoria, e_nivel, usuario_id, e_anexo):
                             st.success("Alinhamento publicado!")
                             st.session_state["alinhamento_em_edicao"] = None
+                            # Sem isso, quem já está com o app aberto só veria
+                            # esse alinhamento novo depois de até 1min (cache
+                            # de carregar_alinhamentos_pendentes_cache).
+                            carregar_alinhamentos_pendentes_cache.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao publicar o alinhamento.")
@@ -267,6 +271,7 @@ if pode_gerenciar:
                         if db.atualizar_alinhamento(em_edicao, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data, e_anexo):
                             st.success("Alinhamento atualizado!")
                             st.session_state["alinhamento_em_edicao"] = None
+                            carregar_alinhamentos_pendentes_cache.clear()
                             st.rerun()
                         else:
                             st.error("Erro ao atualizar o alinhamento.")
@@ -394,7 +399,8 @@ if pode_gerenciar:
                             ),
                         ):
                             if db.resetar_ciencia_alinhamento(aid):
-                                st.success("Popup vai reaparecer pra quem ainda não confirmou (até 15s).")
+                                carregar_alinhamentos_pendentes_cache.clear()
+                                st.success("Popup vai reaparecer pra quem ainda não confirmou.")
                                 st.rerun()
                             else:
                                 st.error("Erro ao disparar a ciência de novo.")
@@ -407,6 +413,7 @@ if pode_gerenciar:
                                 if not motivo_inativ.strip():
                                     st.warning("Justificativa obrigatória.")
                                 elif db.toggle_ativo_alinhamento(aid, False, justificativa=motivo_inativ.strip(), usuario_id=usuario_id, usuario_nome=nome):
+                                    carregar_alinhamentos_pendentes_cache.clear()
                                     st.rerun()
                                 else:
                                     st.error("Erro ao inativar.")
@@ -425,6 +432,7 @@ if pode_gerenciar:
                             if not motivo_excl.strip():
                                 st.warning("Motivo obrigatório.")
                             elif db.excluir_alinhamento_com_motivo(aid, motivo_excl, usuario_id):
+                                carregar_alinhamentos_pendentes_cache.clear()
                                 st.rerun()
                             else:
                                 st.error("Erro ao excluir.")
