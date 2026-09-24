@@ -31,6 +31,51 @@ def _resposta(status_code=200, json_data=None):
     return resp
 
 
+@pytest.fixture(autouse=True)
+def _sem_pausa_de_bloqueio():
+    """A pausa depois de um BLOCKED vale pro processo inteiro (atributo de
+    classe) -- sem zerar, um teste de bloqueio contaminaria os seguintes."""
+    DatabaseManager._turso_bloqueado_ate = 0.0
+    yield
+    DatabaseManager._turso_bloqueado_ate = 0.0
+
+
+def _resposta_blocked():
+    return _resposta(json_data={"results": [
+        {"type": "error", "error": {"message": "reads are blocked", "code": "BLOCKED"}},
+        {"type": "ok"},
+    ]})
+
+
+def test_depois_de_blocked_nao_chama_o_turso_de_novo_durante_a_pausa():
+    """Buscas sem fallback (imagem, Farol) refaziam a chamada em todo clique,
+    porque o st.cache_data não guarda erro. Durante a pausa, falha direto."""
+    db = _db()
+    with patch("shared.database.requests.post", return_value=_resposta_blocked()) as post:
+        with pytest.raises(TursoIndisponivelError):
+            db._turso_pipeline([{"sql": "SELECT 1"}], "token")
+        with pytest.raises(TursoIndisponivelError):
+            db._turso_pipeline([{"sql": "SELECT 1"}], "token")
+    assert post.call_count == 1
+
+
+def test_depois_da_pausa_tenta_o_turso_de_novo():
+    db = _db()
+    with patch("shared.database.requests.post", return_value=_resposta_blocked()):
+        with pytest.raises(TursoIndisponivelError):
+            db._turso_pipeline([{"sql": "SELECT 1"}], "token")
+
+    sucesso = _resposta(json_data={"results": [
+        {"type": "ok", "response": {"result": {"cols": [], "rows": []}}},
+        {"type": "ok"},
+    ]})
+    depois_da_pausa = DatabaseManager._turso_bloqueado_ate + 1
+    with patch("shared.database.time.time", return_value=depois_da_pausa), \
+            patch("shared.database.requests.post", return_value=sucesso) as post:
+        assert db._turso_pipeline([{"sql": "SELECT 1"}], "token") == [{"cols": [], "rows": []}]
+    assert post.call_count == 1
+
+
 def test_erro_code_blocked_vira_tursoindisponivelerror():
     db = _db()
     resposta = _resposta(json_data={"results": [

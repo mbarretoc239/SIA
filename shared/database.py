@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import hashlib
 import json
+import time
 import bcrypt
 from datetime import datetime, timezone
 from cryptography.fernet import Fernet
@@ -182,13 +183,24 @@ class DatabaseManager:
             for linha in resultado.get("rows", [])
         ]
 
+    # Depois de um "BLOCKED" do Turso, não tenta de novo por 10min. Atributo
+    # de classe = vale pro processo inteiro (todas as sessões). Sem isso, as
+    # buscas sem fallback (imagem da Amostragem, Farol Mensal) refaziam a
+    # chamada em todo clique: o st.cache_data não guarda erro, só resultado.
+    _TURSO_PAUSA_APOS_BLOQUEIO_S = 600
+    _turso_bloqueado_ate = 0.0
+
     def _turso_pipeline(self, statements: list, token: str) -> list:
         """Executa uma lista de statements SQL ({"sql":..., "args":[...]})
         numa única requisição HTTP ao Turso. Retorna a lista de `result`,
         um por statement, na mesma ordem."""
         if not token:
             raise RuntimeError("Token do Turso não configurado em st.secrets['turso']")
-        body = {"requests": [{"type": "execute", "stmt": s} for s in statements] + [{"type": "close"}]}
+        if time.time() < DatabaseManager._turso_bloqueado_ate:
+            raise TursoIndisponivelError(
+                "Turso bloqueado por limite do plano (nova tentativa só depois da pausa)"
+            )
+        body ={"requests": [{"type": "execute", "stmt": s} for s in statements] + [{"type": "close"}]}
         resp = requests.post(
             f"{self.turso_url}/v2/pipeline",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -215,6 +227,7 @@ class DatabaseManager:
                 # pra UI mostrar um aviso amigável em vez de deixar a página
                 # inteira quebrar com traceback -- ver TursoIndisponivelError.
                 if isinstance(erro, dict) and erro.get("code") == "BLOCKED":
+                    DatabaseManager._turso_bloqueado_ate = time.time() + self._TURSO_PAUSA_APOS_BLOQUEIO_S
                     raise TursoIndisponivelError(mensagem)
                 raise RuntimeError(mensagem)
             resultados.append(item["response"]["result"])
