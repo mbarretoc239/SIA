@@ -167,6 +167,63 @@ def buscar_ultimo_alinhamento_visivel_cache(role):
     return DatabaseManager().buscar_ultimo_alinhamento_visivel(role)
 
 
+# --- Tela de Alinhamentos (views/5_Alinhamentos.py) ---
+# As leituras abaixo rodavam sem cache no corpo da tela, e o Streamlit roda
+# todas as abas a cada clique: um gestor disparava 6 consultas por
+# interação. Em 2026-09-24, um deploy com a tela aberta gerou 73 leituras de
+# alinhamentos_historico_status em 5min (a página reconectando a cada ~3s).
+# TTL longo porque toda escrita em alinhamentos acontece dentro do app e
+# chama limpar_caches_alinhamentos() -- o TTL é só rede de segurança.
+
+
+@st.cache_data(ttl=1800)
+def carregar_alinhamentos_visiveis_cache(role):
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_alinhamentos_visiveis(role)
+
+
+@st.cache_data(ttl=1800)
+def carregar_alinhamentos_cache():
+    """Todos os não excluídos (aba Gerenciar, e a aba de testes em Configurações)."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_alinhamentos()
+
+
+@st.cache_data(ttl=1800)
+def carregar_alinhamentos_excluidos_cache():
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_alinhamentos_excluidos()
+
+
+@st.cache_data(ttl=1800)
+def carregar_historico_status_alinhamentos_cache():
+    from shared.database import DatabaseManager
+    return DatabaseManager().carregar_historico_status_alinhamentos()
+
+
+@st.cache_data(ttl=300)
+def contar_leituras_por_alinhamento_cache():
+    """Badge "X/Y cientes" da aba Gerenciar. Muda a cada "Estou Ciente"
+    (app.py limpa na hora); TTL menor cobre confirmações feitas por fora
+    disso (ex.: cadastro de usuário novo marcando tudo como lido)."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().contar_leituras_por_alinhamento()
+
+
+def limpar_caches_alinhamentos():
+    """Chamar depois de qualquer escrita em alinhamentos (publicar, editar,
+    inativar, reativar, excluir, restaurar, disparar ciência de novo). Limpa
+    pra todos os usuários -- escrita em alinhamento é rara, e um comunicado
+    novo precisa aparecer pra todo mundo na hora."""
+    carregar_alinhamentos_visiveis_cache.clear()
+    carregar_alinhamentos_cache.clear()
+    carregar_alinhamentos_excluidos_cache.clear()
+    carregar_historico_status_alinhamentos_cache.clear()
+    contar_leituras_por_alinhamento_cache.clear()
+    buscar_ultimo_alinhamento_visivel_cache.clear()
+    carregar_alinhamentos_pendentes_cache.clear()
+
+
 @st.cache_data(ttl=3600)
 def listar_links_padrao_cache(incluir_inativos=False, role=None):
     """Cache de 1h sobre DatabaseManager.listar_links_padrao -- a Home

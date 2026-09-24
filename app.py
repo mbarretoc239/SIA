@@ -1,7 +1,11 @@
 import streamlit as st
 import re
 import time
-from core.settings import carregar_alinhamentos_pendentes_cache, carregar_meus_links_cache
+from core.settings import (
+    carregar_alinhamentos_pendentes_cache,
+    carregar_meus_links_cache,
+    contar_leituras_por_alinhamento_cache,
+)
 from shared.database import DatabaseManager
 from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro, notificar_esqueci_senha, pode_notificar_esqueci_senha
 from shared.ui import COR_SUBTITULO, COR_TITULO
@@ -47,6 +51,14 @@ def _expirar_cookie_sessao():
         height=0,
     )
 
+def _limpar_caches_apos_ciencia(usuario_id):
+    """Só a entrada de pendentes de quem confirmou (mesma chave usada no
+    carregar_alinhamentos_pendentes_cache mais abaixo) -- limpar tudo faria
+    cada "Estou Ciente" reler os pendentes de todos os usuários ativos."""
+    carregar_alinhamentos_pendentes_cache.clear(usuario_id, st.session_state.get("role_interno", "Contas"))
+    contar_leituras_por_alinhamento_cache.clear()
+
+
 @st.dialog("Aviso do Sistema", width="large")
 def mostrar_alinhamento_dialog(alinhamento, usuario_id):
     is_inativacao = not alinhamento.get("ativo", True)
@@ -63,7 +75,7 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
             db.marcar_inativacao_lida(alinhamento["id"], usuario_id)
             st.session_state["alinhamentos_pendentes"].pop(0)
             st.session_state["_dialog_alinhamento_id"] = None
-            carregar_alinhamentos_pendentes_cache.clear()
+            _limpar_caches_apos_ciencia(usuario_id)
             st.rerun()
     else:
         st.subheader(alinhamento["titulo"])
@@ -78,7 +90,7 @@ def mostrar_alinhamento_dialog(alinhamento, usuario_id):
             # pendente no banco mas o popup nunca reabre, porque o app acha
             # que já mostrou esse id nesta sessão.
             st.session_state["_dialog_alinhamento_id"] = None
-            carregar_alinhamentos_pendentes_cache.clear()
+            _limpar_caches_apos_ciencia(usuario_id)
             st.rerun()
 
 
@@ -404,7 +416,18 @@ else:
             st.caption("Nenhum link cadastrado.")
             
         st.page_link("views/1_Configuracoes.py", label=" Adicionar Link")
-        
+
+    # Registro de uso (tabela uso_telas): 1 linha quando a pessoa ENTRA numa
+    # tela, não a cada clique dentro dela -- pra saber quais telas são mais
+    # usadas e por quem. Nunca pode atrapalhar a navegação, então erro aqui
+    # é ignorado.
+    if st.session_state.get("_ultima_tela_registrada") != pg.title:
+        st.session_state["_ultima_tela_registrada"] = pg.title
+        try:
+            db.registrar_uso_tela(usuario_id_atual, role, pg.title)
+        except Exception:
+            pass
+
     pg.run()
     
     st.sidebar.divider()

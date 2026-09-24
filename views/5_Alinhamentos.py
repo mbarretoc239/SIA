@@ -6,7 +6,12 @@ import streamlit as st
 from core.settings import (
     NIVEL_HIERARQUIA,
     ROLES_CIENCIA_OBRIGATORIA,
-    carregar_alinhamentos_pendentes_cache,
+    carregar_alinhamentos_cache,
+    carregar_alinhamentos_excluidos_cache,
+    carregar_alinhamentos_visiveis_cache,
+    carregar_historico_status_alinhamentos_cache,
+    contar_leituras_por_alinhamento_cache,
+    limpar_caches_alinhamentos,
     listar_usuarios_cache,
 )
 from shared.database import DatabaseManager
@@ -106,8 +111,8 @@ def _render_historico_status(aid, historico_por_alinhamento):
 
 
 with aba_historico:
-    alinhamentos = db.carregar_alinhamentos_visiveis(role)
-    historico_por_alinhamento = db.carregar_historico_status_alinhamentos()
+    alinhamentos = carregar_alinhamentos_visiveis_cache(role)
+    historico_por_alinhamento = carregar_historico_status_alinhamentos_cache()
 
     if not alinhamentos:
         st.info("Nenhum alinhamento disponível para o seu nível de acesso.")
@@ -194,7 +199,7 @@ with aba_historico:
 
 if pode_gerenciar:
     with aba_gerenciar:
-        todos_base = db.carregar_alinhamentos()  # exclui excluídos por padrão
+        todos_base = carregar_alinhamentos_cache()  # exclui excluídos
         anos_disponiveis2 = sorted({
             pd.to_datetime(a["created_at"]).year for a in todos_base if a.get("created_at")
         }, reverse=True)
@@ -221,9 +226,11 @@ if pode_gerenciar:
         # alinhamento que estiver de fato aberto (ver _form_edicao e o loop
         # da lista). Evita buscar as 1454+ linhas de alinhamentos_lidos
         # inteira só pra montar um contador.
-        usuarios_ativos = db.carregar_usuarios_ativos()
-        contagem_leituras_por_alinhamento = db.contar_leituras_por_alinhamento()
-        historico_por_alinhamento = db.carregar_historico_status_alinhamentos()
+        # listar_usuarios_cache já traz status/role/nome de todos -- filtrar
+        # aqui evita uma segunda consulta só pros ativos.
+        usuarios_ativos = [u for u in listar_usuarios_cache() if u.get("status") == "Ativo"]
+        contagem_leituras_por_alinhamento = contar_leituras_por_alinhamento_cache()
+        historico_por_alinhamento = carregar_historico_status_alinhamentos_cache()
 
         def _form_edicao(a_alvo, em_edicao):
             """Campos + Salvar/Cancelar + status de ciência. Reaproveitado
@@ -264,9 +271,8 @@ if pode_gerenciar:
                             st.success("Alinhamento publicado!")
                             st.session_state["alinhamento_em_edicao"] = None
                             # Sem isso, quem já está com o app aberto só veria
-                            # esse alinhamento novo depois de até 1min (cache
-                            # de carregar_alinhamentos_pendentes_cache).
-                            carregar_alinhamentos_pendentes_cache.clear()
+                            # esse alinhamento novo quando os caches vencessem.
+                            limpar_caches_alinhamentos()
                             st.rerun()
                         else:
                             st.error("Erro ao publicar o alinhamento.")
@@ -276,7 +282,7 @@ if pode_gerenciar:
                         if db.atualizar_alinhamento(em_edicao, e_titulo, e_conteudo, e_categoria, e_nivel, nova_data, e_anexo):
                             st.success("Alinhamento atualizado!")
                             st.session_state["alinhamento_em_edicao"] = None
-                            carregar_alinhamentos_pendentes_cache.clear()
+                            limpar_caches_alinhamentos()
                             st.rerun()
                         else:
                             st.error("Erro ao atualizar o alinhamento.")
@@ -404,7 +410,7 @@ if pode_gerenciar:
                             ),
                         ):
                             if db.resetar_ciencia_alinhamento(aid):
-                                carregar_alinhamentos_pendentes_cache.clear()
+                                limpar_caches_alinhamentos()
                                 st.success("Popup vai reaparecer pra quem ainda não confirmou.")
                                 st.rerun()
                             else:
@@ -418,13 +424,14 @@ if pode_gerenciar:
                                 if not motivo_inativ.strip():
                                     st.warning("Justificativa obrigatória.")
                                 elif db.toggle_ativo_alinhamento(aid, False, justificativa=motivo_inativ.strip(), usuario_id=usuario_id, usuario_nome=nome):
-                                    carregar_alinhamentos_pendentes_cache.clear()
+                                    limpar_caches_alinhamentos()
                                     st.rerun()
                                 else:
                                     st.error("Erro ao inativar.")
                     else:
                         if st.button("Reativar", key=f"reativ_{aid}", use_container_width=True):
                             if db.toggle_ativo_alinhamento(aid, True, usuario_id=usuario_id, usuario_nome=nome):
+                                limpar_caches_alinhamentos()
                                 st.rerun()
                             else:
                                 st.error("Erro ao reativar.")
@@ -437,7 +444,7 @@ if pode_gerenciar:
                             if not motivo_excl.strip():
                                 st.warning("Motivo obrigatório.")
                             elif db.excluir_alinhamento_com_motivo(aid, motivo_excl, usuario_id):
-                                carregar_alinhamentos_pendentes_cache.clear()
+                                limpar_caches_alinhamentos()
                                 st.rerun()
                             else:
                                 st.error("Erro ao excluir.")
@@ -460,7 +467,7 @@ if pode_gerenciar:
     with aba_excluidos:
         st.markdown("Alinhamentos excluídos, com motivo e responsável. Restaurar devolve o item para a lista de gerenciamento.")
 
-        excluidos = db.carregar_alinhamentos_excluidos()
+        excluidos = carregar_alinhamentos_excluidos_cache()
         if not excluidos:
             st.info("Nenhum alinhamento excluído.")
         else:
@@ -481,6 +488,7 @@ if pode_gerenciar:
                     st.write("")
                     if st.button("Restaurar", key=f"restaurar_{aid}", use_container_width=True):
                         if db.restaurar_alinhamento(aid):
+                            limpar_caches_alinhamentos()
                             st.success("Restaurado.")
                             st.rerun()
                         else:

@@ -133,6 +133,17 @@ class DatabaseManager:
             inicio += tamanho_pagina
         return todas
 
+    def registrar_uso_tela(self, usuario_id, role, tela) -> None:
+        """Uma linha em uso_telas quando a pessoa entra numa tela (app.py chama
+        só na troca de tela, não a cada clique). Timeout curto: registro de
+        uso nunca pode segurar a navegação -- quem chama também ignora erro."""
+        requests.post(
+            f"{self.supabase_url}/rest/v1/uso_telas",
+            headers=self.headers,
+            json={"usuario_id": usuario_id, "role": role, "tela": tela},
+            timeout=3,
+        )
+
     def _get(self, endpoint: str) -> list:
         return self._get_paginado(f"{self.supabase_url}/rest/v1/{endpoint}")
 

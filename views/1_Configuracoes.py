@@ -20,10 +20,12 @@ from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cl
 from core.farol_mensal import carregar_glosas_5310, carregar_processos_ia
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
 from core.settings import (
+    carregar_alinhamentos_cache,
     carregar_excecoes_modulos_cache,
     carregar_meus_links_cache,
     carregar_permissoes_modulos_cache,
     carregar_textos_prestador_cache,
+    limpar_caches_alinhamentos,
     listar_links_padrao_cache,
     listar_usuarios_cache,
 )
@@ -352,6 +354,7 @@ if "debug_testes" in abas_por_id:
             if st.form_submit_button("Registrar Alinhamento de Teste", type="primary"):
                 titulo_final = f"[TESTE] {t_titulo}" if not t_titulo.startswith("[TESTE]") else t_titulo
                 if db.inserir_alinhamento(titulo_final, t_conteudo, t_categoria, t_nivel, usuario_id_admin):
+                    limpar_caches_alinhamentos()
                     _flash("Alinhamento de teste registrado!")
                     st.rerun()
                 else:
@@ -361,9 +364,9 @@ if "debug_testes" in abas_por_id:
 
         # --- 2. Testar notificação (popup "Estou Ciente") ---
         st.markdown("### 2. Testar Notificação ao Vivo")
-        st.caption("Remove sua confirmação de ciência de um alinhamento, fazendo o popup \"Estou Ciente\" reaparecer em até 45s.")
+        st.caption("Remove sua confirmação de ciência de um alinhamento, fazendo o popup \"Estou Ciente\" reaparecer na próxima interação.")
 
-        todos_alinhamentos = db.carregar_alinhamentos()
+        todos_alinhamentos = carregar_alinhamentos_cache()
         if not todos_alinhamentos:
             st.info("Nenhum alinhamento cadastrado.")
         else:
@@ -372,9 +375,10 @@ if "debug_testes" in abas_por_id:
             if st.button("Resetar minha ciência e forçar popup", type="primary"):
                 aid_escolhido = opcoes[escolha]
                 if db.remover_leitura_alinhamento(aid_escolhido, usuario_id_admin):
+                    limpar_caches_alinhamentos()
                     st.session_state.pop("_dialog_alinhamento_id", None)
                     st.session_state.pop("alinhamentos_pendentes", None)
-                    st.success("Ciência removida! O popup deve aparecer na próxima checagem (até 45s).")
+                    st.success("Ciência removida! O popup deve aparecer na próxima interação.")
                 else:
                     st.error("Erro ao remover a confirmação de ciência.")
 
@@ -396,6 +400,7 @@ if "debug_testes" in abas_por_id:
                     with col_del:
                         if st.button("Excluir", key=f"btn_excluir_teste_{a['id']}", use_container_width=True):
                             if db.excluir_alinhamento(a["id"]):
+                                limpar_caches_alinhamentos()
                                 st.rerun()
                             else:
                                 st.error("Erro ao excluir.")
