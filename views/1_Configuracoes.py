@@ -10,6 +10,7 @@ from core.amostragem import (
     buscar_guias_ia_por_processo_cache,
     buscar_guias_liberadas_ia_por_processo_cache,
     buscar_imagem_por_guias_cache,
+    buscar_status_processo_cache,
     carregar_processos_turso,
     preparar_registros_base_ia,
     preparar_registros_imagem,
@@ -1360,6 +1361,7 @@ if "importar_planilhas" in abas_por_id:
                             except Exception:
                                 pass
                         carregar_dados_atuais.clear()
+                        buscar_status_processo_cache.clear()
                         _flash(f"{total_5201} processo(s) importado(s) em {mes_referencia_5201} com sucesso.")
                         st.rerun()
                     except Exception as erro:

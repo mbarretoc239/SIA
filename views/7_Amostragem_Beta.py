@@ -481,7 +481,7 @@ with aba_busca:
                 st.success("Análise Integral ativa", icon="🔎")
                 if st.button("Desativar", key="btn_desativar_integral", use_container_width=True):
                     if st.session_state.db.desmarcar_analise_integral(processo_ativo):
-                        buscar_analise_integral_cache.clear()
+                        buscar_analise_integral_cache.clear(processo_ativo)
                         st.rerun()
                     else:
                         st.error("Erro ao desativar Análise Integral.")
@@ -497,7 +497,7 @@ with aba_busca:
                 ):
                     marcado_por = st.session_state.get("auditor_nome", "")
                     if st.session_state.db.marcar_analise_integral(processo_ativo, marcado_por=marcado_por):
-                        buscar_analise_integral_cache.clear()
+                        buscar_analise_integral_cache.clear(processo_ativo)
                         st.rerun()
                     else:
                         st.error("Erro ao marcar Análise Integral.")
@@ -531,14 +531,14 @@ with aba_busca:
                             # Produtividade continuaria mostrando o status
                             # antigo por até 24h depois de marcar.
                             carregar_dados_atuais.clear()
-                            buscar_status_processo_cache.clear()
+                            buscar_status_processo_cache.clear(processo_ativo)
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
                     if col_calculado.button("Calculado", key="btn_marcar_calculado_manual", use_container_width=True):
                         if st.session_state.db.marcar_status_manual_5201(processo_ativo, "CALCULADO"):
                             carregar_dados_atuais.clear()
-                            buscar_status_processo_cache.clear()
+                            buscar_status_processo_cache.clear(processo_ativo)
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
@@ -895,7 +895,12 @@ with aba_busca:
     # guias que os filtros já tiraram da lista.
     df = df[df["NU_GUIA"].isin(df_guias["NU_GUIA"])]
 
-    guias_vistas = buscar_guias_vistas_cache(tuple(df_guias["NU_GUIA"].unique().tolist()))
+    # Chave = todas as guias do processo (N + liberadas), não df_guias já
+    # filtrado -- com os filtros na chave, cada troca de biometria/imagem
+    # relia o banco. O resultado só é usado pra checar se uma guia está no
+    # conjunto, então trazer as marcações do processo inteiro não muda a tela.
+    guias_do_processo = tuple(sorted({str(g["nu_guia"]) for g in guias + guias_liberadas}))
+    guias_vistas = buscar_guias_vistas_cache(guias_do_processo)
 
     # Snapshot imutável da "Sugestão de amostra" no momento em que ela foi
     # calculada pela primeira vez pra cada especialidade deste processo --
@@ -1093,6 +1098,10 @@ with aba_busca:
             # nisso", mesmo que a sugestão mude depois.
             if esp not in snapshots_sugestao:
                 if st.session_state.db.salvar_snapshot_sugestao_amostra(processo_ativo, esp, list(guias_sugeridas_agora)):
+                    # Só a entrada deste processo -- .clear() sem argumento
+                    # invalidaria o cache de todos os auditores a cada
+                    # processo aberto (snapshot é gravado quase sempre).
+                    buscar_snapshots_sugestao_amostra_cache.clear(processo_ativo)
                     snapshots_sugestao[esp] = {
                         "guias": guias_sugeridas_agora,
                         "tamanho_sugerido": len(guias_sugeridas_agora),

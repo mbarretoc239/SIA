@@ -53,12 +53,18 @@ class DatabaseManager:
         # Inicializa a criptografia Fernet
         self.fernet = Fernet(st.secrets["seguranca"]["fernet_key"].encode('utf-8'))
 
-        # Headers padrão para a API REST do Supabase (PostgREST)
+        # Headers padrão para a API REST do Supabase (PostgREST).
+        # return=minimal: escrita não devolve a linha gravada/apagada no corpo
+        # da resposta -- quase nenhum chamador usa esse retorno, e ele conta
+        # como egress igual a uma leitura (ex.: cada DELETE em lote do
+        # REL5201 devolvia até 5.000 linhas cifradas à toa). Quem precisa do
+        # retorno (ID recém-criado) pede return=representation na própria
+        # chamada -- ver criar_usuario, inserir_alinhamento, inserir_link_util.
         self.headers = {
             "apikey": self.supabase_key,
             "Authorization": f"Bearer {self.supabase_key}",
             "Content-Type": "application/json",
-            "Prefer": "return=representation"
+            "Prefer": "return=minimal"
         }
 
         # Turso: só as tabelas de dado bruto mensal (ver TURSO_CAMPOS_* acima).
@@ -78,7 +84,7 @@ class DatabaseManager:
             "apikey": self._service_role,
             "Authorization": f"Bearer {self._service_role}",
             "Content-Type": "application/json",
-            "Prefer": "return=representation",
+            "Prefer": "return=minimal",
         }
 
     def _get_paginado(self, url: str, params: dict = None, headers: dict = None) -> list:
@@ -1146,7 +1152,8 @@ class DatabaseManager:
             "status": "Pendente"
         }
         
-        response = requests.post(url, headers=self.headers, json=data)
+        headers_com_retorno = {**self.headers, "Prefer": "return=representation"}
+        response = requests.post(url, headers=headers_com_retorno, json=data)
         if response.status_code not in [200, 201]:
             return False
 
@@ -1580,7 +1587,8 @@ class DatabaseManager:
             "autor_id": autor_id,
             "anexo_url": anexo_url.strip() if anexo_url else None,
         }
-        response = requests.post(url, headers=self.headers, json=data)
+        headers_com_retorno = {**self.headers, "Prefer": "return=representation"}
+        response = requests.post(url, headers=headers_com_retorno, json=data)
         if response.status_code not in [200, 201]:
             return False
 

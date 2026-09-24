@@ -861,64 +861,54 @@ def buscar_imagem_por_guias_cache(nu_guias: tuple) -> list:
     return DatabaseManager().buscar_imagem_por_guias(list(nu_guias))
 
 
-@st.cache_data(ttl=30)
-def buscar_analise_integral_cache(processo) -> dict | None:
-    """Cache de 30s sobre DatabaseManager.buscar_analise_integral --
-    rodava sem cache no corpo principal da tela de Amostragem
-    (views/7_Amostragem_Beta.py), ou seja, em TODO rerun do Streamlit
-    enquanto um processo está aberto (qualquer clique/checkbox na tela,
-    não só ao trocar de processo). `amostragem_analise_integral` foi a
-    tabela mais lida numa janela limpa medida em 2026-09-23 (142
-    requisições em 28min), ver docs/turso_bloqueado_2026-09-23.md.
+# TTL de 30min nas 4 buscas por processo abaixo (eram 30s): cada processo
+# é aberto por um auditor só, então o cache nunca é reaproveitado por outra
+# pessoa -- com 30s, era o próprio auditor relendo tudo a cada clique
+# enquanto trabalhava no processo (medido em 2026-09-24: guias_vistas lida
+# ~8-10x por processo aberto, ver docs/turso_bloqueado_2026-09-23.md).
+# Mudança feita pelo app aparece na hora mesmo assim: `.clear(processo)`
+# limpa a entrada daquele processo pra todos os usuários (o cache é do
+# servidor, não da sessão), sem derrubar o cache dos outros processos.
 
-    TTL curto (não 24h como as buscas por processo da base IA) porque
-    esse dado muda por ação de qualquer auditor a qualquer momento
-    (marcar/desmarcar Análise Integral) -- quem clica already vê o
-    próprio clique refletido na hora via `.clear()` + `st.rerun()`
-    (views/7_Amostragem_Beta.py); o TTL só limita quanto tempo um OUTRO
-    usuário work numa aba já aberta demora a ver a marcação de alguém
-    mais."""
+
+@st.cache_data(ttl=1800)
+def buscar_analise_integral_cache(processo) -> dict | None:
+    """Invalidado por `.clear()` ao marcar/desmarcar Análise Integral
+    (views/7_Amostragem_Beta.py)."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_analise_integral(processo)
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=1800)
 def buscar_status_processo_cache(nu_ordem: str) -> dict | None:
-    """Cache de 30s sobre DatabaseManager.buscar_status_processo -- mesmo
-    motivo de buscar_analise_integral_cache (roda sem cache no corpo
-    principal da tela de Amostragem, em todo rerun enquanto um processo
-    está aberto). TTL curto pelo mesmo motivo: status pode mudar por
-    marcação manual (marcar_status_manual_5201) a qualquer momento;
-    quem marca já invalida e vê na hora via `.clear()` + `st.rerun()`."""
+    """Invalidado por `.clear()` no status manual (views/7_Amostragem_Beta.py)
+    e na reimportação do REL5201 (views/1_Configuracoes.py)."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_status_processo(nu_ordem)
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=1800)
 def buscar_guias_vistas_cache(nu_guias: tuple) -> set:
-    """Cache de 30s sobre DatabaseManager.buscar_guias_vistas -- rodava sem
-    cache no corpo principal da tela de Amostragem, em todo rerun. Seguro
-    cachear com TTL curto porque o "marcar vista" real (ver o <script> em
-    renderizar_tabela_guias) grava direto do navegador pro Supabase via
-    fetch() e atualiza o contador só no client-side -- o valor lido aqui em
-    Python já é só o estado inicial ao carregar/re-renderizar a tabela, não
-    algo que precise refletir o próprio clique do usuário na hora. `nu_guias`
-    precisa ser tupla (chave de cache hasheável); quem chama converte a
-    lista de guias do processo."""
+    """`nu_guias` = TODAS as guias do processo (não só as que sobram depois
+    dos filtros de biometria/imagem) -- senão cada troca de filtro vira uma
+    chave nova e relê o banco. Precisa ser tupla (chave hasheável).
+
+    Sem `.clear()` porque a marcação é gravada direto pelo navegador
+    (marcarVistaNoServidor em renderizar_tabela_guias), não pelo Python. Não
+    afeta o auditor: o navegador guarda as próprias marcações em
+    localStorage e junta com esta lista, então um cache antigo nunca
+    esconde o que ele marcou. Só quem abre o MESMO processo em outro
+    navegador vê marcações recentes com até 30min de atraso."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_guias_vistas(list(nu_guias))
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=1800)
 def buscar_snapshots_sugestao_amostra_cache(processo) -> dict:
-    """Cache de 30s sobre DatabaseManager.buscar_snapshots_sugestao_amostra
-    -- rodava sem cache no corpo principal da tela de Amostragem, em todo
-    rerun. Seguro cachear: salvar_snapshot_sugestao_amostra já usa
-    'resolution=ignore-duplicates' (grava só na 1ª vez por
-    processo+especialidade), então reler um snapshot levemente desatualizado
-    no máximo atrasa em até 30s a tela perceber que o snapshot já foi
-    criado -- pior caso é 1-2 POSTs a mais (ignorados pelo Postgres), nunca
-    dado incorreto."""
+    """Invalidado por `.clear(processo)` logo depois de gravar um snapshot
+    novo (views/7_Amostragem_Beta.py) -- sem isso, cada rerun com o cache
+    antigo tentaria gravar de novo o mesmo snapshot (ignorado pelo banco,
+    mas é uma requisição a mais por rerun)."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_snapshots_sugestao_amostra(processo)
 
