@@ -93,3 +93,31 @@ def test_sucesso_normal_nao_afetado():
     ]})
     with patch("shared.database.requests.post", return_value=resposta):
         assert db._turso_pipeline([{"sql": "SELECT 1"}], "token") == [{"cols": [], "rows": []}]
+
+
+def _db_supabase():
+    db = _db()
+    db.supabase_url = "https://exemplo.supabase.co"
+    db.headers = {}
+    return db
+
+
+def test_fallback_apagado_vira_tursoindisponivelerror():
+    """As tabelas turso_fallback_* são apagadas pelo job pg_cron
+    apagar_fallback_turso (03/10/2026). Se o Turso ainda estiver bloqueado
+    nesse dia, a tabela sumida (HTTP 404) tem que degradar igual ao Turso
+    bloqueado -- as views capturam TursoIndisponivelError e não quebram."""
+    db = _db_supabase()
+    with patch("shared.database.requests.get", return_value=_resposta(status_code=404)):
+        with pytest.raises(TursoIndisponivelError):
+            db._fallback_guias_ia_por_processo("123", "N")
+
+
+def test_fallback_com_outro_erro_http_continua_erro_de_verdade():
+    """Só 404 (tabela apagada) vira o silêncio de "Turso indisponível" --
+    timeout/500 no fallback precisa continuar aparecendo como falha."""
+    db = _db_supabase()
+    with patch("shared.database.requests.get", return_value=_resposta(status_code=500)):
+        with pytest.raises(RuntimeError) as excinfo:
+            db._fallback_guias_ia_por_processo("123", "N")
+    assert not isinstance(excinfo.value, TursoIndisponivelError)

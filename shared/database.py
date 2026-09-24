@@ -32,6 +32,14 @@ TURSO_CAMPOS_5310 = (
 )
 
 
+class SupabaseHTTPError(RuntimeError):
+    """Resposta não-2xx do PostgREST numa leitura paginada (_get_paginado)."""
+
+    def __init__(self, mensagem: str, status_code: int):
+        super().__init__(mensagem)
+        self.status_code = status_code
+
+
 class TursoIndisponivelError(RuntimeError):
     """Turso recusou a operação por limite do PLANO (code "BLOCKED", ex.:
     cota de leitura mensal estourada) -- não é bug de query nem de dado.
@@ -113,9 +121,10 @@ class DatabaseManager:
                 # como completo, exatamente o bug de "corte em 1000 linhas"
                 # que essa funcao existe pra evitar, so que disparado por
                 # falha de rede em vez de falta de paginacao.
-                raise RuntimeError(
+                raise SupabaseHTTPError(
                     f"Falha ao paginar {url} (offset {inicio}): "
-                    f"HTTP {r.status_code} -- {r.text[:200]}"
+                    f"HTTP {r.status_code} -- {r.text[:200]}",
+                    r.status_code,
                 )
             lote = r.json()
             todas.extend(lote)
@@ -390,7 +399,20 @@ class DatabaseManager:
             f"{self.supabase_url}/rest/v1/turso_fallback_base_ia_guias"
             f"?nu_ordem=eq.{ordem}&liberacao=eq.{liberacao}&select={campos}"
         )
-        return self._get_paginado(url)
+        return self._get_fallback_turso(url)
+
+    def _get_fallback_turso(self, url: str) -> list:
+        """Leitura nas tabelas turso_fallback_*. Tabela inexistente (HTTP 404)
+        vira TursoIndisponivelError: essas tabelas são apagadas pelo job
+        pg_cron `apagar_fallback_turso` (03/10/2026), e se nesse dia o Turso
+        ainda estiver bloqueado a tela tem que ficar sem os dados em silêncio,
+        como já fica quando o fallback falha, em vez de quebrar."""
+        try:
+            return self._get_paginado(url)
+        except SupabaseHTTPError as erro:
+            if erro.status_code == 404:
+                raise TursoIndisponivelError(str(erro)) from erro
+            raise
 
     # --- Análise Integral (prestadores de risco: analisa também as guias já liberadas pela IA) ---
     def buscar_analise_integral(self, processo) -> dict | None:
@@ -470,10 +492,10 @@ class DatabaseManager:
             # produção); viraram tabelas, calculadas uma única vez em
             # scripts/popular_fallback_turso.py. Apagar as tabelas e este
             # bloco quando o Turso normalizar.
-            linhas_critica = self._get_paginado(f"{self.supabase_url}/rest/v1/turso_fallback_ia_criticas?select=*")
+            linhas_critica = self._get_fallback_turso(f"{self.supabase_url}/rest/v1/turso_fallback_ia_criticas?select=*")
             linhas_biometria = {
                 l["nu_ordem"]: l
-                for l in self._get_paginado(f"{self.supabase_url}/rest/v1/turso_fallback_ia_biometria?select=*")
+                for l in self._get_fallback_turso(f"{self.supabase_url}/rest/v1/turso_fallback_ia_biometria?select=*")
             }
 
         # Uma linha por nu_ordem que TEM guia pendente de revisão (é isso
@@ -678,7 +700,7 @@ class DatabaseManager:
                 f"?nu_ordem=eq.{ordem}&select=nu_guia,cd_procedimento,nomenclatura_procedimento,"
                 f"glosa,tipo_glosa,justificativa_glosa"
             )
-            return self._get_paginado(url)
+            return self._get_fallback_turso(url)
 
     def buscar_imagem_por_guias(self, nu_guias: list) -> list:
         """Registros de imagem (guia, procedimento, dente, status, tem_imagem)
