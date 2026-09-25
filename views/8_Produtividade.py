@@ -271,7 +271,7 @@ if df.empty:
     st.stop()
 
 if "_importado_em" in df.columns and df["_importado_em"].notna().any():
-    ultima = pd.to_datetime(df["_importado_em"]).max()
+    ultima = pd.to_datetime(df["_importado_em"], errors="coerce", format="ISO8601").max()
     st.caption(f"Última atualização: {ultima.strftime('%d/%m/%Y %H:%M')}")
 
 # -------------------------------------------------------- Seletor de mês ----

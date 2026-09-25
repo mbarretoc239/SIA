@@ -93,6 +93,21 @@ def _norm(texto) -> str:
     return sem_acento.strip().upper()
 
 
+def _ler_data(serie: pd.Series) -> pd.Series:
+    """Coluna de data do arquivo -> datetime.
+
+    O .xlsx às vezes traz a data como número de série do Excel (46204 =
+    01/07/2026) em vez de data: pd.to_datetime leria como nanossegundos desde
+    1970 (foi o que aconteceu com DATA_RECEBIMENTO_PROCESSO_FISICO no REL5201
+    de ago/2026). Texto é lido valor a valor (format="mixed"), sem depender do
+    formato do primeiro -- data com e sem hora na mesma coluna não se anulam."""
+    if pd.api.types.is_datetime64_any_dtype(serie):
+        return serie
+    if pd.api.types.is_numeric_dtype(serie):
+        return pd.to_datetime(serie, unit="D", origin="1899-12-30", errors="coerce")
+    return pd.to_datetime(serie, errors="coerce", dayfirst=True, format="mixed")
+
+
 def _presente(valor) -> bool:
     if valor is None:
         return False
@@ -187,7 +202,7 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
     df["STATUS"] = df["STATUS"].fillna("").apply(_norm)
     df["QT_PROCEDIMENTO"] = pd.to_numeric(df["QT_PROCEDIMENTO"], errors="coerce").fillna(0).astype(int)
     for col in ("DATA_CONSISTENCIA", "DATA_FECHAMENTO"):
-        df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
+        df[col] = _ler_data(df[col])
 
     if "EXECUCAO" in df.columns:
         df["EXECUCAO"] = df["EXECUCAO"].fillna("").apply(_norm)
@@ -200,9 +215,7 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
         df["MODALIDADE"] = ""
 
     if "DATA_RECEBIMENTO_PROCESSO_FISICO" in df.columns:
-        df["DATA_RECEBIMENTO_PROCESSO_FISICO"] = pd.to_datetime(
-            df["DATA_RECEBIMENTO_PROCESSO_FISICO"], errors="coerce", dayfirst=True
-        )
+        df["DATA_RECEBIMENTO_PROCESSO_FISICO"] = _ler_data(df["DATA_RECEBIMENTO_PROCESSO_FISICO"])
     else:
         df["DATA_RECEBIMENTO_PROCESSO_FISICO"] = pd.NaT
 
@@ -274,9 +287,14 @@ def registros_para_df(registros: list) -> pd.DataFrame:
     if not registros:
         return pd.DataFrame(columns=CAMPOS_REGISTRO)
     df = pd.DataFrame(registros)
+    # format="ISO8601": cada valor lido pelo próprio formato. Sem isso o
+    # pandas escolhe o formato pelo PRIMEIRO valor da coluna e anula o resto
+    # -- os 2 meses retidos vêm misturados, e um mês gravado com fração de
+    # segundo (ou o status manual, que grava datetime.now()) apagava as datas
+    # do outro (visto em 2026-09-25: card "App + Misto/Não App" zerado).
     for col in ("DATA_CONSISTENCIA", "DATA_FECHAMENTO", "DATA_RECEBIMENTO_PROCESSO_FISICO"):
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
+            df[col] = pd.to_datetime(df[col], errors="coerce", format="ISO8601")
     return df
 
 
