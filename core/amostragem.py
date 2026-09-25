@@ -951,8 +951,8 @@ def montar_lista_processos_mes(
     from core.relatorio_5201 import STATUS_LABELS
 
     colunas_finais = [
-        "Processo", "Status", "Execução", "Login de digitador", "% Liberação IA", "% Biometria", "Total de Guias",
-        "Procedimentos", "Especialidades", "Crítica",
+        "Processo", "Status", "Execução", "Data de entrada", "Login de digitador", "% Liberação IA", "% Biometria",
+        "Total de Guias", "Procedimentos", "Especialidades", "Crítica",
     ]
     if not processos_turso:
         return pd.DataFrame(columns=colunas_finais)
@@ -986,10 +986,19 @@ def montar_lista_processos_mes(
     campos_rel5201 = [
         "ORDEM", "STATUS", "EXECUCAO", "QT_GUIAS", "QT_PROCEDIMENTO",
         "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA", "OP_ENC_DIGITACAO",
+        "DATA_RECEBIMENTO_PROCESSO_FISICO",
     ]
     campos_disponiveis = [c for c in campos_rel5201 if c in df_rel5201.columns]
     if "ORDEM" in campos_disponiveis:
-        df_rel = df_rel5201[campos_disponiveis].drop_duplicates(subset="ORDEM")
+        # O REL5201 retido tem 2 meses, e um processo pode estar nos dois:
+        # fica o do mês mais recente. Sem ordenar, o drop_duplicates ficava
+        # com o que o banco devolvesse primeiro (sem ordem garantida) --
+        # podia mostrar o status de agosto de um processo já atualizado em
+        # setembro.
+        df_rel = df_rel5201
+        if "_mes_referencia" in df_rel.columns:
+            df_rel = df_rel.sort_values("_mes_referencia", ascending=False, kind="stable")
+        df_rel = df_rel[campos_disponiveis].drop_duplicates(subset="ORDEM")
     else:
         df_rel = pd.DataFrame(columns=campos_rel5201)
 
@@ -1023,6 +1032,16 @@ def montar_lista_processos_mes(
         df_final["Execução"] = df_final["EXECUCAO"].replace("", None)
     else:
         df_final["Execução"] = None
+
+    # Data de entrada do processo físico (DATA_RECEBIMENTO_PROCESSO_FISICO do
+    # REL5201), só a data -- em branco quando o processo não tem entrada
+    # registrada ou não bateu com o REL5201.
+    if "DATA_RECEBIMENTO_PROCESSO_FISICO" in df_final.columns:
+        df_final["Data de entrada"] = pd.to_datetime(
+            df_final["DATA_RECEBIMENTO_PROCESSO_FISICO"], errors="coerce"
+        ).dt.normalize()
+    else:
+        df_final["Data de entrada"] = pd.NaT
 
     # Login de digitador (OP_ENC_DIGITACAO do REL5201): "Sim" = processo
     # digitado, "Não" = coluna presente e sem login. Em branco (None) = sem

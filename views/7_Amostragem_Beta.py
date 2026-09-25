@@ -306,7 +306,7 @@ with aba_busca:
                 todas_especialidades = sorted({
                     e for lista in df_processos["Especialidades"].str.split(", ") for e in lista if e
                 })
-                col_filtro_esp, col_filtro_digitador = st.columns([3, 1])
+                col_filtro_esp, col_filtro_digitador, col_filtro_entrada = st.columns([2.5, 1, 1.5])
                 with col_filtro_esp:
                     filtro_especialidades = st.multiselect(
                         "Especialidade", todas_especialidades,
@@ -326,6 +326,29 @@ with aba_busca:
                             "não aparecem em Sim nem em Não."
                         ),
                     ) or "Todos"
+                with col_filtro_entrada:
+                    # "Todos"/"Período" em vez de só o calendário: um intervalo
+                    # escolhido no st.date_input não tem como ser apagado pelo
+                    # próprio widget -- "Todos" é o jeito de desligar o filtro.
+                    modo_entrada = st.segmented_control(
+                        "Data de entrada", ["Todos", "Período"],
+                        default=valor_persistido("lista_proc_filtro_entrada_modo", "Todos"),
+                        key="lista_proc_filtro_entrada_modo",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_entrada_modo",),
+                        help=(
+                            "Data de entrada do processo físico (REL5201). Em Período, clique numa "
+                            "data pra ver só aquele dia, ou em duas pra um intervalo. Processos sem "
+                            "data de entrada não aparecem com o filtro ativo."
+                        ),
+                    ) or "Todos"
+                    periodo_entrada = ()
+                    if modo_entrada == "Período":
+                        periodo_entrada = st.date_input(
+                            "Período de entrada", value=valor_persistido("lista_proc_filtro_entrada", ()),
+                            format="DD/MM/YYYY", key="lista_proc_filtro_entrada",
+                            on_change=persistir_entre_paginas, args=("lista_proc_filtro_entrada",),
+                            label_visibility="collapsed",
+                        )
 
                 col_filtro_pct, col_filtro_bio, col_filtro_guias, col_filtro_proc = st.columns(4)
                 with col_filtro_pct:
@@ -355,6 +378,13 @@ with aba_busca:
                             lambda s: bool(set(s.split(", ")) & alvo)
                         )
                     ]
+                if periodo_entrada:
+                    # 1 data escolhida = só aquele dia; 2 = intervalo fechado.
+                    # Sem data de entrada (NaT) nunca passa.
+                    datas_entrada = df_lista_filtrada["Data de entrada"].dt.date
+                    df_lista_filtrada = df_lista_filtrada[
+                        datas_entrada.between(periodo_entrada[0], periodo_entrada[-1])
+                    ]
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "% Liberação IA", filtro_pct)
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "% Biometria", filtro_bio)
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "Total de Guias", filtro_guias)
@@ -364,6 +394,7 @@ with aba_busca:
                 evento_lista = st.dataframe(
                     df_lista_filtrada, use_container_width=True, hide_index=True,
                     on_select="rerun", selection_mode="single-row", key="lista_processos_tabela",
+                    column_config={"Data de entrada": st.column_config.DateColumn(format="DD/MM/YYYY")},
                 )
                 linhas_selecionadas = evento_lista.selection.get("rows") if evento_lista else []
                 if linhas_selecionadas:

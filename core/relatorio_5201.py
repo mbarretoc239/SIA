@@ -294,8 +294,23 @@ def registros_para_df(registros: list) -> pd.DataFrame:
     # do outro (visto em 2026-09-25: card "App + Misto/Não App" zerado).
     for col in ("DATA_CONSISTENCIA", "DATA_FECHAMENTO", "DATA_RECEBIMENTO_PROCESSO_FISICO"):
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce", format="ISO8601")
+            df[col] = _datas_gravadas(df[col])
     return df
+
+
+def _datas_gravadas(serie: pd.Series) -> pd.Series:
+    """Datas ISO gravadas no payload -> datetime. Registros importados antes
+    da correção de _ler_data guardaram o número de série do Excel como
+    nanossegundos ('1970-01-01T00:00:00.000046204' = série 46204 =
+    01/07/2026) -- desfaz aqui, pra esses processos não aparecerem com
+    entrada em 1970."""
+    datas = pd.to_datetime(serie, errors="coerce", format="ISO8601")
+    serial = serie.astype("string").str.extract(r"^1970-01-01T00:00:00\.(\d+)$")[0]
+    corrompidas = serial.notna()
+    if corrompidas.any():
+        dias = serial.where(corrompidas).str.ljust(9, "0").astype("float")
+        datas = datas.where(~corrompidas, pd.to_datetime(dias, unit="D", origin="1899-12-30"))
+    return datas
 
 
 @st.cache_data(ttl=86400)
