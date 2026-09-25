@@ -1449,6 +1449,12 @@ if "importar_planilhas" in abas_por_id:
                                 retomar=retomar_imagem,
                             )
                             barra_img.empty()
+                            # Sem isso, um processo já aberto nas 24h anteriores
+                            # continuaria mostrando o dado de imagem do mês
+                            # anterior até o cache vencer sozinho -- achado em
+                            # 2026-09-25 (a base de imagem tem cadência própria,
+                            # reimportada todo mês, separada da base IA).
+                            buscar_imagem_por_guias_cache.clear()
                             st.success(
                                 f"Mês {mes_referencia_img}: {total_inserido_img} de {total_bruto_img} "
                                 f"linha(s) importadas com sucesso."
