@@ -307,7 +307,11 @@ with aba_busca:
                 todas_especialidades = sorted({
                     e for lista in df_processos["Especialidades"].str.split(", ") for e in lista if e
                 })
-                col_filtro_esp, col_filtro_digitador, col_filtro_entrada = st.columns([2.5, 1, 1.5])
+                # Digitador e Entrada têm os mesmos 3 botões (Todos/Sim/Não) --
+                # largura igual pros dois, generosa o bastante pro texto não
+                # cortar (aconteceu em produção com 1 e 1.5 -- ver memória
+                # "checar UI ao redor" antes de mexer nessa linha de novo).
+                col_filtro_esp, col_filtro_digitador, col_filtro_entrada = st.columns([2, 1.5, 1.5])
                 with col_filtro_esp:
                     filtro_especialidades = st.multiselect(
                         "Especialidade", todas_especialidades,
