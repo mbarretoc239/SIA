@@ -1067,6 +1067,19 @@ def montar_lista_processos_mes(
     )
 
 
+def filtrar_por_data_entrada(df_lista: pd.DataFrame, opcao: str) -> pd.DataFrame:
+    """Filtro "Data de entrada" da lista de processos: "Sim" = tem data de
+    entrada do processo físico; "Não" = processo que está no REL5201 mas sem
+    data. Processo sem match no REL5201 (Status vazio) não entra em nenhum
+    dos dois -- não dá pra saber se tem data ou não (mesma regra do filtro
+    "Login de digitador")."""
+    if opcao == "Sim":
+        return df_lista[df_lista["Data de entrada"].notna()]
+    if opcao == "Não":
+        return df_lista[df_lista["Data de entrada"].isna() & df_lista["Status"].notna()]
+    return df_lista
+
+
 def _guia_tem_proc_prioritario(procs_str: str, procs_prioridade_normal: set) -> bool:
     """True se a guia contém pelo menos um procedimento fora da lista de
     prioridade normal (ou seja, um procedimento de alta prioridade que força

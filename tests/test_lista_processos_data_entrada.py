@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from core.amostragem import montar_lista_processos_mes
+from core.amostragem import filtrar_por_data_entrada, montar_lista_processos_mes
 from core.relatorio_5201 import registros_para_df
 
 
@@ -53,11 +53,29 @@ def test_processo_sem_data_ou_sem_rel5201_fica_em_branco():
     assert lista["Data de entrada"].isna().all()
 
 
-def test_filtro_por_periodo_da_tela():
-    """Mesma conta do filtro em views/7_Amostragem_Beta.py: 1 data = só o dia,
-    2 = intervalo fechado; sem data nunca passa."""
-    datas = pd.Series(pd.to_datetime(["2026-09-01", "2026-09-10", None])).dt.date
-    um_dia = (pd.Timestamp("2026-09-01").date(),)
-    intervalo = (pd.Timestamp("2026-09-01").date(), pd.Timestamp("2026-09-05").date())
-    assert datas.between(um_dia[0], um_dia[-1]).tolist() == [True, False, False]
-    assert datas.between(intervalo[0], intervalo[-1]).tolist() == [True, False, False]
+def _df_para_filtro():
+    """Processo com data, processo sem data mas com REL5201 (Status
+    preenchido), e processo sem match nenhum no REL5201 (Status vazio)."""
+    return pd.DataFrame({
+        "Processo": ["1", "2", "3"],
+        "Status": ["Fechado", "Consistido", None],
+        "Data de entrada": [pd.Timestamp("2026-09-01"), pd.NaT, pd.NaT],
+    })
+
+
+def test_filtro_todos_nao_muda_nada():
+    df = _df_para_filtro()
+    assert filtrar_por_data_entrada(df, "Todos").equals(df)
+
+
+def test_filtro_sim_so_quem_tem_data():
+    resultado = filtrar_por_data_entrada(_df_para_filtro(), "Sim")
+    assert resultado["Processo"].tolist() == ["1"]
+
+
+def test_filtro_nao_so_quem_bateu_no_rel5201_mas_sem_data():
+    """Processo "3" não tem match no REL5201 (Status vazio) -- não sabe se
+    tem data ou não, então fica fora do "Não" (mesma regra do "Login de
+    digitador")."""
+    resultado = filtrar_por_data_entrada(_df_para_filtro(), "Não")
+    assert resultado["Processo"].tolist() == ["2"]

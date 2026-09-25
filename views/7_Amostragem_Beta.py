@@ -21,6 +21,7 @@ from core.amostragem import (
     carregar_procedimentos_criticos,
     carregar_processos_turso,
     consolidar_por_guia,
+    filtrar_por_data_entrada,
     guia_100pct,
     guias_com_proc_critico,
     marcar_amostra,
@@ -327,28 +328,17 @@ with aba_busca:
                         ),
                     ) or "Todos"
                 with col_filtro_entrada:
-                    # "Todos"/"Período" em vez de só o calendário: um intervalo
-                    # escolhido no st.date_input não tem como ser apagado pelo
-                    # próprio widget -- "Todos" é o jeito de desligar o filtro.
-                    modo_entrada = st.segmented_control(
-                        "Data de entrada", ["Todos", "Período"],
-                        default=valor_persistido("lista_proc_filtro_entrada_modo", "Todos"),
-                        key="lista_proc_filtro_entrada_modo",
-                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_entrada_modo",),
+                    filtro_entrada = st.segmented_control(
+                        "Data de entrada", ["Todos", "Sim", "Não"],
+                        default=valor_persistido("lista_proc_filtro_entrada", "Todos"),
+                        key="lista_proc_filtro_entrada",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_entrada",),
                         help=(
-                            "Data de entrada do processo físico (REL5201). Em Período, clique numa "
-                            "data pra ver só aquele dia, ou em duas pra um intervalo. Processos sem "
-                            "data de entrada não aparecem com o filtro ativo."
+                            "Sim = o processo tem data de entrada do processo físico registrada no "
+                            "REL5201 (DATA_RECEBIMENTO_PROCESSO_FISICO). Processos sem match no "
+                            "REL5201 não aparecem em Sim nem em Não."
                         ),
                     ) or "Todos"
-                    periodo_entrada = ()
-                    if modo_entrada == "Período":
-                        periodo_entrada = st.date_input(
-                            "Período de entrada", value=valor_persistido("lista_proc_filtro_entrada", ()),
-                            format="DD/MM/YYYY", key="lista_proc_filtro_entrada",
-                            on_change=persistir_entre_paginas, args=("lista_proc_filtro_entrada",),
-                            label_visibility="collapsed",
-                        )
 
                 col_filtro_pct, col_filtro_bio, col_filtro_guias, col_filtro_proc = st.columns(4)
                 with col_filtro_pct:
@@ -378,13 +368,7 @@ with aba_busca:
                             lambda s: bool(set(s.split(", ")) & alvo)
                         )
                     ]
-                if periodo_entrada:
-                    # 1 data escolhida = só aquele dia; 2 = intervalo fechado.
-                    # Sem data de entrada (NaT) nunca passa.
-                    datas_entrada = df_lista_filtrada["Data de entrada"].dt.date
-                    df_lista_filtrada = df_lista_filtrada[
-                        datas_entrada.between(periodo_entrada[0], periodo_entrada[-1])
-                    ]
+                df_lista_filtrada = filtrar_por_data_entrada(df_lista_filtrada, filtro_entrada)
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "% Liberação IA", filtro_pct)
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "% Biometria", filtro_bio)
                 df_lista_filtrada = aplicar_filtro_numerico(df_lista_filtrada, "Total de Guias", filtro_guias)
