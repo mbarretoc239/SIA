@@ -37,6 +37,7 @@ from core.relatorio_5201 import (
     STATUS_CORES,
     carregar_dados_atuais,
     formatar_status_processo,
+    meses_disponiveis,
     obter_detalhe_glosas_prestador_cacheado,
     obter_risco_prestador_cacheado,
     status_processo,
@@ -257,10 +258,32 @@ with aba_busca:
     # pra um usuário específico sem precisar mudar a role dele.
     if tem_acesso_modulo(_permissoes_pagina, _role_pagina, "amostragem_lista_processos", _usuario_id_pagina, _excecoes_pagina):
         with st.expander("Lista de processos do mês"):
+            # REL5201 guarda 2 meses -- com mais de um mês importado (ex:
+            # setembro e outubro coexistindo), deixa escolher qual analisar
+            # em vez de misturar os dois silenciosamente (o merge antigo
+            # ficava só com o registro mais recente de cada processo, sem
+            # separar por mês). A base IA/Turso usada pra especialidade e
+            # crítica continua sendo sempre a mais recente -- não dá pra
+            # escolher o mês dela aqui, só do REL5201.
+            df_5201_completo = carregar_dados_atuais()
+            meses_5201 = meses_disponiveis(df_5201_completo)
+            if meses_5201:
+                mes_persistido = valor_persistido("lista_proc_mes_5201", meses_5201[0])
+                indice_mes = meses_5201.index(mes_persistido) if mes_persistido in meses_5201 else 0
+                escolha_mes_lista = st.selectbox(
+                    "Mês de análise (REL5201)", meses_5201, index=indice_mes,
+                    key="lista_proc_mes_5201", width=300,
+                    on_change=persistir_entre_paginas, args=("lista_proc_mes_5201",),
+                    help="Filtra pelo mês de referência do REL5201. A base IA (especialidade, crítica) continua sendo sempre a mais recente importada.",
+                )
+                df_5201_escolhido = df_5201_completo[df_5201_completo["_mes_referencia"] == escolha_mes_lista]
+            else:
+                df_5201_escolhido = df_5201_completo
+
             try:
                 with st.spinner("Carregando processos..."):
                     df_processos = montar_lista_processos_mes(
-                        carregar_processos_turso(), carregar_dados_atuais(), carregar_procedimentos_criticos()
+                        carregar_processos_turso(), df_5201_escolhido, carregar_procedimentos_criticos()
                     )
             except TursoIndisponivelError:
                 # Sem aviso de propósito (pedido do usuário) -- só fica em
