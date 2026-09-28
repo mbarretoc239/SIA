@@ -368,22 +368,15 @@ if pdf_file is not None:
                 ["Todas selecionadas na tabela", "Somente Glosas Críticas"]
             )
             
-            # PAR fica dentro do mesmo contêiner do cabeçalho, mas SEPARADO do
-            # radio por um divider + legenda -- sem isso (checkbox solto logo
-            # abaixo do radio) ele parecia uma 5ª opção da lista em vez de um
-            # modificador independente (ver print do usuário, 2026-09-28).
-            with st.container(border=True):
-                opcao_prefixo = st.radio(
-                    "Cabeçalho do Relatório:",
-                    [
-                        "Nenhum Cabeçalho",
-                        "c/ Especialidades Críticas",
-                        "s/ Especialidades Críticas"
-                    ]
-                )
-                st.divider()
-                st.caption("Combina com qualquer opção acima (ou fica sozinho):")
-                flag_par = st.checkbox("PAR")
+            opcao_prefixo = st.radio(
+                "Cabeçalho do Relatório:",
+                [
+                    "Nenhum Cabeçalho",
+                    "c/ Especialidades Críticas",
+                    "s/ Especialidades Críticas",
+                    "PAR"
+                ]
+            )
 
             btn_gerar = st.button("Gerar Texto", type="primary", use_container_width=True)
             
@@ -422,33 +415,16 @@ if pdf_file is not None:
                 texto_gerado = texto_gerado.replace("PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\\n", "")
                 texto_gerado = texto_gerado.replace("PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\n", "")
                 texto_gerado = texto_gerado.replace("PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// ", "")
-                texto_gerado = texto_gerado.replace("PAR//PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\\n", "")
-                texto_gerado = texto_gerado.replace("PAR//PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\n", "")
-                texto_gerado = texto_gerado.replace("PAR//PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// ", "")
-                texto_gerado = texto_gerado.replace("PAR//PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS///\\n", "")
-                texto_gerado = texto_gerado.replace("PAR//PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS///\n", "")
-                texto_gerado = texto_gerado.replace("PAR//PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// ", "")
                 texto_gerado = texto_gerado.replace("PAR- ", "")
 
                 texto_pronto = texto_gerado
                 if "Nenhuma glosa" not in texto_gerado:
-                    # Prefixo de especialidade (mutuamente exclusivo, como antes)
-                    prefixo_especialidade = ""
                     if "c/ Especialidades" in opcao_prefixo:
-                        prefixo_especialidade = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// "
+                        texto_pronto = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// " + texto_gerado
                     elif "s/ Especialidades" in opcao_prefixo:
-                        prefixo_especialidade = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// "
-
-                    # PAR é independente da especialidade e vem sempre na
-                    # frente: "PAR//" + prefixo de especialidade quando os dois
-                    # estão marcados, ou "PAR- " sozinho quando só o PAR está
-                    # marcado (sem especialidade selecionada).
-                    if flag_par and prefixo_especialidade:
-                        texto_pronto = "PAR//" + prefixo_especialidade + texto_gerado
-                    elif flag_par:
+                        texto_pronto = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// " + texto_gerado
+                    elif opcao_prefixo == "PAR":
                         texto_pronto = "PAR- " + texto_gerado
-                    else:
-                        texto_pronto = prefixo_especialidade + texto_gerado
 
                 # Key versionada pelo arquivo + opções + CONTEÚDO de df_final
                 # (hash, não só o nome do arquivo): trocar de PDF, mudar
@@ -464,7 +440,7 @@ if pdf_file is not None:
                 hash_df_final = hashlib.md5(df_final.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
                 key_texto_final = (
                     f"texto_final_v_{pdf_file.name}_"
-                    f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}_{flag_par}_{hash_df_final}"
+                    f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}_{hash_df_final}"
                 )
                 # Label centralizado numa variável: o botão "Copiar Texto" busca
                 # o textarea por este mesmo texto exato no DOM. Definir os dois
