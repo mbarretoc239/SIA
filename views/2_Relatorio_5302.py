@@ -368,18 +368,22 @@ if pdf_file is not None:
                 ["Todas selecionadas na tabela", "Somente Glosas Críticas"]
             )
             
-            opcao_prefixo = st.radio(
-                "Cabeçalho do Relatório:",
-                [
-                    "Nenhum Cabeçalho",
-                    "c/ Especialidades Críticas",
-                    "s/ Especialidades Críticas"
-                ]
-            )
-            # PAR é independente da especialidade -- combina com qualquer uma
-            # das 3 opções acima, ou fica sozinho. Ver montagem do prefixo
-            # combinado logo abaixo, em texto_pronto.
-            flag_par = st.checkbox("PAR")
+            # PAR fica dentro do mesmo contêiner do cabeçalho, mas SEPARADO do
+            # radio por um divider + legenda -- sem isso (checkbox solto logo
+            # abaixo do radio) ele parecia uma 5ª opção da lista em vez de um
+            # modificador independente (ver print do usuário, 2026-09-28).
+            with st.container(border=True):
+                opcao_prefixo = st.radio(
+                    "Cabeçalho do Relatório:",
+                    [
+                        "Nenhum Cabeçalho",
+                        "c/ Especialidades Críticas",
+                        "s/ Especialidades Críticas"
+                    ]
+                )
+                st.divider()
+                st.caption("Combina com qualquer opção acima (ou fica sozinho):")
+                flag_par = st.checkbox("PAR")
 
             btn_gerar = st.button("Gerar Texto", type="primary", use_container_width=True)
             
