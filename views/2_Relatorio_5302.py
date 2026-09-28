@@ -376,7 +376,11 @@ if pdf_file is not None:
                     "s/ Especialidades Críticas"
                 ]
             )
-            
+            # PAR é independente da especialidade -- combina com qualquer uma
+            # das 3 opções acima, ou fica sozinho. Ver montagem do prefixo
+            # combinado logo abaixo, em texto_pronto.
+            flag_par = st.checkbox("PAR")
+
             btn_gerar = st.button("Gerar Texto", type="primary", use_container_width=True)
             
         with col2:
@@ -414,14 +418,34 @@ if pdf_file is not None:
                 texto_gerado = texto_gerado.replace("PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\\n", "")
                 texto_gerado = texto_gerado.replace("PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\n", "")
                 texto_gerado = texto_gerado.replace("PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// ", "")
-                
+                texto_gerado = texto_gerado.replace("PAR//PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\\n", "")
+                texto_gerado = texto_gerado.replace("PAR//PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS///\n", "")
+                texto_gerado = texto_gerado.replace("PAR//PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// ", "")
+                texto_gerado = texto_gerado.replace("PAR//PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS///\\n", "")
+                texto_gerado = texto_gerado.replace("PAR//PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS///\n", "")
+                texto_gerado = texto_gerado.replace("PAR//PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// ", "")
+                texto_gerado = texto_gerado.replace("PAR- ", "")
+
                 texto_pronto = texto_gerado
                 if "Nenhuma glosa" not in texto_gerado:
+                    # Prefixo de especialidade (mutuamente exclusivo, como antes)
+                    prefixo_especialidade = ""
                     if "c/ Especialidades" in opcao_prefixo:
-                        texto_pronto = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// " + texto_gerado
+                        prefixo_especialidade = "PROCESSO ANALISADO POR AMOSTRAGEM DAS ESPECIALIDADES CRÍTICAS/// "
                     elif "s/ Especialidades" in opcao_prefixo:
-                        texto_pronto = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// " + texto_gerado
-                    
+                        prefixo_especialidade = "PROCESSO SEM ESPECIALIDADES CRÍTICAS ANALISADO POR AMOSTRAGEM DO ENVIO DE IMAGENS/// "
+
+                    # PAR é independente da especialidade e vem sempre na
+                    # frente: "PAR//" + prefixo de especialidade quando os dois
+                    # estão marcados, ou "PAR- " sozinho quando só o PAR está
+                    # marcado (sem especialidade selecionada).
+                    if flag_par and prefixo_especialidade:
+                        texto_pronto = "PAR//" + prefixo_especialidade + texto_gerado
+                    elif flag_par:
+                        texto_pronto = "PAR- " + texto_gerado
+                    else:
+                        texto_pronto = prefixo_especialidade + texto_gerado
+
                 # Key versionada pelo arquivo + opções + CONTEÚDO de df_final
                 # (hash, não só o nome do arquivo): trocar de PDF, mudar
                 # filtros/prefixo, OU marcar/desmarcar/editar uma linha
@@ -436,7 +460,7 @@ if pdf_file is not None:
                 hash_df_final = hashlib.md5(df_final.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
                 key_texto_final = (
                     f"texto_final_v_{pdf_file.name}_"
-                    f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}_{hash_df_final}"
+                    f"{opcao_agrupamento}_{opcao_filtro}_{opcao_prefixo}_{flag_par}_{hash_df_final}"
                 )
                 # Label centralizado numa variável: o botão "Copiar Texto" busca
                 # o textarea por este mesmo texto exato no DOM. Definir os dois
