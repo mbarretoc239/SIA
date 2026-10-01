@@ -948,10 +948,15 @@ def montar_lista_processos_mes(
     Especialidades e crítica vêm do Turso -- o REL5201 não detalha por
     guia, só o total do processo.
 
-    % Liberação IA = LIBERADOS_IA / (LIBERADOS_IA + NAO_LIBERADOS_IA) -- é
-    por PROCEDIMENTO avaliado pela IA, não por guia (confirmado nos dados:
-    a soma dos dois bate com QT_PROCEDIMENTO na maioria dos processos, quase
-    nunca com QT_GUIAS).
+    % Liberação IA = LIBERADOS_IA / QT_PROCEDIMENTO (total de procedimentos
+    do processo, não só os avaliados) -- é por PROCEDIMENTO, não por guia
+    (confirmado nos dados: LIBERADOS_IA + NAO_LIBERADOS_IA bate com
+    QT_PROCEDIMENTO na maioria dos processos, quase nunca com QT_GUIAS).
+    Correção de 2026-10-01: a fórmula antiga dividia só pelos AVALIADOS
+    (LIBERADOS_IA + NAO_LIBERADOS_IA), então um processo com muitos
+    procedimentos ainda NÃO avaliados pela IA podia mostrar 100% mesmo
+    tendo avaliado quase nada -- confirmado pelo usuário comparando com
+    conta manual no Excel (liberados/total deu 5,55%, não 100%).
 
     Status/Execução também vêm do REL5201 (STATUS_LABELS/valores normalizados
     já usados em Produtividade -- APP/MISTO/N_APP)."""
@@ -1025,9 +1030,8 @@ def montar_lista_processos_mes(
     df_final["Procedimentos"] = _coluna_num("QT_PROCEDIMENTO")
 
     liberados = _coluna_num("QUANTIDADE_LIBERADOS_IA")
-    nao_liberados = _coluna_num("QUANTIDADE_NAO_LIBERADOS_IA")
-    total_avaliado = liberados + nao_liberados
-    pct_liberacao = (liberados / total_avaliado * 100).where(total_avaliado > 0)
+    qt_procedimento = df_final["Procedimentos"]
+    pct_liberacao = (liberados / qt_procedimento * 100).where(qt_procedimento > 0)
     df_final["% Liberação IA"] = pct_liberacao.round(1)
 
     if "STATUS" in df_final.columns:

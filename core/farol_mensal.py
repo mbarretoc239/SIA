@@ -180,10 +180,10 @@ def montar_base_farol(
     "Crítica" = tem especialidade crítica OU procedimento crítico, igual à
     lista da Amostragem, só que sobre TODAS as guias do processo.
 
-    % Liberação IA = liberados / (liberados + não liberados) -- por
-    procedimento, vem da 5201, 1 casa decimal (mesma conta da Amostragem).
-    LIBERADO_100_IA NÃO usa esse % arredondado: exige contagem exata
-    (liberados > 0, não liberados == 0 e não avaliados == 0)."""
+    % Liberação IA = liberados / QT_PROCEDIMENTO (total do processo, não só
+    os avaliados) -- por procedimento, vem da 5201, 1 casa decimal (mesma
+    conta da Amostragem). LIBERADO_100_IA NÃO usa esse % arredondado: exige
+    contagem exata (liberados > 0, não liberados == 0 e não avaliados == 0)."""
     if df_5201 is None or df_5201.empty or "ORDEM" not in df_5201.columns:
         return BaseFarol(df=pd.DataFrame(columns=COLUNAS_BASE))
 
@@ -238,8 +238,13 @@ def montar_base_farol(
     liberados = _numerica(df, "QUANTIDADE_LIBERADOS_IA")
     nao_liberados = _numerica(df, "QUANTIDADE_NAO_LIBERADOS_IA")
     nao_avaliados = _numerica(df, "QUANTIDADE_NAO_AVALIADO_IA")
-    avaliados = liberados + nao_liberados
-    pct_liberacao = (liberados / avaliados * 100).where(avaliados > 0).round(1)
+    # % sobre o TOTAL de procedimentos do processo (QT_PROCEDIMENTO), não só
+    # os avaliados -- correção de 2026-10-01: dividir só por avaliados fazia
+    # processo com muito procedimento ainda NÃO avaliado pela IA mostrar
+    # 100%, mesmo tendo avaliado quase nada (confirmado com conta manual do
+    # usuário no Excel). LIBERADO_100_IA (regra "é 100%?", não o %) já exigia
+    # nao_avaliados == 0, essa parte não muda.
+    pct_liberacao = (liberados / qt_procedimento * 100).where(qt_procedimento > 0).round(1)
     liberado_100 = (liberados > 0) & (nao_liberados == 0) & (nao_avaliados == 0)
 
     if tem_digitador:

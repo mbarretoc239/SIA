@@ -5,6 +5,7 @@ quando o processo está nos 2 meses retidos."""
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 
 from core.amostragem import filtrar_por_data_entrada, montar_lista_processos_mes
 from core.relatorio_5201 import registros_para_df
@@ -79,3 +80,17 @@ def test_filtro_nao_so_quem_bateu_no_rel5201_mas_sem_data():
     digitador")."""
     resultado = filtrar_por_data_entrada(_df_para_filtro(), "Não")
     assert resultado["Processo"].tolist() == ["2"]
+
+
+def test_pct_liberacao_ia_divide_pelo_total_de_procedimentos():
+    # bug real (2026-10-01): dividia só pelos AVALIADOS (liberados +
+    # não liberados), então processo com muito procedimento ainda não
+    # avaliado mostrava 100% -- confirmado errado com conta manual no Excel
+    # do usuário (liberados/total deu 5,55%, não 100%).
+    registros = [{
+        "ORDEM": "30", "STATUS": "CONSISTIDO", "EXECUCAO": "APP", "_mes_referencia": "2026-10",
+        "QT_PROCEDIMENTO": 36, "QUANTIDADE_LIBERADOS_IA": 2, "QUANTIDADE_NAO_LIBERADOS_IA": 0,
+        "QUANTIDADE_NAO_AVALIADO_IA": 34,
+    }]
+    lista = _lista(registros, [_processo_turso("30")])
+    assert lista.iloc[0]["% Liberação IA"] == pytest.approx(2 / 36 * 100, abs=0.05)
