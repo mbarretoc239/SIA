@@ -216,7 +216,11 @@ def _guias_para_df(guias: list) -> pd.DataFrame:
     consolidar_por_guia/marcar_amostra (Especialidade, CD_PROCEDIMENTO,
     NU_GUIA, LIBERACAO, Qtde)."""
     if not guias:
-        return pd.DataFrame()
+        # Com as MESMAS colunas do caminho normal -- processo sem guia na
+        # base IA mas com glosa no REL5310 (ver "if df.empty" mais abaixo)
+        # segue usando `df` nas contas de biometria/imagem; um DataFrame
+        # totalmente vazio (sem colunas) quebrava isso com KeyError.
+        return pd.DataFrame(columns=["Especialidade", "CD_PROCEDIMENTO", "NU_GUIA", "CD_OPERADOR_ATEND", "Qtde"])
     return pd.DataFrame({
         "Especialidade": [g["ds_grupo"] for g in guias],
         "CD_PROCEDIMENTO": [g["cd_procedimento"] for g in guias],
@@ -478,13 +482,25 @@ with aba_busca:
                 )
                 st.dataframe(df_liberadas, use_container_width=True, hide_index=True)
 
-    if df.empty:
+    if df.empty and not glosas_5310:
         st.warning(
             f"Nenhuma guia com LIBERAÇÃO = N encontrada para o processo "
             f"'{processo_ativo}' na base importada. Confira o número ou se o "
             f"mês do processo ainda está entre os 2 meses mantidos na base."
         )
         st.stop()
+    elif df.empty:
+        # Achado em produção (2026-10-01): processo sem guia pendente na
+        # base IA (ex.: 100% liberado, nada sobrou pra revisar) mas com
+        # glosa administrativa no REL5310 -- guia que nem aparece na base IA
+        # (o relatório da IA não traz guia já glosada). Antes isso parava a
+        # tela aqui, escondendo a glosa do auditor; continua só com a seção
+        # de glosas (mais abaixo), sem o sorteio por especialidade (não tem
+        # nada da base IA pra sortear).
+        st.info(
+            f"Processo '{processo_ativo}' não tem guia pendente na base IA, mas tem "
+            "glosa administrativa no REL5310 (abaixo) -- revise essas guias."
+        )
 
     total_guias_processo = guias[0].get("total_guias_processo") if guias else (
         guias_liberadas[0].get("total_guias_processo") if guias_liberadas else None
@@ -760,7 +776,11 @@ with aba_busca:
     # inteira em produção -- degrada pra "sem dado de imagem" em vez disso.
     turso_bloqueado_imagem = False
     try:
-        imagem_registros = buscar_imagem_por_guias_cache(tuple(df["NU_GUIA"].unique().tolist()))
+        # Inclui também as guias de glosa do REL5310 (não entram em `df`,
+        # mas têm NU_GUIA de verdade -- podem ter imagem registrada igual
+        # qualquer outra guia).
+        guias_para_imagem = set(df["NU_GUIA"].unique().tolist()) | {g["nu_guia"] for g in glosas_5310}
+        imagem_registros = buscar_imagem_por_guias_cache(tuple(sorted(guias_para_imagem)))
     except TursoIndisponivelError:
         imagem_registros = []
         turso_bloqueado_imagem = True
@@ -906,7 +926,10 @@ with aba_busca:
     df_guias = _aplicar_filtro_guia(df_guias, biometria_por_guia, filtro_biometria)
     df_guias = _aplicar_filtro_guia(df_guias, imagem_por_guia, filtro_imagem)
 
-    if df_guias.empty:
+    if df_guias.empty and not (df.empty and glosas_5310):
+        # Processo sem guia na base IA e sem glosa no 5310 já parou lá em
+        # cima; chegar aqui vazio só acontece pelo filtro de Biometria/Imagem
+        # mesmo (não pelo caso "só tem glosa", tratado à parte).
         st.info("Nenhuma guia bate com os filtros selecionados.")
         st.stop()
 
@@ -915,11 +938,14 @@ with aba_busca:
     # guias que os filtros já tiraram da lista.
     df = df[df["NU_GUIA"].isin(df_guias["NU_GUIA"])]
 
-    # Chave = todas as guias do processo (N + liberadas), não df_guias já
-    # filtrado -- com os filtros na chave, cada troca de biometria/imagem
-    # relia o banco. O resultado só é usado pra checar se uma guia está no
-    # conjunto, então trazer as marcações do processo inteiro não muda a tela.
-    guias_do_processo = tuple(sorted({str(g["nu_guia"]) for g in guias + guias_liberadas}))
+    # Chave = todas as guias do processo (N + liberadas) + glosas do 5310
+    # (não entram em `df`, mas também podem ter marcação de "guia vista") --
+    # com os filtros na chave, cada troca de biometria/imagem relia o banco.
+    # O resultado só é usado pra checar se uma guia está no conjunto, então
+    # trazer as marcações do processo inteiro não muda a tela.
+    guias_do_processo = tuple(sorted(
+        {str(g["nu_guia"]) for g in guias + guias_liberadas} | {str(g["nu_guia"]) for g in glosas_5310}
+    ))
     guias_vistas = buscar_guias_vistas_cache(guias_do_processo)
 
     # Snapshot imutável da "Sugestão de amostra" no momento em que ela foi
@@ -990,8 +1016,9 @@ with aba_busca:
             "Amostra sugerida": n_sugerido,
         })
 
-    st.markdown("### Resumo")
-    renderizar_resumo_especialidades(resumo, df)
+    if resumo:
+        st.markdown("### Resumo")
+        renderizar_resumo_especialidades(resumo, df)
 
     # --- Detalhamento ---
     st.markdown("### Detalhamento por especialidade")
