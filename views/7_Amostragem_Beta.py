@@ -520,16 +520,7 @@ with aba_busca:
             renderizar_botao_copiar_processo(processo_ativo)
         with col_integral:
             if analise_integral:
-                # help= em st.success exige Streamlit >= 1.42 -- o Streamlit
-                # Cloud do deploy rodava uma versão mais antiga e quebrou com
-                # TypeError (visto em produção, 2026-10-01). Tooltip trocado
-                # por st.caption, que funciona em qualquer versão.
-                st.success("Análise Integral ativa", icon="🔎")
-                st.caption(
-                    "Prestador de análise de risco (PAR) da importação mensal -- todas as guias são "
-                    "revisadas, inclusive as já liberadas pela IA, sem aplicar % de amostragem. Vem só "
-                    "da lista PAR importada em Configurações, não dá pra ativar/desativar aqui."
-                )
+                st.error("PRESTADOR PAR", icon="🔎")
 
             # Botão só aparece se houver guia com procedimento 731 -- mas
             # isso NÃO significa que o processo é reversão (confirmação é
