@@ -25,6 +25,7 @@ Uso:
 import io
 import json
 import sys
+import traceback
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -91,6 +92,15 @@ def _limpar_lista_par(caminho: str) -> set:
 
 
 class App(tk.Tk):
+    def report_callback_exception(self, exc, val, tb):
+        # Sem isso, o Tkinter engole QUALQUER exceção levantada dentro de um
+        # comando de botão -- manda só pro console (invisível rodando sem
+        # terminal aberto) e segue o loop normalmente, dando a impressão de
+        # "cliquei e não aconteceu nada". Acompanha qualquer erro não
+        # tratado explicitamente nos métodos abaixo.
+        mensagem = "".join(traceback.format_exception(exc, val, tb))
+        messagebox.showerror("Erro inesperado", mensagem)
+
     def __init__(self):
         super().__init__()
         self.title("Farol Mensal offline")
@@ -159,6 +169,12 @@ class App(tk.Tk):
 
         f_filtros = ttk.LabelFrame(self, text="3. Filtros")
         f_filtros.pack(fill="x", **pad)
+        ttk.Label(
+            f_filtros,
+            text="Nas listas abaixo: clique pra marcar um item, Ctrl+clique pra marcar vários. "
+                 "Nenhum item marcado = sem filtro nesse campo (traz todos).",
+            foreground="#555555", wraplength=900, justify="left",
+        ).pack(anchor="w", padx=8, pady=(4, 2))
 
         linha1 = ttk.Frame(f_filtros)
         linha1.pack(fill="x", padx=8, pady=2)
@@ -166,10 +182,22 @@ class App(tk.Tk):
         for valor in (CRITICA_TODOS, CRITICA_COM, CRITICA_SEM):
             ttk.Radiobutton(linha1, text=valor, value=valor, variable=self.filtro_critica,
                              command=self._atualizar_estado_extras).pack(side="left", padx=4)
+        ttk.Label(
+            linha1,
+            text="  (\"Sem críticas\" é o modo normal de rodar o Farol -- os críticos ficam de fora, "
+                 "pra entrar na aba Operacional)",
+            foreground="#555555",
+        ).pack(side="left")
 
         linha2 = ttk.Frame(f_filtros)
         linha2.pack(fill="x", padx=8, pady=2)
-        ttk.Label(linha2, text="Aceitar também estas especialidades (só em 'Sem críticas'):").pack(anchor="w")
+        linha2_topo = ttk.Frame(linha2)
+        linha2_topo.pack(fill="x")
+        ttk.Label(
+            linha2_topo, text="Aceitar também estas especialidades como \"sem crítica\" (só vale com 'Sem críticas' acima):",
+        ).pack(side="left")
+        ttk.Button(linha2_topo, text="Limpar", width=8,
+                   command=lambda: self.lista_extras.selection_clear(0, "end")).pack(side="right")
         self.lista_extras = tk.Listbox(linha2, selectmode="multiple", height=4, exportselection=False)
         self.lista_extras.pack(fill="x", pady=2)
 
@@ -186,13 +214,15 @@ class App(tk.Tk):
             ttk.Radiobutton(linha4, text=valor, value=valor, variable=self.filtro_digitador).pack(side="left", padx=4)
 
         linha5 = ttk.Frame(f_filtros)
-        linha5.pack(fill="x", padx=8, pady=2)
-        ttk.Label(linha5, text="% Liberação IA:").pack(side="left")
-        ttk.Combobox(linha5, textvariable=self.op_liberacao, values=_OPERADORES, state="readonly", width=16).pack(side="left", padx=4)
-        ttk.Entry(linha5, textvariable=self.val_liberacao, width=8).pack(side="left")
-        ttk.Label(linha5, text="     % Biometria:").pack(side="left")
-        ttk.Combobox(linha5, textvariable=self.op_biometria, values=_OPERADORES, state="readonly", width=16).pack(side="left", padx=4)
-        ttk.Entry(linha5, textvariable=self.val_biometria, width=8).pack(side="left")
+        linha5.pack(fill="x", padx=8, pady=(8, 2))
+        ttk.Label(linha5, text="% Liberação IA — deixe em branco pra não filtrar:").pack(anchor="w")
+        linha5b = ttk.Frame(f_filtros)
+        linha5b.pack(fill="x", padx=8, pady=(0, 6))
+        ttk.Combobox(linha5b, textvariable=self.op_liberacao, values=_OPERADORES, state="readonly", width=18).pack(side="left")
+        ttk.Entry(linha5b, textvariable=self.val_liberacao, width=8).pack(side="left", padx=(4, 24))
+        ttk.Label(linha5b, text="% Biometria:").pack(side="left")
+        ttk.Combobox(linha5b, textvariable=self.op_biometria, values=_OPERADORES, state="readonly", width=18).pack(side="left", padx=4)
+        ttk.Entry(linha5b, textvariable=self.val_biometria, width=8).pack(side="left")
 
         ttk.Checkbutton(
             f_filtros, text="Gerar aba Operacional (crítico/APP fora do FAROL e fora da lista PAR)",
@@ -218,8 +248,12 @@ class App(tk.Tk):
     def _bloco_multiselect(self, pai, titulo) -> tk.Listbox:
         frame = ttk.Frame(pai)
         frame.pack(side="left", fill="both", expand=True, padx=4)
-        ttk.Label(frame, text=titulo).pack(anchor="w")
+        topo = ttk.Frame(frame)
+        topo.pack(fill="x")
+        ttk.Label(topo, text=titulo).pack(side="left")
         lista = tk.Listbox(frame, selectmode="multiple", height=5, exportselection=False)
+        ttk.Button(topo, text="Limpar", width=8,
+                   command=lambda: lista.selection_clear(0, "end")).pack(side="right")
         lista.pack(fill="both", expand=True)
         return lista
 
