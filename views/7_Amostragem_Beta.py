@@ -420,8 +420,8 @@ with aba_busca:
         st.info("Digite o número do processo e clique em Buscar guias.")
         st.stop()
 
-    # Análise Integral: processo marcado (persistido por número de processo,
-    # ver marcar_analise_integral) soma as guias já liberadas pela IA
+    # Análise Integral: processo marcado via import mensal da lista PAR (em
+    # Configurações, ver substituir_analise_integral) soma as guias já liberadas pela IA
     # (liberacao=S) às pendentes (N) em TODAS as tabelas -- alguns
     # prestadores de análise de risco exigem cobertura de tudo, não só do
     # que a IA não liberou. Carregado aqui em cima porque decide se busca
@@ -520,29 +520,15 @@ with aba_busca:
             renderizar_botao_copiar_processo(processo_ativo)
         with col_integral:
             if analise_integral:
-                st.success("Análise Integral ativa", icon="🔎")
-                if st.button("Desativar", key="btn_desativar_integral", use_container_width=True):
-                    if st.session_state.db.desmarcar_analise_integral(processo_ativo):
-                        buscar_analise_integral_cache.clear(processo_ativo)
-                        st.rerun()
-                    else:
-                        st.error("Erro ao desativar Análise Integral.")
-            else:
-                if st.button(
-                    "🔎 Marcar como Análise Integral", key="btn_marcar_integral", use_container_width=True,
+                st.success(
+                    "Análise Integral ativa", icon="🔎",
                     help=(
-                        "Alguns prestadores de análise de risco precisam ter TODAS as guias revisadas, "
-                        "inclusive as já liberadas pela IA. Ativa isso pra esse processo: soma as guias "
-                        "liberadas (S) às pendentes (N) em todas as tabelas abaixo, sem aplicar % de "
-                        "amostragem -- fica marcado permanentemente pra esse processo."
+                        "Prestador de análise de risco (PAR) da importação mensal -- todas as guias são "
+                        "revisadas, inclusive as já liberadas pela IA, sem aplicar % de amostragem. Essa "
+                        "marcação vem só da lista PAR importada em Configurações, não pode ser ativada "
+                        "ou desativada manualmente aqui."
                     ),
-                ):
-                    marcado_por = st.session_state.get("auditor_nome", "")
-                    if st.session_state.db.marcar_analise_integral(processo_ativo, marcado_por=marcado_por):
-                        buscar_analise_integral_cache.clear(processo_ativo)
-                        st.rerun()
-                    else:
-                        st.error("Erro ao marcar Análise Integral.")
+                )
 
             # Botão só aparece se houver guia com procedimento 731 -- mas
             # isso NÃO significa que o processo é reversão (confirmação é

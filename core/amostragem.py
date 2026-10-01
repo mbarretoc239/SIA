@@ -873,8 +873,8 @@ def buscar_imagem_por_guias_cache(nu_guias: tuple) -> list:
 
 @st.cache_data(ttl=1800)
 def buscar_analise_integral_cache(processo) -> dict | None:
-    """Invalidado por `.clear()` ao marcar/desmarcar Análise Integral
-    (views/7_Amostragem_Beta.py)."""
+    """Invalidado por `.clear()` ao importar a lista PAR mensal
+    (views/1_Configuracoes.py, substituir_analise_integral)."""
     from shared.database import DatabaseManager
     return DatabaseManager().buscar_analise_integral(processo)
 

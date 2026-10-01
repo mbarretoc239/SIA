@@ -6,6 +6,7 @@ import io
 from shared.database import DatabaseManager, TursoIndisponivelError
 
 from core.amostragem import (
+    buscar_analise_integral_cache,
     buscar_glosas_5310_por_processo_cache,
     buscar_guias_ia_por_processo_cache,
     buscar_guias_liberadas_ia_por_processo_cache,
@@ -18,7 +19,7 @@ from core.amostragem import (
 )
 from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cluster
 from core.farol_mensal import carregar_glosas_5310, carregar_processos_ia
-from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros
+from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros, _norm
 from core.settings import (
     carregar_alinhamentos_cache,
     carregar_excecoes_modulos_cache,
@@ -1401,6 +1402,14 @@ if "importar_planilhas" in abas_por_id:
                             total_inserido_ia = db.importar_base_ia(
                                 registros_ia, mes_referencia_ia, ao_progredir=_atualizar_barra_ia, retomar=retomar_ia
                             )
+                            # Grava também no formato de bucket (1 linha por
+                            # processo, ver shared/database.py) -- em paralelo
+                            # ao import de sempre acima, que continua valendo
+                            # como recurso de emergência caso o bucket dê
+                            # problema. Não entra no retomar/barra de progresso
+                            # (lote único, processo é bem mais rápido que o
+                            # import por guia).
+                            db.importar_base_ia_bucket(registros_ia, mes_referencia_ia)
                             barra_ia.empty()
                             # Sem isso, a Lista de processos do mês (Amostragem), o
                             # Farol Mensal e as 4 buscas por processo continuariam
@@ -1497,6 +1506,9 @@ if "importar_planilhas" in abas_por_id:
                                 registros_5310, mes_referencia_5310, ao_progredir=_atualizar_barra_5310,
                                 retomar=retomar_5310,
                             )
+                            # Bucket em paralelo (ver comentário equivalente no
+                            # import da base IA acima).
+                            db.importar_5310_bucket(registros_5310, mes_referencia_5310)
                             barra_5310.empty()
                             carregar_glosas_5310.clear()
                             buscar_glosas_5310_por_processo_cache.clear()
@@ -1511,6 +1523,68 @@ if "importar_planilhas" in abas_por_id:
                             )
                     except TursoIndisponivelError:
                         alerta_turso_indisponivel()
+                    except Exception as erro:
+                        st.error(f"Falha na importação: {erro}")
+
+            with st.expander("Lista PAR — Análise Integral (Amostragem)", expanded=False):
+                st.caption(
+                    "Sobe a lista mensal de prestadores de Análise de Risco (PAR), recebida "
+                    "previamente por nome e cruzada aqui pelo número de processo. Usa a 1ª aba "
+                    "do arquivo e só as 3 primeiras colunas (Execução, Processo, Prestador). "
+                    "SUBSTITUI a lista inteira de Análise Integral — processos do mês anterior "
+                    "que não estiverem nesta planilha deixam de ser Análise Integral."
+                )
+                mes_par = st.date_input(
+                    "Mês de referência desta lista PAR",
+                    value=date.today().replace(day=1),
+                    key="mes_upload_par",
+                )
+                arquivo_par = st.file_uploader(
+                    "Lista PAR (.xlsx)", type=["xlsx"], key="upload_par"
+                )
+                if arquivo_par and st.button("Importar lista PAR", key="btn_importar_par", type="primary"):
+                    try:
+                        with st.spinner("Lendo planilha e cruzando com a 5201 atual..."):
+                            df_par = pd.read_excel(arquivo_par, sheet_name=0).iloc[:, :3]
+                            df_par.columns = ["EXECUCAO", "PROCESSO", "PRESTADOR"]
+                            df_par["PROCESSO"] = df_par["PROCESSO"].apply(
+                                lambda v: str(int(v)) if pd.notna(v) else None
+                            )
+                            df_par["EXECUCAO_NORM"] = df_par["EXECUCAO"].apply(_norm)
+
+                            df_5201 = carregar_dados_atuais()
+                            mapa_execucao = dict(zip(df_5201["ORDEM"], df_5201["EXECUCAO"].apply(_norm))) \
+                                if "EXECUCAO" in df_5201.columns else {}
+                            ordens_validas = set(df_5201["ORDEM"])
+
+                            total_linhas = len(df_par)
+                            sem_processo = df_par["PROCESSO"].isna().sum()
+                            df_par = df_par[df_par["PROCESSO"].notna()]
+                            df_par["achou_processo"] = df_par["PROCESSO"].isin(ordens_validas)
+                            nao_encontrados = (~df_par["achou_processo"]).sum()
+                            df_par = df_par[df_par["achou_processo"]]
+                            df_par["execucao_bate"] = df_par.apply(
+                                lambda r: mapa_execucao.get(r["PROCESSO"]) == r["EXECUCAO_NORM"], axis=1
+                            )
+                            execucao_divergente = (~df_par["execucao_bate"]).sum()
+                            df_par = df_par[df_par["execucao_bate"]]
+
+                            processos_ok = df_par["PROCESSO"].tolist()
+                        if not processos_ok:
+                            st.warning("Nenhum processo da planilha bateu com a 5201 atual. Nada foi importado.")
+                        else:
+                            marcado_por = f"Importação PAR {mes_par.strftime('%m/%Y')}"
+                            total_par = db.substituir_analise_integral(processos_ok, marcado_por)
+                            buscar_analise_integral_cache.clear()
+                            descartados = total_linhas - total_par
+                            msg_descarte = (
+                                f" {descartados} linha(s) descartada(s) ({sem_processo} sem nº de processo, "
+                                f"{nao_encontrados} não encontrado(s) na 5201 atual, "
+                                f"{execucao_divergente} com execução divergente)." if descartados else ""
+                            )
+                            st.success(
+                                f"{total_par} processo(s) marcados como Análise Integral.{msg_descarte}"
+                            )
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")
 

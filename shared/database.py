@@ -379,7 +379,23 @@ class DatabaseManager:
         """Guias com LIBERACAO=N da base IA para um número de processo
         (NU_ORDEM) -- é só isso que a tela de Amostragem audita, mesmo a
         tabela guardando liberadas também (pro cálculo de % Biometria da
-        lista de processos)."""
+        lista de processos).
+
+        Tenta o bucket (base_processo_bucket, 1 row_read por processo)
+        primeiro; só cai pra tabela antiga (1 row_read por GUIA) se o
+        processo ainda não tiver bucket nesse mês -- ver comentário em
+        _importar_bucket_por_mes. Mantém o caminho antigo intacto de
+        propósito (recurso de emergência caso o bucket dê problema)."""
+        try:
+            bucket = self.buscar_bucket_processo(nu_ordem)
+        except TursoIndisponivelError:
+            bucket = None
+        if bucket and bucket["guias_ia"]:
+            total = len(bucket["guias_ia"])
+            return [
+                {**g, "total_guias_processo": total}
+                for g in bucket["guias_ia"] if g.get("liberacao") == "N"
+            ]
         try:
             resultado = self._turso_pipeline([{
                 "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, total_guias_processo, cd_operador_atend "
@@ -395,7 +411,15 @@ class DatabaseManager:
         padrão não entram no sorteio/contagem da Amostragem, só consulta --
         exceto quando o processo está marcado como "Análise Integral" (ver
         buscar_analise_integral), caso em que a tela soma essas guias às
-        pendentes (N) na análise principal."""
+        pendentes (N) na análise principal.
+
+        Mesma preferência por bucket de buscar_guias_ia_por_processo, ver lá."""
+        try:
+            bucket = self.buscar_bucket_processo(nu_ordem)
+        except TursoIndisponivelError:
+            bucket = None
+        if bucket and bucket["guias_ia"]:
+            return [g for g in bucket["guias_ia"] if g.get("liberacao") == "S"]
         try:
             resultado = self._turso_pipeline([{
                 "sql": "SELECT nu_guia, cd_procedimento, ds_grupo, cd_operador_atend "
@@ -448,21 +472,83 @@ class DatabaseManager:
         linhas = self._get_paginado(url)
         return linhas[0] if linhas else None
 
-    def marcar_analise_integral(self, processo, marcado_por: str = "") -> bool:
-        """Marca o processo como Análise Integral (upsert -- reclicar não
-        duplica, só atualiza marcado_por/marcado_em)."""
-        url = f"{self.supabase_url}/rest/v1/amostragem_analise_integral?on_conflict=processo"
-        headers_upsert = {**self.headers, "Prefer": "resolution=merge-duplicates,return=minimal"}
-        data = {"processo": str(processo), "marcado_por": marcado_por}
-        r = requests.post(url, headers=headers_upsert, json=data)
-        return r.ok
+    def substituir_analise_integral(self, processos: list[str], marcado_por: str) -> int:
+        """Substitui TODA a lista de Análise Integral pelos processos dados
+        (import mensal da lista PAR) -- apaga tudo que existia antes e
+        insere a lista nova. Não acumula mês a mês: um prestador PAR de
+        setembro que não aparece na lista de outubro deixa de ser Análise
+        Integral automaticamente. Retorna quantos processos foram marcados."""
+        url_delete = f"{self.supabase_url}/rest/v1/amostragem_analise_integral?processo=not.is.null"
+        r_delete = requests.delete(url_delete, headers=self.headers)
+        if not r_delete.ok:
+            raise RuntimeError(
+                f"Falha ao limpar amostragem_analise_integral: HTTP {r_delete.status_code} — {r_delete.text[:500]}"
+            )
+        processos_unicos = sorted({str(p).strip() for p in processos if str(p).strip()})
+        if not processos_unicos:
+            return 0
+        url_insert = f"{self.supabase_url}/rest/v1/amostragem_analise_integral"
+        registros = [{"processo": p, "marcado_por": marcado_por} for p in processos_unicos]
+        r = requests.post(url_insert, headers=self.headers, json=registros)
+        r.raise_for_status()
+        return len(processos_unicos)
 
-    def desmarcar_analise_integral(self, processo) -> bool:
-        """Remove a marcação -- o processo volta a analisar só as guias
-        pendentes (liberacao=N), como qualquer outro."""
-        url = f"{self.supabase_url}/rest/v1/amostragem_analise_integral?processo=eq.{processo}"
-        r = requests.delete(url, headers=self.headers)
-        return r.ok
+    def _bucket_mes_mais_recente(self) -> str | None:
+        """Mês mais recente com QUALQUER dado no bucket, ou None se o
+        bucket ainda está vazio (nenhum mês foi importado no formato novo
+        ainda -- os três agregados abaixo caem pro caminho antigo nesse caso)."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT MAX(mes_referencia) AS mes FROM base_processo_bucket",
+        }], self._turso_token_leitura)[0]
+        linhas = self._turso_linhas(resultado)
+        return linhas[0]["mes"] if linhas else None
+
+    def _listar_processos_agregado_bucket(self, mes: str) -> list:
+        """Equivalente a listar_processos_agregado, lendo do bucket: 1
+        row_read por processo em vez de GROUP_CONCAT sobre todas as guias."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_ordem, guias_ia FROM base_processo_bucket "
+                   "WHERE mes_referencia = ? AND guias_ia != '[]'",
+            "args": [self._turso_arg(mes)],
+        }], self._turso_token_leitura)[0]
+        saida = []
+        for linha in self._turso_linhas(resultado):
+            guias = json.loads(linha["guias_ia"] or "[]")
+            pendentes = [g for g in guias if g.get("liberacao") == "N"]
+            if not pendentes:
+                continue
+            saida.append({
+                "nu_ordem": linha["nu_ordem"],
+                "especialidades": ",".join(sorted({g["ds_grupo"] for g in pendentes if g.get("ds_grupo")})),
+                "procedimentos": ",".join(sorted({g["cd_procedimento"] for g in pendentes if g.get("cd_procedimento")})),
+                "total_itens": len(guias),
+                "itens_biometria": sum(1 for g in guias if g.get("cd_operador_atend") == "CONN_APPOD_NEW"),
+                "itens_com_operador": sum(1 for g in guias if g.get("cd_operador_atend")),
+            })
+        return saida
+
+    def _listar_processos_farol_agregado_bucket(self, mes: str) -> list:
+        """Equivalente a listar_processos_farol_agregado, lendo do bucket
+        (TODAS as guias, liberadas ou não -- diferente do método acima)."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT nu_ordem, guias_ia FROM base_processo_bucket "
+                   "WHERE mes_referencia = ? AND guias_ia != '[]'",
+            "args": [self._turso_arg(mes)],
+        }], self._turso_token_leitura)[0]
+        saida = []
+        for linha in self._turso_linhas(resultado):
+            guias = json.loads(linha["guias_ia"] or "[]")
+            saida.append({
+                "nu_ordem": linha["nu_ordem"],
+                "especialidades": ",".join(sorted({g["ds_grupo"] for g in guias if g.get("ds_grupo")})),
+                "procedimentos": ",".join(sorted({g["cd_procedimento"] for g in guias if g.get("cd_procedimento")})),
+                "pares": ",".join(sorted({f"{g.get('ds_grupo') or ''}|{g.get('cd_procedimento') or ''}" for g in guias})),
+                "total_itens": len(guias),
+                "itens_biometria": sum(1 for g in guias if g.get("cd_operador_atend") == "CONN_APPOD_NEW"),
+                "itens_com_operador": sum(1 for g in guias if g.get("cd_operador_atend")),
+                "mes_referencia": mes,
+            })
+        return saida
 
     def listar_processos_agregado(self) -> list:
         """Um registro por NU_ORDEM (processo) do mês mais recente em
@@ -482,7 +568,23 @@ class DatabaseManager:
            métrica que aparece no PowerBI), não só a fatia pendente de
            revisão. % = biometria/total, mas só quando `itens_com_operador
            > 0` -- processo sem nenhum operador gravado (import antigo)
-           fica em branco em vez de aparentar 0%."""
+           fica em branco em vez de aparentar 0%.
+
+        Prefere o bucket (base_processo_bucket) quando ele já tem dado do
+        mês mais recente -- import em paralelo grava os dois formatos (ver
+        importar_base_ia_bucket), então o resultado é idêntico, só muda o
+        custo de leitura (1 row_read por processo em vez de GROUP_CONCAT
+        sobre todas as guias). Caminho antigo abaixo fica intocado como
+        recurso de emergência."""
+        try:
+            mes_bucket = self._bucket_mes_mais_recente()
+        except TursoIndisponivelError:
+            mes_bucket = None
+        if mes_bucket:
+            try:
+                return self._listar_processos_agregado_bucket(mes_bucket)
+            except TursoIndisponivelError:
+                pass
         try:
             resultado_critica, resultado_biometria = self._turso_pipeline([
                 {
@@ -547,7 +649,19 @@ class DatabaseManager:
         procedimento crítico), total_itens, itens_biometria (operador
         CONN_APPOD_NEW = biometria facial, mesma regra da Amostragem),
         itens_com_operador (só > 0 quando há operador gravado -- import
-        antigo fica sem) e mes_referencia."""
+        antigo fica sem) e mes_referencia.
+
+        Prefere o bucket quando disponível, mesmo critério de
+        listar_processos_agregado -- ver lá."""
+        try:
+            mes_bucket = self._bucket_mes_mais_recente()
+        except TursoIndisponivelError:
+            mes_bucket = None
+        if mes_bucket:
+            try:
+                return self._listar_processos_farol_agregado_bucket(mes_bucket)
+            except TursoIndisponivelError:
+                pass
         resultado = self._turso_pipeline([{
             "sql": "SELECT nu_ordem, "
                    "GROUP_CONCAT(DISTINCT ds_grupo) AS especialidades, "
@@ -567,7 +681,14 @@ class DatabaseManager:
         """Glosas do REL5310 agregadas por processo e código de glosa: uma
         linha por (nu_ordem, glosa) com a quantidade de guias distintas
         afetadas. Usado pela coluna OBS do Farol Mensal (uma consulta pra
-        lista inteira, em vez de buscar_glosas_5310_por_processo um por um)."""
+        lista inteira, em vez de buscar_glosas_5310_por_processo um por um).
+
+        NÃO lê do bucket (ainda) de propósito: essa consulta não filtra por
+        mês (soma os ~2 meses retidos em base_5310_glosas), e o bucket só
+        passa a ter dado a partir do mês em que essa funcionalidade entrou
+        no ar -- ler só do bucket perderia o mês mais antigo que ainda está
+        apenas na tabela velha, até os dois meses convergirem sozinhos pela
+        retenção. Revisitar depois que o bucket cobrir os 2 meses inteiros."""
         resultado = self._turso_pipeline([{
             "sql": "SELECT nu_ordem, glosa, COUNT(DISTINCT nu_guia) AS qtd_guias "
                    "FROM base_5310_glosas "
@@ -640,6 +761,140 @@ class DatabaseManager:
 
         return total
 
+    # --- Bucket por processo (base_processo_bucket): experimento pra reduzir
+    # rows_read no Turso (ver docs/turso_bloqueado_2026-09-23.md). Em vez de
+    # 1 linha por GUIA (centenas de milhares/mês), 1 linha por PROCESSO, com
+    # as guias daquele processo guardadas como array JSON numa coluna --
+    # ler o processo inteiro custa 1 row_read em vez de uma pra cada guia.
+    # Cada fonte (base IA, REL5310, futuramente imagem) escreve só a SUA
+    # coluna (guias_ia/guias_5310/imagens) sem tocar nas outras -- um mesmo
+    # processo pode ter linha criada por qualquer uma das 3 primeiro.
+    # Filtro/parse do JSON acontece sempre em Python (nunca json_each/
+    # json_extract em SQL -- testado e isso reintroduz o custo por elemento
+    # que o bucket existe pra evitar). Em produção desde 2026-10 só pra
+    # meses importados daqui pra frente -- meses já importados no formato
+    # antigo (base_ia_guias/base_5310_glosas) não foram migrados, ficam lá
+    # até expirar sozinhos pela retenção de cada tabela (decisão do usuário:
+    # sem job de migração).
+    def _importar_bucket_por_mes(
+        self, campo: str, registros: list, mes_referencia: str, campos_guia: tuple,
+        lote: int = 500, lotes_por_requisicao: int = 16, ao_progredir=None,
+    ) -> int:
+        """Agrupa `registros` (lista flat, 1 item por guia, com `nu_ordem`)
+        por processo e grava cada grupo como array JSON na coluna `campo`
+        (guias_ia ou guias_5310) de base_processo_bucket. Reseta só essa
+        coluna pros processos desse `mes_referencia` antes de regravar
+        (reimportação idempotente) -- não mexe nas outras colunas do bucket,
+        que podem já ter sido escritas por outra fonte neste mesmo mês.
+        `campos_guia`: quais chaves de cada registro entram no JSON (nu_ordem
+        e mes_referencia ficam de fora -- já são a chave da linha)."""
+        token = self._turso_token_escrita
+
+        agrupado: dict[str, list] = {}
+        for reg in registros:
+            nu_ordem = str(reg["nu_ordem"])
+            agrupado.setdefault(nu_ordem, []).append({c: reg.get(c) for c in campos_guia})
+
+        self._turso_pipeline([{
+            "sql": f"UPDATE base_processo_bucket SET {campo} = '[]' WHERE mes_referencia = ?",
+            "args": [self._turso_arg(mes_referencia)],
+        }], token)
+
+        agora = datetime.now(timezone.utc).isoformat()
+        itens = list(agrupado.items())
+        lotes = [itens[i:i + lote] for i in range(0, len(itens), lote)]
+        enviados = 0
+        for i in range(0, len(lotes), lotes_por_requisicao):
+            grupo = lotes[i:i + lotes_por_requisicao]
+            statements = []
+            for pedaco in grupo:
+                placeholders = ",".join(["(?,?,?,?)"] * len(pedaco))
+                sql = (
+                    f"INSERT INTO base_processo_bucket (nu_ordem, mes_referencia, {campo}, atualizado_em) "
+                    f"VALUES {placeholders} "
+                    f"ON CONFLICT(nu_ordem, mes_referencia) DO UPDATE SET "
+                    f"{campo} = excluded.{campo}, atualizado_em = excluded.atualizado_em"
+                )
+                args = []
+                for nu_ordem, guias in pedaco:
+                    args += [
+                        self._turso_arg(nu_ordem), self._turso_arg(mes_referencia),
+                        self._turso_arg(json.dumps(guias, ensure_ascii=False)), self._turso_arg(agora),
+                    ]
+                statements.append({"sql": sql, "args": args})
+            self._turso_pipeline(statements, token)
+            enviados += sum(len(pedaco) for pedaco in grupo)
+            if ao_progredir:
+                ao_progredir(enviados, len(itens))
+
+        self._turso_pipeline([{
+            "sql": "INSERT INTO _controle_meses (tabela, mes_referencia) VALUES (?, ?) "
+                   "ON CONFLICT(tabela, mes_referencia) DO NOTHING",
+            "args": [self._turso_arg("base_processo_bucket"), self._turso_arg(mes_referencia)],
+        }], token)
+        resultado_meses = self._turso_pipeline([{
+            "sql": "SELECT mes_referencia FROM _controle_meses WHERE tabela = ?",
+            "args": [self._turso_arg("base_processo_bucket")],
+        }], token)[0]
+        meses = sorted({linha[0]["value"] for linha in resultado_meses.get("rows", [])}, reverse=True)
+        for mes_antigo in meses[2:]:
+            while True:
+                resultado = self._turso_pipeline([{
+                    "sql": "DELETE FROM base_processo_bucket WHERE rowid IN "
+                           "(SELECT rowid FROM base_processo_bucket WHERE mes_referencia = ? LIMIT 5000)",
+                    "args": [self._turso_arg(mes_antigo)],
+                }], token)[0]
+                if int(resultado.get("affected_row_count") or 0) == 0:
+                    break
+            self._turso_pipeline([{
+                "sql": "DELETE FROM _controle_meses WHERE tabela = ? AND mes_referencia = ?",
+                "args": [self._turso_arg("base_processo_bucket"), self._turso_arg(mes_antigo)],
+            }], token)
+
+        return len(agrupado)
+
+    def importar_base_ia_bucket(self, registros: list, mes_referencia: str, ao_progredir=None) -> int:
+        """Grava a base IA do mês no formato de bucket (1 linha por
+        processo). `registros`: mesmo formato de importar_base_ia (ver
+        preparar_registros_base_ia) -- total_guias_processo não entra no
+        JSON (é só len(guias_ia) na leitura)."""
+        return self._importar_bucket_por_mes(
+            "guias_ia", registros, mes_referencia,
+            ("nu_guia", "cd_procedimento", "ds_grupo", "liberacao", "cd_operador_atend"),
+            ao_progredir=ao_progredir,
+        )
+
+    def importar_5310_bucket(self, registros: list, mes_referencia: str, ao_progredir=None) -> int:
+        """Grava o REL5310 do mês no formato de bucket (1 linha por
+        processo). `registros`: mesmo formato de importar_5310 (ver
+        preparar_registros_5310)."""
+        return self._importar_bucket_por_mes(
+            "guias_5310", registros, mes_referencia,
+            ("nu_guia", "cd_procedimento", "nomenclatura_procedimento", "glosa", "tipo_glosa", "justificativa_glosa"),
+            ao_progredir=ao_progredir,
+        )
+
+    def buscar_bucket_processo(self, nu_ordem: str) -> dict | None:
+        """Linha do bucket pra esse processo (o mês mais recente que tiver
+        dado), já com guias_ia/guias_5310/imagens decodificados de JSON.
+        None se o processo não tem bucket em NENHUM mês retido -- dado
+        anterior à migração, formato antigo (tabela por guia) ainda vale."""
+        resultado = self._turso_pipeline([{
+            "sql": "SELECT mes_referencia, guias_ia, guias_5310, imagens FROM base_processo_bucket "
+                   "WHERE nu_ordem = ? ORDER BY mes_referencia DESC LIMIT 1",
+            "args": [self._turso_arg(str(nu_ordem))],
+        }], self._turso_token_leitura)[0]
+        linhas = self._turso_linhas(resultado)
+        if not linhas:
+            return None
+        linha = linhas[0]
+        return {
+            "mes_referencia": linha["mes_referencia"],
+            "guias_ia": json.loads(linha["guias_ia"] or "[]"),
+            "guias_5310": json.loads(linha["guias_5310"] or "[]"),
+            "imagens": json.loads(linha["imagens"] or "[]"),
+        }
+
     def importar_base_ia(
         self, registros: list, mes_referencia: str, lote: int = 500, ao_progredir=None, retomar: bool = False
     ) -> int:
@@ -705,7 +960,16 @@ class DatabaseManager:
         da IA não traz guia já glosada), então é uma fonte extra de guias
         pra sinalizar na Amostragem, sem depender de especialidade nenhuma
         (a Amostragem agrupa essas guias por código de glosa, não por
-        DS_GRUPO como o resto da tela)."""
+        DS_GRUPO como o resto da tela).
+
+        Prefere o bucket (ver buscar_guias_ia_por_processo); cai pro caminho
+        antigo se o processo não tiver bucket nesse mês."""
+        try:
+            bucket = self.buscar_bucket_processo(nu_ordem)
+        except TursoIndisponivelError:
+            bucket = None
+        if bucket and bucket["guias_5310"]:
+            return bucket["guias_5310"]
         try:
             resultado = self._turso_pipeline([{
                 "sql": "SELECT nu_guia, cd_procedimento, nomenclatura_procedimento, glosa, "
