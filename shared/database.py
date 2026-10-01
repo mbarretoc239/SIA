@@ -529,26 +529,23 @@ class DatabaseManager:
 
     def _listar_processos_farol_agregado_bucket(self, mes: str) -> list:
         """Equivalente a listar_processos_farol_agregado, lendo do bucket
-        (TODAS as guias, liberadas ou não -- diferente do método acima)."""
+        (TODAS as guias, liberadas ou não -- diferente do método acima).
+        Agregação em si é a mesma usada pelo Farol Mensal offline (ver
+        core.farol_mensal.agregar_processos_farol) -- só achata o JSON de
+        cada linha do bucket de volta pro formato flat que essa função
+        espera, pra nunca duplicar a lógica de agregação."""
+        from core.farol_mensal import agregar_processos_farol
         resultado = self._turso_pipeline([{
             "sql": "SELECT nu_ordem, guias_ia FROM base_processo_bucket "
                    "WHERE mes_referencia = ? AND guias_ia != '[]'",
             "args": [self._turso_arg(mes)],
         }], self._turso_token_leitura)[0]
-        saida = []
-        for linha in self._turso_linhas(resultado):
-            guias = json.loads(linha["guias_ia"] or "[]")
-            saida.append({
-                "nu_ordem": linha["nu_ordem"],
-                "especialidades": ",".join(sorted({g["ds_grupo"] for g in guias if g.get("ds_grupo")})),
-                "procedimentos": ",".join(sorted({g["cd_procedimento"] for g in guias if g.get("cd_procedimento")})),
-                "pares": ",".join(sorted({f"{g.get('ds_grupo') or ''}|{g.get('cd_procedimento') or ''}" for g in guias})),
-                "total_itens": len(guias),
-                "itens_biometria": sum(1 for g in guias if g.get("cd_operador_atend") == "CONN_APPOD_NEW"),
-                "itens_com_operador": sum(1 for g in guias if g.get("cd_operador_atend")),
-                "mes_referencia": mes,
-            })
-        return saida
+        registros_flat = [
+            {**g, "nu_ordem": linha["nu_ordem"]}
+            for linha in self._turso_linhas(resultado)
+            for g in json.loads(linha["guias_ia"] or "[]")
+        ]
+        return agregar_processos_farol(registros_flat, mes_referencia=mes)
 
     def listar_processos_agregado(self) -> list:
         """Um registro por NU_ORDEM (processo) do mês mais recente em

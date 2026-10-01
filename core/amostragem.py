@@ -409,7 +409,7 @@ LIMITE_GLOSA_5310 = 400
 PROCEDIMENTO_REVERSAO = "731"
 
 
-def preparar_registros_5310(arquivo) -> tuple[list, str, int, int]:
+def preparar_registros_5310(arquivo, mapa_procedimentos: dict = None) -> tuple[list, str, int, int]:
     """Lê o REL5310 (.xlsx, já reduzido pelo usuário) e devolve
     (registros_para_inserir, mes_referencia, total_bruto, nao_cruzados).
 
@@ -440,11 +440,18 @@ def preparar_registros_5310(arquivo) -> tuple[list, str, int, int]:
     desse relatório (pode ter mais de um valor no arquivo, ex.: parcelas do
     dia 1 e do dia 15, mas sempre do mesmo mês), ao contrário de
     DATA DE PRODUCAO, que varia livremente entre guias antigas e recentes.
-    """
-    from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
+
+    `mapa_procedimentos`: {codigo_curto: descricao} -- se None (uso normal
+    dentro do SIA), busca do Supabase (carregar_mapa_procedimentos). Injetar
+    aqui permite rodar essa função sem rede nenhuma (ver
+    ferramentas/farol_mensal_offline.py, que lê o mapa de um JSON exportado
+    por scripts/exportar_criticos_farol.py em vez de consultar o Supabase)."""
+    if mapa_procedimentos is None:
+        from services.relatorio_5302.glosa_matcher import carregar_mapa_procedimentos
+        mapa_procedimentos = carregar_mapa_procedimentos()
 
     mapa_por_descricao = {}
-    for codigo_curto, descricao in carregar_mapa_procedimentos().items():
+    for codigo_curto, descricao in mapa_procedimentos.items():
         mapa_por_descricao.setdefault(_norm(descricao), codigo_curto)
 
     wb, linhas, idx = _abrir_planilha_normalizada(arquivo, COLUNAS_NECESSARIAS_5310)

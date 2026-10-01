@@ -61,6 +61,7 @@ COLUNAS_SAIDA = [COL_PROCESSO_PRODUCAO, COL_PRESTADOR_PRODUCAO, COL_QTDE_PROCEDI
 
 NOTA_LIBERADO_100 = "100% liberado pela IA (automático)"
 NOTA_COMPULSORIO_SIM = "Fechamento compulsório incluído no SIM (opção marcada)"
+NOTA_PAR_FORCADO = "PAR pela lista de prestadores de risco (import manual)"
 
 
 @dataclass
@@ -307,7 +308,7 @@ def preparar_sem_dado(sem_dado):
     return df[COLUNAS_SAIDA].reset_index(drop=True)
 
 
-def cruzar(producao, agregado, sem_dado=None):
+def cruzar(producao, agregado, sem_dado=None, par_forcado=None):
     """Cruza a produção (já filtrada) com as ocorrências por nome de prestador
     e monta os 6 baldes. Mesma lógica do trecho final de processar() do
     original, mais a regra dos 100% e a coluna OBS (ver docstring do módulo).
@@ -315,7 +316,12 @@ def cruzar(producao, agregado, sem_dado=None):
     `producao`: ORDEM, PRESTADOR, QT_PROCEDIMENTO e, opcionais, OBS (texto
     livre, ex: glosas do REL5310) e LIBERADO_100_IA (bool).
     `agregado`: retorno de carregar_ocorrencias()[0].
-    `sem_dado`: processos sem dado de procedimento (ver preparar_sem_dado)."""
+    `sem_dado`: processos sem dado de procedimento (ver preparar_sem_dado).
+    `par_forcado`: números de processo (lista/set) de uma lista externa de
+    prestadores de análise de risco (PAR) -- pedido do usuário no Farol
+    Mensal offline: processo nessa lista vira PAR por cima do que a 5307
+    classificou, e nunca vai pro S (roda ANTES da regra dos 100%, que já
+    protege PAR de virar S automaticamente)."""
     producao = producao.copy()
     producao["_chave"] = producao[COL_PRESTADOR_PRODUCAO].astype(str).str.strip().str.upper()
 
@@ -352,6 +358,15 @@ def cruzar(producao, agregado, sem_dado=None):
     resultado.loc[sem_match, "CLASSIFICACAO"] = "SEM_OCORRENCIA"
     resultado.loc[sem_match, "OCORRENCIA"] = "OCORRÊNCIA NÃO ENCONTRADA NA PLANILHA"
 
+    # Lista PAR externa (antes da regra dos 100%, que já protege quem já é
+    # PAR de virar S automaticamente -- precisa já estar PAR nesse ponto).
+    par_forcado_set = {str(p).strip() for p in (par_forcado or [])}
+    eh_par_forcado = (
+        resultado[COL_PROCESSO_PRODUCAO].astype(str).isin(par_forcado_set)
+        if par_forcado_set else pd.Series(False, index=resultado.index)
+    )
+    resultado.loc[eh_par_forcado, "CLASSIFICACAO"] = "PAR"
+
     # --- acrescentado na integração: regra dos 100% + OBS ---
     if COL_LIBERADO_100 in resultado.columns:
         liberado_100 = resultado[COL_LIBERADO_100].fillna(False).astype(bool)
@@ -368,6 +383,7 @@ def cruzar(producao, agregado, sem_dado=None):
     partes = pd.DataFrame({
         "a": pd.Series("", index=resultado.index).mask(automatico_100, NOTA_LIBERADO_100),
         "b": pd.Series("", index=resultado.index).mask(compulsorio_sim, NOTA_COMPULSORIO_SIM),
+        "d": pd.Series("", index=resultado.index).mask(eh_par_forcado, NOTA_PAR_FORCADO),
         "c": obs_base,
     })
     resultado[COL_OBS] = partes.apply(lambda linha: " | ".join(p for p in linha if p), axis=1) if len(partes) else ""

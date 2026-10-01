@@ -61,9 +61,9 @@ class BaseFarol:
 
 
 COLUNAS_BASE = [
-    "ORDEM", "PRESTADOR", "QT_PROCEDIMENTO", "STATUS", "EXECUCAO", "MODALIDADE", "DIGITADO",
-    "PCT_LIBERACAO_IA", "PCT_BIOMETRIA", "ESPECIALIDADES", "CRITICA", "SEM_DADO_IA",
-    "LIBERADO_100_IA", "OBS", "_ESPECIALIDADES_CRITICAS",
+    "ORDEM", "PRESTADOR", "QT_PROCEDIMENTO", "QT_GUIAS", "CIDADE", "UF", "STATUS", "EXECUCAO",
+    "MODALIDADE", "DIGITADO", "PCT_LIBERACAO_IA", "PCT_BIOMETRIA", "ESPECIALIDADES", "CRITICA",
+    "SEM_DADO_IA", "LIBERADO_100_IA", "OBS", "_ESPECIALIDADES_CRITICAS",
 ]
 
 
@@ -121,6 +121,51 @@ def formatar_glosas_5310(linhas: list) -> dict:
         ]
         resultado[ordem] = "REL5310: " + "; ".join(partes)
     return resultado
+
+
+def agregar_processos_farol(registros_ia: list, mes_referencia: str = None) -> list:
+    """Agrega registros flat da base IA (1 item por guia, com nu_ordem --
+    ver core.amostragem.preparar_registros_base_ia) por processo, no mesmo
+    formato de DatabaseManager.listar_processos_farol_agregado: nu_ordem,
+    especialidades/procedimentos/pares (distintos, por vírgula), total_itens,
+    itens_biometria, itens_com_operador, mes_referencia.
+
+    Usada tanto pelo bucket no Turso (shared.database, lendo o JSON já
+    agrupado) quanto pelo Farol Mensal offline (ferramentas/
+    farol_mensal_offline.py, lendo direto da planilha) -- mesma lógica nos
+    dois caminhos, pra nunca divergir."""
+    por_processo: dict = {}
+    for reg in registros_ia:
+        por_processo.setdefault(str(reg["nu_ordem"]), []).append(reg)
+    saida = []
+    for nu_ordem, guias in por_processo.items():
+        saida.append({
+            "nu_ordem": nu_ordem,
+            "especialidades": ",".join(sorted({g.get("ds_grupo") for g in guias if g.get("ds_grupo")})),
+            "procedimentos": ",".join(sorted({g.get("cd_procedimento") for g in guias if g.get("cd_procedimento")})),
+            "pares": ",".join(sorted({f"{g.get('ds_grupo') or ''}|{g.get('cd_procedimento') or ''}" for g in guias})),
+            "total_itens": len(guias),
+            "itens_biometria": sum(1 for g in guias if g.get("cd_operador_atend") == "CONN_APPOD_NEW"),
+            "itens_com_operador": sum(1 for g in guias if g.get("cd_operador_atend")),
+            "mes_referencia": mes_referencia or guias[0].get("mes_referencia"),
+        })
+    return saida
+
+
+def agregar_glosas_5310(registros_5310: list) -> dict:
+    """Agrega registros flat do REL5310 (ver
+    core.amostragem.preparar_registros_5310) direto no formato de
+    formatar_glosas_5310, sem passar por listar_glosas_5310_agregado
+    (Turso) -- usado pelo Farol Mensal offline."""
+    por_chave: dict = {}
+    for reg in registros_5310:
+        chave = (str(reg["nu_ordem"]), str(reg.get("glosa") or "").strip())
+        por_chave.setdefault(chave, set()).add(reg.get("nu_guia"))
+    linhas = [
+        {"nu_ordem": nu_ordem, "glosa": glosa, "qtd_guias": len(guias)}
+        for (nu_ordem, glosa), guias in por_chave.items()
+    ]
+    return formatar_glosas_5310(linhas)
 
 
 def montar_base_farol(
@@ -209,6 +254,9 @@ def montar_base_farol(
         "ORDEM": df["ORDEM"],
         "PRESTADOR": _texto(df, "PRESTADOR"),
         "QT_PROCEDIMENTO": qt_procedimento,
+        "QT_GUIAS": _numerica(df, "QT_GUIAS"),
+        "CIDADE": _texto(df, "CIDADE"),
+        "UF": _texto(df, "UF"),
         "STATUS": status_bruto.apply(lambda s: STATUS_LABELS.get(s, s) if s else ""),
         "EXECUCAO": _texto(df, "EXECUCAO"),
         "MODALIDADE": _texto(df, "MODALIDADE"),
@@ -278,7 +326,12 @@ def aplicar_filtros(df: pd.DataFrame, filtros: FiltrosFarol) -> pd.DataFrame:
     demais especialidades (consulta, dentística etc.) não importam. Ex.:
     escolher CIRURGIA traz quem tem cirurgia + consulta + dentística e quem
     tem só cirurgia, mas nunca quem tem cirurgia + endodontia (endodontia é
-    crítica e não foi escolhida)."""
+    crítica e não foi escolhida). Processo 100% liberado pela IA (
+    LIBERADO_100_IA) TAMBÉM nunca é excluído por essa exceção, mesmo que
+    tenha crítica fora da lista escolhida -- pedido do usuário: 100%
+    liberado tem que sempre chegar ao cruzamento com a 5307 pra regra dos
+    100% (services/farol_mensal/processamento.cruzar) poder promovê-lo pro
+    S, mesmo rodando o Farol filtrado em "Sem críticas" (fluxo normal)."""
     if df.empty:
         return df
     df = df[df["MODALIDADE"] != MODALIDADE_SEMPRE_EXCLUIDA]
@@ -302,7 +355,8 @@ def aplicar_filtros(df: pd.DataFrame, filtros: FiltrosFarol) -> pd.DataFrame:
         alvo = frozenset(filtros.especialidades_extras)
         # sem exceção, alvo é vazio e sobra "nenhuma crítica" (= ~CRITICA)
         sobra_critica = com_dado["_ESPECIALIDADES_CRITICAS"].apply(lambda criticas: bool(criticas - alvo))
-        com_dado = com_dado[~sobra_critica.astype(bool)]
+        exclui = sobra_critica.astype(bool) & ~com_dado["LIBERADO_100_IA"]
+        com_dado = com_dado[~exclui]
     com_dado = _filtro_numerico(com_dado, "PCT_LIBERACAO_IA", filtros.liberacao_ia)
     com_dado = _filtro_numerico(com_dado, "PCT_BIOMETRIA", filtros.biometria)
 
@@ -317,6 +371,49 @@ def separar_para_cruzamento(df_filtrado: pd.DataFrame):
     producao = df_filtrado[~df_filtrado["SEM_DADO_IA"]][colunas].reset_index(drop=True)
     sem_dado = df_filtrado[df_filtrado["SEM_DADO_IA"]][["ORDEM", "PRESTADOR", "QT_PROCEDIMENTO", "OBS"]].reset_index(drop=True)
     return producao, sem_dado
+
+
+COLUNAS_OPERACIONAL = ["Processo", "Prestador", "Cidade", "UF", "Procedimentos", "Guias"]
+
+
+def montar_operacional(base_df: pd.DataFrame, ordens_no_farol, ordens_par=()) -> pd.DataFrame:
+    """Lista pra planilha do time operacional (pedido extra do usuário, só
+    no Farol Mensal offline -- ver ferramentas/farol_mensal_offline.py):
+    processos de execução APP com especialidade OU procedimento crítico que
+    NÃO foram pro FAROL (balde S) nesta rodada e não estão na lista PAR (que
+    o usuário já inclui à parte nessa planilha, manualmente).
+
+    `base_df`: BaseFarol.df INTEIRO (sem os filtros da tela aplicados) --
+    crítica aqui é sempre avaliada sobre a base IA toda, independente do
+    filtro de especialidade escolhido pra rodar o Farol (motivo do pedido:
+    normalmente roda o Farol filtrado em "Sem críticas", mas os críticos
+    ainda precisam aparecer em algum lugar).
+    `ordens_no_farol`: ORDEM (como string) de quem foi classificado S nesta
+    rodada (ver services.farol_mensal.processamento.cruzar).
+    `ordens_par`: ORDEM da lista PAR externa (mesmo arquivo de par_forcado
+    em cruzar) -- fica de fora por já estar na planilha à parte.
+
+    Processo SEM dado na base IA fica de fora: não dá pra confirmar crítica
+    sem o dado (decisão explícita do usuário, não assumir "crítico" nem
+    "não crítico")."""
+    ordens_no_farol = {str(o).strip() for o in (ordens_no_farol or [])}
+    ordens_par = {str(o).strip() for o in (ordens_par or [])}
+    if base_df.empty:
+        return pd.DataFrame(columns=COLUNAS_OPERACIONAL)
+    df = base_df[
+        (base_df["EXECUCAO"] == "APP")
+        & (base_df["MODALIDADE"] != MODALIDADE_SEMPRE_EXCLUIDA)
+        & (~base_df["SEM_DADO_IA"])
+        & (base_df["CRITICA"])
+        & (~base_df["ORDEM"].isin(ordens_no_farol))
+        & (~base_df["ORDEM"].isin(ordens_par))
+    ]
+    return df[["ORDEM", "PRESTADOR", "CIDADE", "UF", "QT_PROCEDIMENTO", "QT_GUIAS"]].rename(
+        columns={
+            "ORDEM": "Processo", "PRESTADOR": "Prestador", "CIDADE": "Cidade", "UF": "UF",
+            "QT_PROCEDIMENTO": "Procedimentos", "QT_GUIAS": "Guias",
+        }
+    )[COLUNAS_OPERACIONAL].sort_values("Processo").reset_index(drop=True)
 
 
 def resumo_farol(resultado, total_processos_mes: int, total_procedimentos_mes: int) -> dict:
