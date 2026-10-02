@@ -921,7 +921,7 @@ def buscar_snapshots_sugestao_amostra_cache(processo) -> dict:
 
 
 @st.cache_data(ttl=86400)
-def carregar_processos_turso() -> list:
+def _carregar_processos_turso_cacheado() -> list:
     """Lista agregada de processos do mês (Turso, ou fallback Supabase se
     bloqueado) -- cacheada por 24h (era 5min, depois 1h; ver
     core/relatorio_5201.py::carregar_dados_atuais pro mesmo motivo -- essa
@@ -932,6 +932,21 @@ def carregar_processos_turso() -> list:
     from shared.database import DatabaseManager
     db = DatabaseManager()
     return db.listar_processos_agregado()
+
+
+def carregar_processos_turso() -> list:
+    """Mesma lista, mas NUNCA deixa uma lista vazia ficar presa em cache por
+    24h. Em 2026-10-02 um bug no bucket devolveu lista vazia, o conserto foi
+    em shared/database.py -- e o Streamlit só invalida o cache quando o código
+    da PRÓPRIA função cacheada muda, então a lista vazia continuou aparecendo
+    mesmo depois do deploy ("nenhum processo" em qualquer mês)."""
+    lista = _carregar_processos_turso_cacheado()
+    if not lista:
+        _carregar_processos_turso_cacheado.clear()
+    return lista
+
+
+carregar_processos_turso.clear = _carregar_processos_turso_cacheado.clear
 
 
 def montar_lista_processos_mes(

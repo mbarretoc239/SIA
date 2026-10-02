@@ -381,7 +381,9 @@ def separar_para_cruzamento(df_filtrado: pd.DataFrame):
 COLUNAS_OPERACIONAL = ["Processo", "Prestador", "Cidade", "UF", "Procedimentos", "Guias"]
 
 
-def montar_operacional(base_df: pd.DataFrame, ordens_no_farol, ordens_par=()) -> pd.DataFrame:
+def montar_operacional(
+    base_df: pd.DataFrame, ordens_no_farol, ordens_par=(), status_aceitos=(),
+) -> pd.DataFrame:
     """Lista pra planilha do time operacional (pedido extra do usuário, só
     no Farol Mensal offline -- ver ferramentas/farol_mensal_offline.py):
     processos de execução APP com especialidade OU procedimento crítico que
@@ -395,8 +397,14 @@ def montar_operacional(base_df: pd.DataFrame, ordens_no_farol, ordens_par=()) ->
     ainda precisam aparecer em algum lugar).
     `ordens_no_farol`: ORDEM (como string) de quem foi classificado S nesta
     rodada (ver services.farol_mensal.processamento.cruzar).
+    `status_aceitos`: só entram processos com esses status (rótulo da base,
+    ex.: "Fechado", "Digitado"); vazio = qualquer status.
     `ordens_par`: ORDEM da lista PAR externa (mesmo arquivo de par_forcado
     em cruzar) -- fica de fora por já estar na planilha à parte.
+
+    100% liberado pela IA (LIBERADO_100_IA) também fica de fora, direto da
+    base -- não depende dele ter caído no S (um filtro de status/execução
+    pode deixá-lo fora do cruzamento, e aí ele não estaria em `ordens_no_farol`).
 
     Processo SEM dado na base IA fica de fora: não dá pra confirmar crítica
     sem o dado (decisão explícita do usuário, não assumir "crítico" nem
@@ -405,11 +413,14 @@ def montar_operacional(base_df: pd.DataFrame, ordens_no_farol, ordens_par=()) ->
     ordens_par = {str(o).strip() for o in (ordens_par or [])}
     if base_df.empty:
         return pd.DataFrame(columns=COLUNAS_OPERACIONAL)
+    if status_aceitos:
+        base_df = base_df[base_df["STATUS"].isin(status_aceitos)]
     df = base_df[
         (base_df["EXECUCAO"] == "APP")
         & (base_df["MODALIDADE"] != MODALIDADE_SEMPRE_EXCLUIDA)
         & (~base_df["SEM_DADO_IA"])
         & (base_df["CRITICA"])
+        & (~base_df["LIBERADO_100_IA"])
         & (~base_df["ORDEM"].isin(ordens_no_farol))
         & (~base_df["ORDEM"].isin(ordens_par))
     ]
@@ -449,9 +460,21 @@ def resumo_farol(resultado, total_processos_mes: int, total_procedimentos_mes: i
 # não há necessidade real de expirar sozinho tão rápido.) ---
 
 @st.cache_data(ttl=86400)
-def carregar_processos_ia() -> list:
+def _carregar_processos_ia_cacheado() -> list:
     from shared.database import DatabaseManager
     return DatabaseManager().listar_processos_farol_agregado()
+
+
+def carregar_processos_ia() -> list:
+    """Nunca deixa lista vazia presa no cache de 24h -- mesmo motivo de
+    core.amostragem.carregar_processos_turso."""
+    lista = _carregar_processos_ia_cacheado()
+    if not lista:
+        _carregar_processos_ia_cacheado.clear()
+    return lista
+
+
+carregar_processos_ia.clear = _carregar_processos_ia_cacheado.clear
 
 
 @st.cache_data(ttl=86400)
