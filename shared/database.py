@@ -493,12 +493,19 @@ class DatabaseManager:
         r.raise_for_status()
         return len(processos_unicos)
 
-    def _bucket_mes_mais_recente(self) -> str | None:
-        """Mês mais recente com QUALQUER dado no bucket, ou None se o
-        bucket ainda está vazio (nenhum mês foi importado no formato novo
-        ainda -- os três agregados abaixo caem pro caminho antigo nesse caso)."""
+    def _bucket_mes_mais_recente(self, coluna: str = "guias_ia") -> str | None:
+        """Mês mais recente que tem dado NA COLUNA pedida (guias_ia por
+        padrão), ou None se nenhum mês tem -- os agregados abaixo caem pro
+        caminho antigo nesse caso.
+
+        Por coluna, não pelo bucket inteiro, porque cada fonte tem o seu mês:
+        a base IA vem de DT_PRODUCAO (2026-09) e o REL5310 de DATA DE
+        PAGAMENTO (2026-11). Pegar o MAX geral fazia o SIA procurar a base IA
+        em 2026-11, não achar nada e deixar a lista de processos da Amostragem
+        (e o Farol Mensal) vazia -- achado em produção em 2026-10-02."""
+        assert coluna in ("guias_ia", "guias_5310", "imagens")
         resultado = self._turso_pipeline([{
-            "sql": "SELECT MAX(mes_referencia) AS mes FROM base_processo_bucket",
+            "sql": f"SELECT MAX(mes_referencia) AS mes FROM base_processo_bucket WHERE {coluna} != '[]'",
         }], self._turso_token_leitura)[0]
         linhas = self._turso_linhas(resultado)
         return linhas[0]["mes"] if linhas else None
@@ -872,25 +879,28 @@ class DatabaseManager:
         )
 
     def buscar_bucket_processo(self, nu_ordem: str) -> dict | None:
-        """Linha do bucket pra esse processo (o mês mais recente que tiver
-        dado), já com guias_ia/guias_5310/imagens decodificados de JSON.
-        None se o processo não tem bucket em NENHUM mês retido -- dado
-        anterior à migração, formato antigo (tabela por guia) ainda vale."""
+        """Dados do processo no bucket, já decodificados de JSON. Cada campo
+        (guias_ia/guias_5310/imagens) vem do mês mais recente em que ELE tem
+        dado -- um mesmo processo pode ter linha em meses diferentes (base IA
+        em 2026-09, REL5310 em 2026-11), e a linha mais recente pode nem ter
+        guias da IA. None se o processo não tem bucket em NENHUM mês retido
+        -- dado anterior à migração, formato antigo (tabela por guia) ainda vale."""
         resultado = self._turso_pipeline([{
             "sql": "SELECT mes_referencia, guias_ia, guias_5310, imagens FROM base_processo_bucket "
-                   "WHERE nu_ordem = ? ORDER BY mes_referencia DESC LIMIT 1",
+                   "WHERE nu_ordem = ? ORDER BY mes_referencia DESC",
             "args": [self._turso_arg(str(nu_ordem))],
         }], self._turso_token_leitura)[0]
         linhas = self._turso_linhas(resultado)
         if not linhas:
             return None
-        linha = linhas[0]
-        return {
-            "mes_referencia": linha["mes_referencia"],
-            "guias_ia": json.loads(linha["guias_ia"] or "[]"),
-            "guias_5310": json.loads(linha["guias_5310"] or "[]"),
-            "imagens": json.loads(linha["imagens"] or "[]"),
-        }
+        bucket = {"mes_referencia": linhas[0]["mes_referencia"], "guias_ia": [], "guias_5310": [], "imagens": []}
+        for campo in ("guias_ia", "guias_5310", "imagens"):
+            for linha in linhas:  # do mais recente pro mais antigo
+                valor = json.loads(linha[campo] or "[]")
+                if valor:
+                    bucket[campo] = valor
+                    break
+        return bucket
 
     def importar_base_ia(
         self, registros: list, mes_referencia: str, lote: int = 500, ao_progredir=None, retomar: bool = False
