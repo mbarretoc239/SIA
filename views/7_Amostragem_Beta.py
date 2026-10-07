@@ -163,6 +163,22 @@ def _botao_flutuante_atalhos():
                     st.switch_page("views/2_Relatorio_5302.py")
                 st.divider()
 
+            st.caption("Cola o número do processo e já busca, sem subir a página.")
+            # Form pelo mesmo motivo do FAB do 5302: dentro de popover o valor
+            # do text_input solto só commita no blur, e o clique em Buscar
+            # pegava o texto antigo.
+            with st.form("form_busca_fab_amostragem", clear_on_submit=False):
+                processo_fab = st.text_input("Número do processo", key="fab_busca_processo")
+                if st.form_submit_button("Buscar", use_container_width=True):
+                    if processo_fab.strip():
+                        st.session_state["_amostragem_beta_processo"] = processo_fab.strip()
+                        # Mantém o campo principal em sincronia (ele é criado
+                        # mais abaixo no script, então ainda dá pra setar aqui).
+                        st.session_state["amostragem_processo_input"] = processo_fab.strip()
+                    else:
+                        st.warning("Informe o número do processo.")
+            st.divider()
+
             st.caption("Clique pra copiar.")
             components.html(
                 f"""
@@ -251,7 +267,9 @@ with aba_config:
         )
 
 with aba_busca:
-    processo_digitado = st.text_input("Número do processo", placeholder="Ex: 8202650447")
+    processo_digitado = st.text_input(
+        "Número do processo", placeholder="Ex: 8202650447", key="amostragem_processo_input",
+    )
     buscar = st.button("Buscar guias")
 
     if buscar:
