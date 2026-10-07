@@ -163,22 +163,6 @@ def _botao_flutuante_atalhos():
                     st.switch_page("views/2_Relatorio_5302.py")
                 st.divider()
 
-            st.caption("Cola o número do processo e já busca, sem subir a página.")
-            # Form pelo mesmo motivo do FAB do 5302: dentro de popover o valor
-            # do text_input solto só commita no blur, e o clique em Buscar
-            # pegava o texto antigo.
-            with st.form("form_busca_fab_amostragem", clear_on_submit=False):
-                processo_fab = st.text_input("Número do processo", key="fab_busca_processo")
-                if st.form_submit_button("Buscar", use_container_width=True):
-                    if processo_fab.strip():
-                        st.session_state["_amostragem_beta_processo"] = processo_fab.strip()
-                        # Mantém o campo principal em sincronia (ele é criado
-                        # mais abaixo no script, então ainda dá pra setar aqui).
-                        st.session_state["amostragem_processo_input"] = processo_fab.strip()
-                    else:
-                        st.warning("Informe o número do processo.")
-            st.divider()
-
             st.caption("Clique pra copiar.")
             components.html(
                 f"""
@@ -222,6 +206,22 @@ def _botao_flutuante_atalhos():
                 """,
                 height=32 * len(itens) + 16 * (len(itens) - 1) + 8,
             )
+            st.divider()
+
+            st.caption("Cola o número do processo e já busca, sem subir a página.")
+            # Form pelo mesmo motivo do FAB do 5302: dentro de popover o valor
+            # do text_input solto só commita no blur, e o clique em Buscar
+            # pegava o texto antigo.
+            with st.form("form_busca_fab_amostragem", clear_on_submit=False):
+                processo_fab = st.text_input("Número do processo", key="fab_busca_processo")
+                if st.form_submit_button("Buscar", use_container_width=True):
+                    if processo_fab.strip():
+                        st.session_state["_amostragem_beta_processo"] = processo_fab.strip()
+                        # Mantém o campo principal em sincronia (ele é criado
+                        # mais abaixo no script, então ainda dá pra setar aqui).
+                        st.session_state["amostragem_processo_input"] = processo_fab.strip()
+                    else:
+                        st.warning("Informe o número do processo.")
 
 
 _botao_flutuante_atalhos()
@@ -1017,6 +1017,16 @@ with aba_busca:
         df_esp_guias = df_guias[df_guias["Especialidade"] == esp].reset_index(drop=True)
         total_procs = int(df_esp_total["Qtde"].sum())
         total_guias = len(df_esp_guias)
+
+        # "Total de procs" = TODOS os procedimentos das guias listadas, não só
+        # os não liberados pela IA. Na Análise Integral as liberadas já estão
+        # dentro de `df`; fora dela soma à parte pra não contar em dobro.
+        if not analise_integral and guias_liberadas:
+            guias_esp = set(df_esp_guias["NU_GUIA"].astype(str))
+            total_procs += sum(
+                1 for g in guias_liberadas
+                if g["ds_grupo"] == esp and str(g["nu_guia"]) in guias_esp
+            )
 
         if analise_integral:
             # Análise Integral: sem sorteio, tudo (N + liberadas) precisa ser
