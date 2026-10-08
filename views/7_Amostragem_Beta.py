@@ -2,6 +2,7 @@ import html
 from datetime import date
 
 import streamlit as st
+from core import marca
 import pandas as pd
 import streamlit.components.v1 as components
 
@@ -58,7 +59,7 @@ from shared.ui import (
     valor_persistido,
 )
 
-st.set_page_config(page_title="Amostragem", page_icon="🦷", layout="wide")
+st.set_page_config(page_title="Amostragem", page_icon=marca.ICONE, layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")

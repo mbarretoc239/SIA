@@ -2,6 +2,7 @@ import hashlib
 import io
 
 import streamlit as st
+from core import marca
 import pandas as pd
 
 from core.settings import (
@@ -14,7 +15,7 @@ from services.relatorio_5302.parser_strategy import processar_csv, processar_pdf
 from services.relatorio_5302.text_engine import gerar_texto, mixar_textos_inteligente
 from shared.ai_utils import melhorar_texto_com_ia
 
-st.set_page_config(page_title="Relatório 5302", page_icon="🦷", layout="wide")
+st.set_page_config(page_title="Relatório 5302", page_icon=marca.ICONE, layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")

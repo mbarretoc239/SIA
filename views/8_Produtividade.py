@@ -1,6 +1,8 @@
 import altair as alt
 import pandas as pd
 import streamlit as st
+from core import marca
+from core.graficos import estilo as _estilo_grafico, tema as _tema_grafico
 
 from shared.ui import fmt_num as _fmt_num, pilula
 
@@ -68,7 +70,7 @@ def _secao_visao_geral(df: pd.DataFrame, titulo: str = "Visão Geral"):
             )
 
         if resumo["total_processos"]:
-            st.altair_chart(_grafico_status(procedimentos_por_status), use_container_width=True)
+            st.altair_chart(_grafico_status(procedimentos_por_status), theme=None, use_container_width=True)
 
 
 def _grafico_status(procedimentos_por_status: dict):
@@ -96,12 +98,12 @@ def _grafico_status(procedimentos_por_status: dict):
     # Rótulo acima de cada barra: mesmo as pequenas (perto de zero, ao lado
     # de uma barra 500x maior) ficam com o número legível sem precisar de
     # hover nem de escala log.
-    rotulos = alt.Chart(df_status).mark_text(dy=-8, color="white", fontSize=12).encode(
+    rotulos = alt.Chart(df_status).mark_text(dy=-8, color=_tema_grafico()["texto"], fontSize=12).encode(
         x=alt.X("Status:N", sort="-y"),
         y=alt.Y("Procedimentos:Q", scale=escala_y),
         text="_rotulo:N",
     )
-    return barras + rotulos
+    return _estilo_grafico(barras + rotulos, _tema_grafico())
 
 
 def _secao_lista_processos(df: pd.DataFrame, auditor: str, dia=None, expandido: bool = False):
@@ -189,7 +191,7 @@ def _secao_produtividade_individual(
     # as barras ficam enormes e coladas; com muitos dias, ficam apertadas.
     # Mesmo ajuste já aplicado no gráfico "Produtividade por Auditor".
     escala_x_dia = alt.Scale(paddingInner=0.35, paddingOuter=0.15)
-    grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color="#4F8CFF").encode(
+    grafico_dia = alt.Chart(df_por_dia).mark_bar(cornerRadiusEnd=4, color=_tema_grafico()["series"][0]).encode(
         # labelOverlap=False -- mesmo cuidado do gráfico por auditor: sem
         # isso, um mês com muitos dias faz o Vega-Lite esconder alguns
         # rótulos de data silenciosamente.
@@ -208,7 +210,8 @@ def _secao_produtividade_individual(
         opacity=alt.condition(selecao_dia, alt.value(1), alt.value(0.65)),
     ).add_params(selecao_dia)
     evento_grafico = st.altair_chart(
-        grafico_dia, use_container_width=True, on_select="rerun", key=f"grafico_prod_mes_{key_prefix}",
+        _estilo_grafico(grafico_dia, _tema_grafico()), theme=None, use_container_width=True,
+        on_select="rerun", key=f"grafico_prod_mes_{key_prefix}",
     )
     pontos_clicados = evento_grafico.selection.get(f"selecao_dia_{key_prefix}") if evento_grafico else None
     dia_clicado = pontos_clicados[0].get("Dia_fmt") if pontos_clicados else None
@@ -233,7 +236,7 @@ def _secao_produtividade_individual(
         )
 
 
-st.set_page_config(page_title="Produtividade", page_icon="🦷", layout="wide")
+st.set_page_config(page_title="Produtividade", page_icon=marca.ICONE, layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
@@ -333,7 +336,7 @@ if _ve_geral:
                 scale=escala_x_auditores,
             ),
             y=alt.Y("Total:Q", title="Procedimentos concluídos (Fechado + Calculado + Aut. Pagto)", scale=escala_y_auditores),
-            color=alt.value("#4F8CFF"),
+            color=alt.value(_tema_grafico()["series"][0]),
             opacity=alt.condition(selecao_auditor, alt.value(1), alt.value(0.65)),
             # Mesmo escape de ponto explicado no gráfico "Produtividade ao
             # longo do mês" acima -- sem \\. o Vega-Lite lê "Aut. Pagto"
@@ -341,15 +344,15 @@ if _ve_geral:
             tooltip=["Auditor", "Fechados", "Calculados",
                      alt.Tooltip("Aut\\. Pagto", type="quantitative", title="Aut. Pagto"), "Total"],
         ).add_params(selecao_auditor)
-        rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color="white", fontSize=11).encode(
+        rotulos_auditores = alt.Chart(tabela_auditores).mark_text(dy=-8, color=_tema_grafico()["texto"], fontSize=11).encode(
             x=alt.X("Auditor:N", sort="-y", scale=escala_x_auditores),
             y=alt.Y("Total:Q", scale=escala_y_auditores),
             text="_rotulo:N",
         )
         st.caption("Clique numa barra pra ver a produtividade individual desse auditor.")
         evento_grafico_auditor = st.altair_chart(
-            (barras_auditores + rotulos_auditores).properties(height=380),
-            use_container_width=True, on_select="rerun", key="grafico_prod_auditor",
+            _estilo_grafico(barras_auditores + rotulos_auditores, _tema_grafico(), altura=380),
+            theme=None, use_container_width=True, on_select="rerun", key="grafico_prod_auditor",
         )
         pontos_clicados_auditor = evento_grafico_auditor.selection.get("selecao_auditor") if evento_grafico_auditor else None
         auditor_clicado = pontos_clicados_auditor[0].get("Auditor") if pontos_clicados_auditor else None

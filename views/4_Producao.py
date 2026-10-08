@@ -1,5 +1,6 @@
 import html
 import streamlit as st
+from core import marca
 import pdfplumber
 import re
 import unicodedata
@@ -14,7 +15,7 @@ from core.settings import (
 from shared.database import DatabaseManager
 from shared.ui import fmt_num
 
-st.set_page_config(page_title="Análise de Produção", page_icon="🦷", layout="wide")
+st.set_page_config(page_title="Análise de Produção", page_icon=marca.ICONE, layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")

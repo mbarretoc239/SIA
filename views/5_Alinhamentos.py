@@ -2,6 +2,7 @@ import re
 
 import pandas as pd
 import streamlit as st
+from core import marca
 
 from core.settings import (
     NIVEL_HIERARQUIA,
@@ -17,7 +18,7 @@ from core.settings import (
 from shared.database import DatabaseManager
 from shared.ui import estilizar_botoes_exclusao
 
-st.set_page_config(page_title="Alinhamentos", page_icon="🦷", layout="wide")
+st.set_page_config(page_title="Alinhamentos", page_icon=marca.ICONE, layout="wide")
 estilizar_botoes_exclusao()
 
 if not st.session_state.get("logado", False):

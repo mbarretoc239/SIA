@@ -8,14 +8,16 @@ from core.settings import (
 )
 from shared.database import DatabaseManager
 from shared.email_utils import enviar_reporte_bug, notificar_novo_cadastro, notificar_esqueci_senha, pode_notificar_esqueci_senha
+from core import marca
 from shared.ui import COR_SUBTITULO, COR_TITULO
 
 # Configuração da Página principal (deve ser a primeira coisa)
 st.set_page_config(
     page_title="SIA Web - Auditoria",
-    page_icon="🦷",
+    page_icon=marca.ICONE,
     layout="wide"
 )
+marca.aplicar()
 
 
 # Inicializa Banco de Dados sempre instanciando a classe nova

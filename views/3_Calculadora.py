@@ -1,4 +1,5 @@
 import streamlit as st
+from core import marca
 
 from core.settings import (
     carregar_excecoes_modulos_cache,
@@ -8,7 +9,7 @@ from core.settings import (
 from shared.database import DatabaseManager
 from shared.ui import COR_PERIGO, COR_SUCESSO
 
-st.set_page_config(page_title="Calculadora de Glosa", page_icon="🦷", layout="centered")
+st.set_page_config(page_title="Calculadora de Glosa", page_icon=marca.ICONE, layout="centered")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")

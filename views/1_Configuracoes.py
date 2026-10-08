@@ -1,6 +1,7 @@
 from datetime import date
 
 import streamlit as st
+from core import marca
 import pandas as pd
 import io
 from shared.database import DatabaseManager, TursoIndisponivelError
@@ -33,7 +34,7 @@ from core.settings import (
 from services.relatorio_5302.glosa_matcher import carregar_mapa_subglosas, carregar_mapa_procedimentos
 from shared.ui import alerta_turso_indisponivel, estilizar_botoes_exclusao
 
-st.set_page_config(page_title="Configurações", page_icon="🦷", layout="wide")
+st.set_page_config(page_title="Configurações", page_icon=marca.ICONE, layout="wide")
 estilizar_botoes_exclusao()
 
 if not st.session_state.get("logado", False):

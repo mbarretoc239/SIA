@@ -2,6 +2,7 @@ import io
 
 import pandas as pd
 import streamlit as st
+from core import marca
 
 from core.amostragem import carregar_procedimentos_criticos, carregar_regras_amostragem_cache
 from core.farol_mensal import (
@@ -49,7 +50,7 @@ from shared.ui import (
     valor_persistido,
 )
 
-st.set_page_config(page_title="Farol Mensal", page_icon="🦷", layout="wide")
+st.set_page_config(page_title="Farol Mensal", page_icon=marca.ICONE, layout="wide")
 
 if not st.session_state.get("logado", False):
     st.warning("Você precisa fazer login na página inicial para acessar esta ferramenta.")
