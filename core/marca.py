@@ -10,9 +10,14 @@ ICONE = str(_ASSETS / "icone.png")
 # azul do texto, vermelho/laranja/laranja-claro/amarelo das petalas (cores do PDF da marca)
 CORES = ["#1539aa", "#ff222b", "#ff4e05", "#ff8800", "#ffcc23"]
 
+# st.logo(size="large") e o maior tamanho nativo e ainda fica pequeno na barra lateral; o CSS abaixo aumenta so o
+# logo da barra lateral aberta (depende dos data-testid do Streamlit; se mudarem, ajustar os seletores).
 _FAIXA = (
     "<style>[data-testid='stHeader']{border-bottom:3px solid transparent;border-image:linear-gradient(90deg,"
-    + ",".join(CORES) + ") 1;}</style>"
+    + ",".join(CORES) + ") 1;}"
+    "[data-testid='stSidebarHeader']{height:auto;min-height:5.5rem;padding-top:1rem;padding-bottom:0.5rem;}"
+    "[data-testid='stSidebarHeader'] [data-testid='stLogo']{height:4.5rem;max-width:100%;width:auto;"
+    "object-fit:contain;}</style>"
 )
 
 
