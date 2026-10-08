@@ -104,3 +104,6 @@ tests/test_farol_mensal_*.py
 # iterar nesse script não pode gerar push/redeploy à toa. scripts/exportar_dados_
 # farol_offline.py (gera o JSON) continua versionado normalmente.
 ferramentas/
+
+# imagens da marca (usadas em core/marca.py)
+!assets/*.png
