@@ -11,12 +11,12 @@ ICONE = str(_ASSETS / "icone.png")
 CORES = ["#1539aa", "#ff222b", "#ff4e05", "#ff8800", "#ffcc23"]
 
 # st.logo(size="large") e o maior tamanho nativo e ainda fica pequeno na barra lateral; o CSS abaixo aumenta so o
-# logo da barra lateral aberta (depende dos data-testid do Streamlit; se mudarem, ajustar os seletores).
+# logo da barra lateral aberta (depende dos data-testid do Streamlit (na barra lateral o logo e stSidebarLogo, nao stLogo); se mudarem, ajustar os seletores).
 _FAIXA = (
     "<style>[data-testid='stHeader']{border-bottom:3px solid transparent;border-image:linear-gradient(90deg,"
     + ",".join(CORES) + ") 1;}"
-    "[data-testid='stSidebarHeader']{height:auto;min-height:5.5rem;padding-top:1rem;padding-bottom:0.5rem;}"
-    "[data-testid='stSidebarHeader'] [data-testid='stLogo']{height:4.5rem;max-width:100%;width:auto;"
+    "[data-testid='stSidebarHeader']{height:auto;min-height:6rem;padding-top:1rem;padding-bottom:0.5rem;}"
+    "[data-testid='stSidebarLogo']{height:5rem !important;max-width:100% !important;width:auto !important;"
     "object-fit:contain;}</style>"
 )
 
