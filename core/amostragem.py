@@ -978,7 +978,7 @@ def montar_lista_processos_mes(
     from core.relatorio_5201 import STATUS_LABELS
 
     colunas_finais = [
-        "Processo", "Status", "Execução", "Data de entrada", "Login de digitador", "% Liberação IA", "% Biometria",
+        "Processo", "Status", "Execução", "Tipo de prestador", "Data de entrada", "Login de digitador", "% Liberação IA", "% Biometria",
         "Total de Guias", "Procedimentos", "Especialidades", "Crítica",
     ]
     if not processos_turso:
@@ -1013,7 +1013,7 @@ def montar_lista_processos_mes(
     campos_rel5201 = [
         "ORDEM", "STATUS", "EXECUCAO", "QT_GUIAS", "QT_PROCEDIMENTO",
         "QUANTIDADE_LIBERADOS_IA", "QUANTIDADE_NAO_LIBERADOS_IA", "OP_ENC_DIGITACAO",
-        "DATA_RECEBIMENTO_PROCESSO_FISICO",
+        "DATA_RECEBIMENTO_PROCESSO_FISICO", "TIPO_PRESTADOR",
     ]
     campos_disponiveis = [c for c in campos_rel5201 if c in df_rel5201.columns]
     if "ORDEM" in campos_disponiveis:
@@ -1079,6 +1079,13 @@ def montar_lista_processos_mes(
         )
     else:
         df_final["Login de digitador"] = None
+
+    # Tipo do prestador (TIPO do REL5201): "Jurídico"/"Físico". Em branco =
+    # sem dado (REL5201 importado antes da coluna, ou sem match).
+    if "TIPO_PRESTADOR" in df_final.columns:
+        df_final["Tipo de prestador"] = df_final["TIPO_PRESTADOR"].replace("", None)
+    else:
+        df_final["Tipo de prestador"] = None
 
     # Processos sem nenhum match no REL5201 (Status vazio) vão pro fim da
     # lista -- não têm status/auditor/% pra mostrar, então atrapalham menos

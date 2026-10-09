@@ -357,7 +357,7 @@ with aba_busca:
                 # largura igual pros dois, generosa o bastante pro texto não
                 # cortar (aconteceu em produção com 1 e 1.5 -- ver memória
                 # "checar UI ao redor" antes de mexer nessa linha de novo).
-                col_filtro_esp, col_filtro_digitador, col_filtro_entrada = st.columns([2, 1.5, 1.5])
+                col_filtro_esp, col_filtro_digitador, col_filtro_entrada, col_filtro_tipo = st.columns([2, 1.5, 1.5, 2.2])
                 with col_filtro_esp:
                     filtro_especialidades = st.multiselect(
                         "Especialidade", todas_especialidades,
@@ -389,6 +389,19 @@ with aba_busca:
                             "REL5201 não aparecem em Sim nem em Não."
                         ),
                     ) or "Todos"
+                with col_filtro_tipo:
+                    filtro_tipo = st.segmented_control(
+                        "Tipo de prestador", ["Todos", "Jurídicos", "Físicos"],
+                        default=valor_persistido("lista_proc_filtro_tipo", "Todos"),
+                        key="lista_proc_filtro_tipo",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_tipo",),
+                        help=(
+                            "Prestador jurídico ou físico, conforme a coluna TIPO do REL5201. "
+                            "Processos sem essa informação (REL5201 importado antes da coluna "
+                            "ser capturada, ou sem match) só aparecem em Todos -- reimporte o "
+                            "REL5201 pra preencher."
+                        ),
+                    ) or "Todos"
 
                 col_filtro_pct, col_filtro_bio, col_filtro_guias, col_filtro_proc = st.columns(4)
                 with col_filtro_pct:
@@ -411,6 +424,9 @@ with aba_busca:
                     df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Execução"].isin(filtro_execucao)]
                 if filtro_digitador != "Todos":
                     df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Login de digitador"] == filtro_digitador]
+                if filtro_tipo != "Todos":
+                    tipo_alvo = {"Jurídicos": "Jurídico", "Físicos": "Físico"}[filtro_tipo]
+                    df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Tipo de prestador"] == tipo_alvo]
                 if filtro_especialidades:
                     alvo = set(filtro_especialidades)
                     df_lista_filtrada = df_lista_filtrada[

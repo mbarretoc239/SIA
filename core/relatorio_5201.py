@@ -49,6 +49,7 @@ COLUNAS_OPCIONAIS = {
     "PRESTADOR", "VALOR_COBRADO", "VALOR_CALCULADO",
     "CIDADE", "UF",
     "OP_ENC_DIGITACAO", "QUANTIDADE_NAO_AVALIADO_IA",
+    "TIPO_PRESTADOR",
 }
 CAMPOS_REGISTRO = list(COLUNAS_NECESSARIAS | COLUNAS_OPCIONAIS)
 
@@ -260,7 +261,24 @@ def ler_relatorio_5201(arquivo) -> pd.DataFrame:
     else:
         df["OP_ENC_DIGITACAO"] = pd.Series([None] * len(df), index=df.index, dtype=object)
 
+    # TIPO do arquivo ("Prestador Juridico" / "Prestador Fisico") -> "Jurídico"
+    # / "Físico" (filtro da lista de processos da Amostragem). "" = valor
+    # que não é nenhum dos dois; None = arquivo sem a coluna TIPO.
+    if "TIPO" in df.columns:
+        df["TIPO_PRESTADOR"] = df["TIPO"].fillna("").apply(_normalizar_tipo_prestador)
+    else:
+        df["TIPO_PRESTADOR"] = pd.Series([None] * len(df), index=df.index, dtype=object)
+
     return df[CAMPOS_REGISTRO]
+
+
+def _normalizar_tipo_prestador(valor) -> str:
+    texto = _norm(valor)
+    if "JURIDIC" in texto:
+        return "Jurídico"
+    if "FISIC" in texto:
+        return "Físico"
+    return ""
 
 
 def montar_registros(df: pd.DataFrame) -> list:
