@@ -357,7 +357,7 @@ with aba_busca:
                 # largura igual pros dois, generosa o bastante pro texto não
                 # cortar (aconteceu em produção com 1 e 1.5 -- ver memória
                 # "checar UI ao redor" antes de mexer nessa linha de novo).
-                col_filtro_esp, col_filtro_digitador, col_filtro_entrada, col_filtro_tipo = st.columns([2, 1.5, 1.5, 2.2])
+                col_filtro_esp, col_filtro_digitador, col_filtro_entrada = st.columns([2, 1.5, 1.5])
                 with col_filtro_esp:
                     filtro_especialidades = st.multiselect(
                         "Especialidade", todas_especialidades,
@@ -389,6 +389,8 @@ with aba_busca:
                             "REL5201 não aparecem em Sim nem em Não."
                         ),
                     ) or "Todos"
+                # Tipo de prestador numa linha própria: com 4 colunas na linha acima o "Não" de Digitador/Entrada cortava
+                col_filtro_tipo, _ = st.columns([2, 3])
                 with col_filtro_tipo:
                     filtro_tipo = st.segmented_control(
                         "Tipo de prestador", ["Todos", "Jurídicos", "Físicos"],
