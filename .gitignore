@@ -107,3 +107,7 @@ ferramentas/
 
 # imagens da marca (usadas em core/marca.py)
 !assets/*.png
+
+# config local do Claude Code e backups
+.claude/
+*.bak
