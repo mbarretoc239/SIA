@@ -106,7 +106,7 @@ def _botao_flutuante_atalhos():
         div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
             position: fixed !important;
             bottom: 6px;
-            left: 20px;
+            left: 22rem;
             z-index: 9999;
             width: fit-content !important;
             transition: left 0.2s ease;
@@ -129,10 +129,12 @@ def _botao_flutuante_atalhos():
                 background-color: #13233A !important;
             }
         }
-        /* Sidebar aberta cobre o canto esquerdo -- desloca o botão pra depois
-           dela (Streamlit expõe o estado via aria-expanded no elemento stSidebar, sem fixar a tag, que pode mudar entre versões do Streamlit). */
-        body:has([data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
-            left: 22rem;
+        /* A sidebar aberta cobre o canto esquerdo (e tem z-index maior), entao o botao
+           fica depois dela por padrao (left: 22rem acima). O Streamlit 1.57 nao poe
+           aria-expanded no DOM; o sinal confiavel e o botao de expandir, que so
+           existe quando a sidebar esta recolhida -- ai o botao volta pro canto. */
+        body:has([data-testid="stExpandSidebarButton"]) div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
+            left: 20px;
         }
         </style>
         """,

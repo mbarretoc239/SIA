@@ -52,7 +52,7 @@ def _botao_flutuante_voltar_amostragem():
         div[data-testid="stPopover"] {
             position: fixed !important;
             bottom: 20px;
-            left: 20px;
+            left: 22rem;
             z-index: 9999;
             width: fit-content !important;
         }
@@ -74,8 +74,8 @@ def _botao_flutuante_voltar_amostragem():
                 background-color: #13233A !important;
             }
         }
-        body:has([data-testid="stSidebar"][aria-expanded="true"]) div[data-testid="stPopover"] {
-            left: 22rem;
+        body:has([data-testid="stExpandSidebarButton"]) div[data-testid="stPopover"] {
+            left: 20px;
         }
         </style>
         """,
