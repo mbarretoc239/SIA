@@ -130,8 +130,8 @@ def _botao_flutuante_atalhos():
             }
         }
         /* Sidebar aberta cobre o canto esquerdo -- desloca o botão pra depois
-           dela (Streamlit expõe o estado via aria-expanded no <section>). */
-        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
+           dela (Streamlit expõe o estado via aria-expanded no elemento stSidebar, sem fixar a tag, que pode mudar entre versões do Streamlit). */
+        body:has([data-testid="stSidebar"][aria-expanded="true"]) div.st-key-fab_container_atalhos div[data-testid="stPopover"] {
             left: 22rem;
         }
         </style>

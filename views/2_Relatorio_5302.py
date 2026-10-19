@@ -74,7 +74,7 @@ def _botao_flutuante_voltar_amostragem():
                 background-color: #13233A !important;
             }
         }
-        body:has(section[data-testid="stSidebar"][aria-expanded="true"]) div[data-testid="stPopover"] {
+        body:has([data-testid="stSidebar"][aria-expanded="true"]) div[data-testid="stPopover"] {
             left: 22rem;
         }
         </style>
