@@ -451,7 +451,10 @@ with aba_busca:
                     column_config={"Data de entrada": st.column_config.DateColumn(format="DD/MM/YYYY")},
                 )
                 linhas_selecionadas = evento_lista.selection.get("rows") if evento_lista else []
-                if linhas_selecionadas:
+                # A seleção da tabela guarda o índice da linha; ao mudar um filtro a lista
+                # encolhe e o índice antigo pode passar do tamanho (IndexError em produção,
+                # 2026-10-19) -- seleção fora da lista é descartada.
+                if linhas_selecionadas and linhas_selecionadas[0] < len(df_lista_filtrada):
                     processo_clicado = str(df_lista_filtrada.iloc[linhas_selecionadas[0]]["Processo"])
                     if processo_clicado != st.session_state.get("_amostragem_beta_processo"):
                         st.session_state["_amostragem_beta_processo"] = processo_clicado
