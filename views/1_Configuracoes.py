@@ -8,6 +8,7 @@ from shared.database import DatabaseManager, TursoIndisponivelError
 
 from core.amostragem import (
     buscar_analise_integral_cache,
+    listar_processos_par_cache,
     buscar_glosas_5310_por_processo_cache,
     buscar_guias_ia_por_processo_cache,
     buscar_guias_liberadas_ia_por_processo_cache,
@@ -1577,6 +1578,7 @@ if "importar_planilhas" in abas_por_id:
                             marcado_por = f"Importação PAR {mes_par.strftime('%m/%Y')}"
                             total_par = db.substituir_analise_integral(processos_ok, marcado_por)
                             buscar_analise_integral_cache.clear()
+                            listar_processos_par_cache.clear()
                             descartados = total_linhas - total_par
                             msg_descarte = (
                                 f" {descartados} linha(s) descartada(s) ({sem_processo} sem nº de processo, "

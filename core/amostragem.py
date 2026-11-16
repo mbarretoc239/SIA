@@ -887,6 +887,15 @@ def buscar_analise_integral_cache(processo) -> dict | None:
 
 
 @st.cache_data(ttl=1800)
+def listar_processos_par_cache() -> set:
+    """Conjunto de processos PAR (Análise Integral) -- pro filtro "É PAR" da
+    lista de processos. Invalidado por `.clear()` junto com
+    buscar_analise_integral_cache ao importar a lista PAR."""
+    from shared.database import DatabaseManager
+    return DatabaseManager().listar_processos_analise_integral()
+
+
+@st.cache_data(ttl=1800)
 def buscar_status_processo_cache(nu_ordem: str) -> dict | None:
     """Invalidado por `.clear()` no status manual (views/7_Amostragem_Beta.py)
     e na reimportação do REL5201 (views/1_Configuracoes.py)."""
@@ -978,8 +987,8 @@ def montar_lista_processos_mes(
     from core.relatorio_5201 import STATUS_LABELS
 
     colunas_finais = [
-        "Processo", "Status", "Execução", "Tipo de prestador", "Data de entrada", "Login de digitador", "% Liberação IA", "% Biometria",
-        "Total de Guias", "Procedimentos", "Especialidades", "Crítica",
+        "Processo", "Status", "Execução", "Tipo de prestador", "Data de entrada", "Procedimentos", "% Liberação IA", "% Biometria",
+        "Total de Guias", "Especialidades", "Crítica", "Login de digitador",
     ]
     if not processos_turso:
         return pd.DataFrame(columns=colunas_finais)

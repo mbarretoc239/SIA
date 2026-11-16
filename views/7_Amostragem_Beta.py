@@ -17,6 +17,7 @@ from core.amostragem import (
     buscar_imagem_por_guias_cache,
     buscar_snapshots_sugestao_amostra_cache,
     buscar_status_processo_cache,
+    listar_processos_par_cache,
     carregar_regras_amostragem_cache,
     calcular_imagens_esperadas_guia,
     carregar_procedimentos_criticos,
@@ -392,7 +393,15 @@ with aba_busca:
                         ),
                     ) or "Todos"
                 # Tipo de prestador numa linha própria: com 4 colunas na linha acima o "Não" de Digitador/Entrada cortava
-                col_filtro_tipo, _ = st.columns([2, 3])
+                col_filtro_tipo, col_filtro_par, _ = st.columns([2, 2.5, 1.5])
+                with col_filtro_par:
+                    filtro_par = st.segmented_control(
+                        "PAR", ["Todos", "É PAR", "Não é PAR"],
+                        default=valor_persistido("lista_proc_filtro_par", "Todos"),
+                        key="lista_proc_filtro_par",
+                        on_change=persistir_entre_paginas, args=("lista_proc_filtro_par",),
+                        help="É PAR = processo na lista PAR mensal importada em Configurações (Análise Integral).",
+                    ) or "Todos"
                 with col_filtro_tipo:
                     filtro_tipo = st.segmented_control(
                         "Tipo de prestador", ["Todos", "Jurídicos", "Físicos"],
@@ -428,6 +437,9 @@ with aba_busca:
                     df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Execução"].isin(filtro_execucao)]
                 if filtro_digitador != "Todos":
                     df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Login de digitador"] == filtro_digitador]
+                if filtro_par != "Todos":
+                    e_par = df_lista_filtrada["Processo"].astype(str).str.strip().isin(listar_processos_par_cache())
+                    df_lista_filtrada = df_lista_filtrada[e_par if filtro_par == "É PAR" else ~e_par]
                 if filtro_tipo != "Todos":
                     tipo_alvo = {"Jurídicos": "Jurídico", "Físicos": "Físico"}[filtro_tipo]
                     df_lista_filtrada = df_lista_filtrada[df_lista_filtrada["Tipo de prestador"] == tipo_alvo]

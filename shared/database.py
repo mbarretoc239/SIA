@@ -472,6 +472,11 @@ class DatabaseManager:
         linhas = self._get_paginado(url)
         return linhas[0] if linhas else None
 
+    def listar_processos_analise_integral(self) -> set:
+        """Todos os processos marcados como Análise Integral (lista PAR)."""
+        url = f"{self.supabase_url}/rest/v1/amostragem_analise_integral?select=processo"
+        return {str(l["processo"]).strip() for l in self._get_paginado(url)}
+
     def substituir_analise_integral(self, processos: list[str], marcado_por: str) -> int:
         """Substitui TODA a lista de Análise Integral pelos processos dados
         (import mensal da lista PAR) -- apaga tudo que existia antes e
