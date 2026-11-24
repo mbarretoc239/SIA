@@ -390,9 +390,9 @@ else:
     # Alinhamentos: visível para todos, conteúdo se ajusta por nível dentro da tela
     paginas.append(st.Page("views/5_Alinhamentos.py", title="Alinhamentos"))
 
-    # Lupita (triagem de imagem gerada por IA): lista fechada de usuários, ver core/lupita/acesso.py
+    # Lupita (triagem de imagem gerada por IA): módulo "lupita" em Configurações > Permissões, ver core/lupita/acesso.py
     from core.lupita.acesso import usuario_liberado as _lupita_liberada
-    if _lupita_liberada(st.session_state.get("usuario_sigo"), role):
+    if _lupita_liberada(st.session_state.get("usuario_sigo"), role, usuario_id_atual):
         paginas.append(st.Page("views/10_Lupita.py", title="Lupita"))
 
     # Todos podem ver a TELA de Configuração, mas o CONTEÚDO lá dentro se protege sozinho

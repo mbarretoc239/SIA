@@ -30,11 +30,11 @@ PERMITE_INCERTA = False
 
 usuario = st.session_state.get("usuario_sigo", "")
 role = st.session_state.get("role_interno")
-if not usuario_liberado(usuario, role):
+if not usuario_liberado(usuario, role, st.session_state.get("usuario_id")):
     st.error("Acesso restrito.")
     st.stop()
 
-repo = LupitaRepo(st.session_state.db, usuario, role)
+repo = LupitaRepo(st.session_state.db, usuario, role, st.session_state.get("usuario_id"))
 
 st.link_button(
     "Conferir no SynthID Detector", SYNTHID_URL,

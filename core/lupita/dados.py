@@ -44,14 +44,18 @@ def _validar_leitura(select: str, limite: int, teto: int) -> None:
 class LupitaRepo:
     """`db` é o DatabaseManager (st.session_state.db); `usuario_sigo` e `role` são de quem está logado."""
 
-    def __init__(self, db, usuario_sigo: str, role: str | None = None):
+    def __init__(self, db, usuario_sigo: str, role: str | None = None, usuario_id=None,
+                 acesso_script: bool = False):
         self.db = db
         self.usuario = str(usuario_sigo or "").strip().upper()
         self.role = role
+        self.usuario_id = usuario_id
+        self.acesso_script = acesso_script   # só scripts de linha de comando (sem sessão do app)
 
     # ------------------------------------------------------------ infraestrutura
     def _headers(self, **extra) -> dict:
-        exigir_acesso(self.usuario, self.role)
+        if not self.acesso_script:
+            exigir_acesso(self.usuario, self.role, self.usuario_id)
         return {**self.db._admin_headers(), **extra}
 
     def _url(self, tabela: str) -> str:

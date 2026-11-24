@@ -231,7 +231,7 @@ def _botao_flutuante_atalhos():
 
 _botao_flutuante_atalhos()
 # Mini Lupita ao lado do Atalhos: só aparece para liberados e não toca o banco antes de uma imagem ser enviada.
-botao_flutuante_lupita(st.session_state.db, st.session_state.get("usuario_sigo", ""), st.session_state.get("role_interno"))
+botao_flutuante_lupita(st.session_state.db, st.session_state.get("usuario_sigo", ""), st.session_state.get("role_interno"), st.session_state.get("usuario_id"))
 
 
 def _guias_para_df(guias: list) -> pd.DataFrame:

@@ -64,7 +64,7 @@ def main() -> int:
     from core.lupita.dados import LupitaRepo
     from shared.database import DatabaseManager
 
-    repo = LupitaRepo(DatabaseManager(), "MATHBC")
+    repo = LupitaRepo(DatabaseManager(), "MATHBC", acesso_script=True)
     if args.gravar:
         repo.inserir_amostras_importadas(amostras)
     versao = repo.salvar_modelo(modelo, origem=f"importação de {os.path.basename(args.json)}")

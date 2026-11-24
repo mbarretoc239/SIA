@@ -138,12 +138,12 @@ body:has([data-testid="stExpandSidebarButton"]) div.st-key-fab_container_lupita 
 """
 
 
-def botao_flutuante_lupita(db, usuario: str, role) -> None:
+def botao_flutuante_lupita(db, usuario: str, role, usuario_id=None) -> None:
     """Botão "Lupita" ao lado de "Atalhos". Não faz nada para quem não tem acesso."""
-    if not usuario_liberado(usuario, role):
+    if not usuario_liberado(usuario, role, usuario_id):
         return
     st.markdown(_CSS, unsafe_allow_html=True)
-    repo = LupitaRepo(db, usuario, role)
+    repo = LupitaRepo(db, usuario, role, usuario_id)
     with st.container(key="fab_container_lupita"):
         with st.popover("🔍 Lupita"):
             with st.container(key="lupita_corpo"):

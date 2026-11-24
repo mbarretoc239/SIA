@@ -22,11 +22,11 @@ from core.lupita.acesso import AcessoNegado, exigir_acesso, usuario_liberado
 RAIZ = Path(__file__).resolve().parent.parent
 
 
-def _repo(usuario="MATHBC", role=None):
+def _repo(usuario="MATHBC", role=None, usuario_id="u-ok"):
     db = MagicMock()
     db.supabase_url = "https://exemplo.supabase.co"
     db._admin_headers.return_value = {"apikey": "srv", "Authorization": "Bearer srv", "Prefer": "return=minimal"}
-    return D.LupitaRepo(db, usuario, role)
+    return D.LupitaRepo(db, usuario, role, usuario_id)
 
 
 def _resposta(corpo, status=200, headers=None):
@@ -38,17 +38,37 @@ def _resposta(corpo, status=200, headers=None):
     return r
 
 
-# ---------------------------------------------------------------- acesso
-@pytest.mark.parametrize("u", ["EJ43058", "LCASTROA", "MATHBC", " mathbc ", "lcastroa"])
-def test_liberados(u):
-    assert usuario_liberado(u)
+# ---------------------------------------------------------------- acesso (módulo "lupita" em Permissões)
+EXCECOES = [
+    {"usuario_id": "u-ok", "modulo": "lupita", "habilitado": True},
+    {"usuario_id": "u-bloq", "modulo": "lupita", "habilitado": False},
+    {"usuario_id": "u-outro-modulo", "modulo": "amostragem", "habilitado": True},
+]
+PERMISSOES = [{"modulo": "lupita", "role": "Gestor", "habilitado": True},
+              {"modulo": "lupita", "role": "CISO", "habilitado": False}]
 
 
-@pytest.mark.parametrize("u", ["", None, "EJ", "LCASTRO", "OUTRO", "MATHBC2", "EJ LCASTRO"])
-def test_negados(u):
-    assert not usuario_liberado(u)
+@pytest.fixture(autouse=True)
+def _permissoes_falsas():
+    with patch("core.lupita.acesso._carregar_permissoes", return_value=(PERMISSOES, EXCECOES)):
+        yield
+
+
+def test_excecao_individual_libera():
+    assert usuario_liberado("X", "Auditor", "u-ok")
+
+
+@pytest.mark.parametrize("uid", [None, "", "u-nao-existe", "u-outro-modulo"])
+def test_sem_excecao_do_modulo_nao_libera(uid):
+    assert not usuario_liberado("X", "Auditor", uid)
     with pytest.raises(AcessoNegado):
-        exigir_acesso(u)
+        exigir_acesso("X", "Auditor", uid)
+
+
+def test_liberacao_por_funcao():
+    assert usuario_liberado("X", "Gestor", "u-qualquer")
+    assert not usuario_liberado("X", "CISO", "u-qualquer")   # linha com habilitado=False
+    assert not usuario_liberado("X", "Contas", "u-qualquer")  # sem linha: fechado
 
 
 @pytest.mark.parametrize("role", ["Admin", "ADMIN", " admin "])
@@ -57,9 +77,25 @@ def test_admin_liberado_pelo_cargo(role):
     exigir_acesso("QUALQUER", role)
 
 
-@pytest.mark.parametrize("role", ["Gestor", "CISO", "Auditor", "Contas", "", None])
+def test_excecao_bloquear_vale_ate_para_admin():
+    assert not usuario_liberado("X", "Admin", "u-bloq")
+
+
+@pytest.mark.parametrize("role", ["Auditor", "Contas", "", None])
 def test_outros_cargos_nao_liberam_sozinhos(role):
     assert not usuario_liberado("OUTRO", role)
+
+
+def test_banco_de_permissoes_fora_do_ar_so_admin_passa():
+    with patch("core.lupita.acesso._carregar_permissoes", side_effect=ConnectionError("fora")):
+        assert usuario_liberado("X", "Admin", "u-ok")
+        assert not usuario_liberado("X", "Auditor", "u-ok")
+        assert not usuario_liberado("X", "Gestor", None)
+
+
+def test_modulo_aparece_em_configuracoes():
+    from core.settings import MODULOS_CONTROLADOS
+    assert "lupita" in MODULOS_CONTROLADOS
 
 
 def test_repo_de_admin_chega_ao_banco():
@@ -70,7 +106,7 @@ def test_repo_de_admin_chega_ao_banco():
 
 
 def test_repo_de_usuario_nao_liberado_nao_chega_ao_banco():
-    repo = _repo("OUTRO")
+    repo = _repo("OUTRO", usuario_id="u-nao-existe")
     with patch("core.lupita.dados.requests") as req:
         with pytest.raises(AcessoNegado):
             repo.versao_ativa()

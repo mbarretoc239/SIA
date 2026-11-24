@@ -113,6 +113,8 @@ MODULOS_CONTROLADOS = {
     # Sem linha em permissoes_modulos só o Admin acessa (ver tem_acesso_modulo);
     # liberar pra outra role/usuário é em Configurações > Permissões.
     "farol_mensal": "Farol Mensal",
+    # Lupita (triagem de imagem gerada por IA, views/10_Lupita.py e mini da Amostragem). Sem linha só o Admin.
+    "lupita": "Lupita (imagem gerada por IA)",
 }
 
 # Roles cujo acesso aos módulos acima é configurável
