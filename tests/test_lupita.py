@@ -140,7 +140,9 @@ def test_app_nao_importa_lupita_no_topo():
 
 def test_view_so_le_banco_por_cache_ou_acao():
     fonte = (RAIZ / "views" / "10_Lupita.py").read_text(encoding="utf-8")
-    assert "@st.cache_data" in fonte and "@st.cache_resource" in fonte
+    mini = (RAIZ / "core" / "lupita" / "mini.py").read_text(encoding="utf-8")
+    assert "@st.cache_data" in mini and "@st.cache_resource" in mini   # caches vivem em mini.py
+    assert "M.versao_ativa" in fonte and "M.modelo_da_versao" in fonte
     assert "repo.amostras_treino()" in fonte and "disabled=not ok" in fonte
 
 
@@ -275,10 +277,11 @@ def test_modelo_antigo_sem_medias_ainda_explica():
 # ---------------------------------------------------------------- tela: atalho e colar
 def test_tela_tem_atalho_synthid_e_colagem():
     fonte = (RAIZ / "views" / "10_Lupita.py").read_text(encoding="utf-8")
-    assert 'SYNTHID_URL = "https://synthid.com"' in fonte and "st.link_button" in fonte
+    mini = (RAIZ / "core" / "lupita" / "mini.py").read_text(encoding="utf-8")
+    assert 'SYNTHID_URL = "https://synthid.com"' in mini and "st.link_button" in fonte
     # o ouvinte de colagem só age no uploader cujo rótulo traz esse marcador
-    assert "cole com Ctrl+V" in fonte.split("ROTULO_UPLOAD =")[1].split("\n")[0]
-    assert "indexOf('cole com Ctrl+V')" in fonte
+    assert "cole com Ctrl+V" in mini.split("ROTULO_UPLOAD =")[1].split("\n")[0]
+    assert "indexOf('cole com Ctrl+V')" in mini
     assert "components.html(_JS_COLAR" in fonte
 
 

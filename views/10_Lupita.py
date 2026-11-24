@@ -8,6 +8,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from core.lupita import explicacao as E
+from core.lupita import mini as M
 from core.lupita import predicao as P
 from core.lupita.acesso import usuario_liberado
 from core.lupita.catalogo import FEATURES, GRUPOS_INFO
@@ -20,50 +21,12 @@ st.caption(
     "e resultado baixo não prova que a imagem é real. O SynthID continua sendo a evidência forte."
 )
 
-SYNTHID_URL = "https://synthid.com"   # portal SynthID Detector (Google)
-ROTULO_UPLOAD = "Radiografia (arraste, clique ou cole com Ctrl+V)"
+SYNTHID_URL = M.SYNTHID_URL
+ROTULO_UPLOAD = M.ROTULO_UPLOAD
+_JS_COLAR = M.JS_COLAR
 # Botão "Não sei ao certo": desligado por ora. Banco (coluna `incerto`), repositório e histórico seguem
 # prontos; pra religar basta trocar para True.
 PERMITE_INCERTA = False
-
-# Colar com Ctrl+V: o st.file_uploader não trata colagem, então este ouvinte vive na página (não no iframe)
-# e entrega a imagem colada ao uploader da Lupita. Só age se o uploader da Lupita estiver na tela
-# (reconhecido pelo rótulo), então não mexe em uploaders de outras telas.
-_JS_COLAR = """
-<script>
-(function () {
-  const pai = window.parent;
-  const doc = pai.document;
-  if (pai.__lupitaColar) { doc.removeEventListener('paste', pai.__lupitaColar, true); }
-  const ouvinte = function (e) {
-    const alvo = e.target;
-    if (alvo && (alvo.tagName === 'TEXTAREA' || alvo.isContentEditable ||
-        (alvo.tagName === 'INPUT' && alvo.type !== 'file'))) return;
-    const caixa = Array.from(doc.querySelectorAll('[data-testid="stFileUploader"]'))
-      .find(function (c) { return (c.textContent || '').indexOf('cole com Ctrl+V') >= 0; });
-    if (!caixa) return;
-    const entrada = caixa.querySelector('input[type="file"]');
-    const itens = (e.clipboardData && e.clipboardData.items) || [];
-    for (let i = 0; i < itens.length; i++) {
-      if (itens[i].kind === 'file' && itens[i].type.indexOf('image/') === 0) {
-        const arq = itens[i].getAsFile();
-        if (!arq || !entrada) return;
-        const ext = (itens[i].type.split('/')[1] || 'png').replace('jpeg', 'jpg');
-        const novo = new pai.File([arq], 'colada_' + Date.now() + '.' + ext, { type: itens[i].type });
-        const lista = new pai.DataTransfer();
-        lista.items.add(novo);
-        entrada.files = lista.files;
-        entrada.dispatchEvent(new pai.Event('change', { bubbles: true }));
-        e.preventDefault();
-        return;
-      }
-    }
-  };
-  pai.__lupitaColar = ouvinte;
-  doc.addEventListener('paste', ouvinte, true);
-})();
-</script>
-"""
 
 usuario = st.session_state.get("usuario_sigo", "")
 role = st.session_state.get("role_interno")
@@ -80,25 +43,11 @@ st.link_button(
 )
 
 
-# ---- caches (único jeito de a tela tocar o banco sem custo por rerun) ----------------------
-@st.cache_data(ttl=600, show_spinner=False)
-def _versao_ativa(_repo):
-    return _repo.versao_ativa()
-
-
-@st.cache_resource(show_spinner="Carregando o modelo...")
-def _modelo_da_versao(_repo, versao):
-    return _repo.modelo_da_versao(versao)
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _historico(_repo):
-    return _repo.historico(50)
-
-
-def _limpar_caches_modelo():
-    _versao_ativa.clear()
-    _modelo_da_versao.clear()
+# ---- caches (compartilhados com o mini da Amostragem, em core/lupita/mini.py) --------------
+_versao_ativa = M.versao_ativa
+_modelo_da_versao = M.modelo_da_versao
+_historico = M.historico
+_limpar_caches_modelo = M.limpar_caches_modelo
 
 
 try:
@@ -118,8 +67,14 @@ with aba_analisar:
         modelo = linha_modelo["modelo"]
         arquivo = st.file_uploader(ROTULO_UPLOAD, type=P.EXTENSOES_ACEITAS, accept_multiple_files=False)
         components.html(_JS_COLAR, height=0)
+        dados = None
         if arquivo is not None:
+            st.session_state.pop(M.CHAVE_IMAGEM_MINI, None)
             dados = arquivo.getvalue()
+        elif st.session_state.get(M.CHAVE_IMAGEM_MINI):
+            dados = st.session_state[M.CHAVE_IMAGEM_MINI]   # veio do botão "Ver detalhado" da Amostragem
+            st.caption("Imagem enviada pelo mini da Amostragem. Para analisar outra, use o campo acima.")
+        if dados is not None:
             if len(dados) > P.TAMANHO_MAXIMO_BYTES:
                 st.error("Arquivo maior que 25 MB.")
             else:

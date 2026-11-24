@@ -3,6 +3,7 @@ from datetime import date
 
 import streamlit as st
 from core import marca
+from core.lupita.mini import botao_flutuante_lupita
 import pandas as pd
 import streamlit.components.v1 as components
 
@@ -229,6 +230,8 @@ def _botao_flutuante_atalhos():
 
 
 _botao_flutuante_atalhos()
+# Mini Lupita ao lado do Atalhos: só aparece para liberados e não toca o banco antes de uma imagem ser enviada.
+botao_flutuante_lupita(st.session_state.db, st.session_state.get("usuario_sigo", ""), st.session_state.get("role_interno"))
 
 
 def _guias_para_df(guias: list) -> pd.DataFrame:
