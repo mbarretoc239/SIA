@@ -85,6 +85,18 @@ OPERADOR_BIOMETRIA = "CONN_APPOD_NEW"
 SEED_PADRAO = 42
 
 
+def _limpar_cache_processo(processo: str) -> None:
+    """Clicar em Buscar sempre traz o dado atual do processo: os caches por processo duram até 24h
+    (e guardavam até resultado vazio), então a busca manual descarta só a entrada deste processo.
+    Custo: poucas consultas pequenas, por clique -- nunca o cache dos outros processos/usuários."""
+    if not processo:
+        return
+    for func in (buscar_guias_ia_por_processo_cache, buscar_guias_liberadas_ia_por_processo_cache,
+                 buscar_glosas_5310_por_processo_cache, buscar_analise_integral_cache,
+                 buscar_status_processo_cache):
+        func.clear(processo)
+
+
 def _botao_flutuante_atalhos():
     """FAB único fixo no canto da tela: reúne o upload do 5302 e os atalhos
     de cópia num só popover -- dois FABs empilhados (versão anterior)
@@ -225,6 +237,7 @@ def _botao_flutuante_atalhos():
                         # Mantém o campo principal em sincronia (ele é criado
                         # mais abaixo no script, então ainda dá pra setar aqui).
                         st.session_state["amostragem_processo_input"] = processo_fab.strip()
+                        _limpar_cache_processo(processo_fab.strip())
                     else:
                         st.warning("Informe o número do processo.")
 
@@ -281,6 +294,7 @@ with aba_busca:
 
     if buscar:
         st.session_state["_amostragem_beta_processo"] = processo_digitado.strip()
+        _limpar_cache_processo(processo_digitado.strip())
 
     # Configurável em Configurações > Permissões (módulo "amostragem_lista_
     # processos") -- por padrão só Gestor/Admin, mas dá pra abrir exceção
