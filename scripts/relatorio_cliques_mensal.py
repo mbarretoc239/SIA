@@ -8,6 +8,8 @@ Brasília) no Desktop.
 Uso:
     python scripts/relatorio_cliques_mensal.py                # mês anterior
     python scripts/relatorio_cliques_mensal.py --mes 2026-11  # mês específico
+    python scripts/relatorio_cliques_mensal.py --semana       # semana passada (seg a dom)
+    python scripts/relatorio_cliques_mensal.py --semana 2026-11-09
     python scripts/relatorio_cliques_mensal.py --ate 2026-11-11T16:46  # parcial (teste)
 
 Fontes:
@@ -40,6 +42,7 @@ BRT = timezone(timedelta(hours=-3))  # Brasil sem horário de verão desde 2019
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
 PASTA_PADRAO = os.path.join(DESKTOP, "cliques mensais")
+PASTA_SEMANAL = os.path.join(DESKTOP, "cliques semanais")
 MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
             "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
@@ -68,6 +71,7 @@ def buscar_cliques(db, ini: datetime, fim: datetime) -> pd.DataFrame:
         pd.to_datetime(df["marcado_em"], utc=True, format="ISO8601")
         .dt.tz_convert(BRT).dt.tz_localize(None)
     )
+    df["mes_clique"] = df["marcado_em"].dt.strftime("%Y-%m")
     return df
 
 
@@ -119,19 +123,27 @@ def carregar_5201(db) -> pd.DataFrame:
     return df.set_index("ORDEM")
 
 
-def montar(cliques: pd.DataFrame, ia: pd.DataFrame, r5201: pd.DataFrame, crit: dict):
-    ia = ia.copy()
-    ia["critico"] = ia["ds_grupo"].isin(set(crit["especialidades_criticas"])) | \
-        ia["cd_procedimento"].isin(set(crit["procedimentos_criticos"]))
-
-    tot = ia.groupby("nu_ordem").agg(
-        guias_tot=("nu_guia", "nunique"), itens_tot=("nu_guia", "size"), crit_tot=("critico", "sum"))
-    guias_crit_tot = ia[ia["critico"]].groupby("nu_ordem")["nu_guia"].nunique().rename("guias_crit_tot")
-
-    # 1 linha por item das guias clicadas (a guia só existe em 1 processo na base do mês)
-    itens = cliques.merge(ia, on="nu_guia", how="left")
-    sem_ia = int(itens["nu_ordem"].isna().groupby(itens["nu_guia"]).all().sum())
-    itens = itens.dropna(subset=["nu_ordem"])
+def montar(cliques: pd.DataFrame, ias: dict, r5201: pd.DataFrame, crit: dict):
+    """`ias`: {mês do clique 'YYYY-MM': base IA do mês anterior}. Cada clique é
+    cruzado com a base IA do mês anterior ao do PRÓPRIO clique (uma semana pode
+    cruzar a virada de mês)."""
+    esp, procs = set(crit["especialidades_criticas"]), set(crit["procedimentos_criticos"])
+    tots, gcts, itens_l, sem_ia = [], [], [], 0
+    for mes_clique, ia in ias.items():
+        ia = ia.copy()
+        ia["critico"] = ia["ds_grupo"].isin(esp) | ia["cd_procedimento"].isin(procs)
+        tots.append(ia.groupby("nu_ordem").agg(
+            guias_tot=("nu_guia", "nunique"), itens_tot=("nu_guia", "size"), crit_tot=("critico", "sum")))
+        gcts.append(ia[ia["critico"]].groupby("nu_ordem")["nu_guia"].nunique().rename("guias_crit_tot"))
+        # 1 linha por item das guias clicadas (a guia só existe em 1 processo na base do mês)
+        it = cliques[cliques["mes_clique"] == mes_clique].merge(ia, on="nu_guia", how="left")
+        sem_ia += int(it["nu_ordem"].isna().groupby(it["nu_guia"]).all().sum())
+        itens_l.append(it.dropna(subset=["nu_ordem"]))
+    tot = pd.concat(tots)
+    tot = tot[~tot.index.duplicated(keep="last")]
+    guias_crit_tot = pd.concat(gcts)
+    guias_crit_tot = guias_crit_tot[~guias_crit_tot.index.duplicated(keep="last")]
+    itens = pd.concat(itens_l)
 
     cl = itens.groupby("nu_ordem").agg(
         guias_clic=("nu_guia", "nunique"), itens_clic=("nu_guia", "size"),
@@ -193,33 +205,44 @@ def notificar(titulo: str, mensagem: str) -> None:
         pass
 
 
-def gerar(mes: str, pasta: str, ate: datetime | None = None) -> str:
+def segunda_da_semana_passada(hoje: datetime) -> datetime:
+    """Segunda-feira 00:00 (BRT) da semana anterior à de `hoje`."""
+    segunda_atual = (hoje - timedelta(days=hoje.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    return segunda_atual - timedelta(days=7)
+
+
+def gerar(ini: datetime, fim: datetime, pasta: str, nome_arquivo: str, parcial: bool = False) -> str:
+    """Relatório dos cliques em [ini, fim) (BRT). Cada clique usa a base IA do
+    mês anterior ao do próprio clique."""
     from shared.database import DatabaseManager
     db = DatabaseManager()
-    ini, fim = limites_do_mes(mes)
-    if ate:
-        fim = min(fim, ate)
-    ano, m = (int(p) for p in mes.split("-"))
-    ano_ia, m_ia = mes_anterior(ano, m)
-    mes_ia = f"{ano_ia:04d}-{m_ia:02d}"
+    rotulo = f"{ini:%d/%m/%Y} a {(fim - timedelta(seconds=1)):%d/%m/%Y}"
 
     cliques = buscar_cliques(db, ini, fim)
-    print(f"Cliques de {ini:%d/%m/%Y} a {(fim - timedelta(seconds=1)):%d/%m/%Y %H:%M}: {len(cliques):,}")
+    print(f"Cliques de {rotulo}: {len(cliques):,}")
     if cliques.empty:
-        raise RuntimeError(f"Nenhum clique encontrado em {mes} — conferir se o filtro/tabela estão certos.")
+        raise RuntimeError(f"Nenhum clique encontrado em {rotulo} — conferir se o filtro/tabela estão certos.")
 
-    ia = buscar_base_ia(db, mes_ia, os.path.join(pasta, "_cache"))
+    # cache compartilhado entre o relatório mensal e o semanal (sempre na pasta padrão)
+    pasta_cache = os.path.join(PASTA_PADRAO, "_cache")
+    ias = {}
+    for mes_clique in sorted(cliques["mes_clique"].unique()):
+        ano, m = (int(p) for p in mes_clique.split("-"))
+        ano_ia, m_ia = mes_anterior(ano, m)
+        ias[mes_clique] = buscar_base_ia(db, f"{ano_ia:04d}-{m_ia:02d}", pasta_cache)
+    meses_ia = ", ".join(f"{mc} -> IA {'{:04d}-{:02d}'.format(*mes_anterior(*(int(p) for p in mc.split('-'))))}" for mc in ias)
+
     r5201 = carregar_5201(db)
     with open(os.path.join(RAIZ, "ferramentas", "dados_farol_offline.json"), encoding="utf-8") as f:
         crit = json.load(f)
 
-    por_proc, detalhe, sem_ia, _, sem_5201 = montar(cliques, ia, r5201, crit)
+    por_proc, detalhe, sem_ia, _, sem_5201 = montar(cliques, ias, r5201, crit)
 
     resumo = pd.DataFrame([
-        ("Período", f"{ini:%Y-%m-%d} a {(fim - timedelta(seconds=1)):%Y-%m-%d}" + (" (parcial)" if ate else "")),
-        ("Base IA usada", mes_ia),
+        ("Período", rotulo + (" (parcial)" if parcial else "")),
+        ("Base IA usada (mês do clique -> base)", meses_ia),
         ("Cliques no período", len(cliques)),
-        (f"Cliques sem correspondência na base IA ({mes_ia})", sem_ia),
+        ("Cliques sem correspondência na base IA", sem_ia),
         ("Processos com pelo menos 1 clique", len(por_proc)),
         ("Guias clicadas", int(por_proc["Guias clicadas"].sum())),
         ("Itens nas guias clicadas", int(por_proc["Itens nas guias clicadas"].sum())),
@@ -230,8 +253,7 @@ def gerar(mes: str, pasta: str, ate: datetime | None = None) -> str:
     ], columns=["Indicador", "Valor"])
 
     os.makedirs(pasta, exist_ok=True)
-    sufixo = "_parcial" if ate else ""
-    destino = os.path.join(pasta, f"cliques_por_processo_{MESES_PT[m - 1]}_{ano}{sufixo}.xlsx")
+    destino = os.path.join(pasta, nome_arquivo)
     with pd.ExcelWriter(destino, engine="openpyxl", datetime_format="DD/MM/YYYY HH:MM:SS") as xw:
         por_proc.to_excel(xw, sheet_name="Por processo", index=False)
         detalhe.to_excel(xw, sheet_name="Guias clicadas", index=False)
@@ -248,25 +270,49 @@ def gerar(mes: str, pasta: str, ate: datetime | None = None) -> str:
 
 
 def main() -> int:
+    for fluxo in (sys.stdout, sys.stderr):  # console cp1252 do Windows não pode derrubar a execução
+        if hasattr(fluxo, "reconfigure"):
+            fluxo.reconfigure(errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mes", help="YYYY-MM (padrão: mês anterior, em BRT)")
-    ap.add_argument("--saida", default=PASTA_PADRAO)
+    grupo = ap.add_mutually_exclusive_group()
+    grupo.add_argument("--mes", help="YYYY-MM (padrão: mês anterior, em BRT)")
+    grupo.add_argument("--semana", nargs="?", const="auto", metavar="YYYY-MM-DD",
+                       help="relatório semanal: sem valor = semana passada; ou a segunda-feira desejada. "
+                            "Vai de segunda 00:00 até a segunda seguinte 00:00 (BRT)")
+    ap.add_argument("--saida", help="pasta de saída (padrão: Desktop/cliques mensais ou Desktop/cliques semanais)")
     ap.add_argument("--ate", help="limita o fim (BRT, ISO) — só pra teste/parcial")
     ap.add_argument("--sem-aviso", action="store_true")
     args = ap.parse_args()
 
     hoje = datetime.now(BRT)
-    mes = args.mes or "{:04d}-{:02d}".format(*mes_anterior(hoje.year, hoje.month))
-    ate = datetime.fromisoformat(args.ate).replace(tzinfo=BRT) if args.ate else None
     try:
-        destino = gerar(mes, args.saida, ate)
+        if args.semana:
+            ini = (segunda_da_semana_passada(hoje) if args.semana == "auto"
+                   else datetime.fromisoformat(args.semana).replace(tzinfo=BRT))
+            if ini.weekday() != 0:
+                raise ValueError(f"{ini:%Y-%m-%d} não é segunda-feira")
+            fim = ini + timedelta(days=7)
+            rotulo = f"semana {ini:%d/%m} a {(fim - timedelta(days=1)):%d/%m}"
+            nome = f"cliques_por_processo_semana_{ini:%Y-%m-%d}_a_{(fim - timedelta(days=1)):%Y-%m-%d}"
+            pasta = args.saida or PASTA_SEMANAL
+        else:
+            mes = args.mes or "{:04d}-{:02d}".format(*mes_anterior(hoje.year, hoje.month))
+            ini, fim = limites_do_mes(mes)
+            rotulo = f"mês {mes}"
+            nome = f"cliques_por_processo_{MESES_PT[ini.month - 1]}_{ini.year}"
+            pasta = args.saida or PASTA_PADRAO
+        parcial = False
+        if args.ate:
+            fim, parcial = min(fim, datetime.fromisoformat(args.ate).replace(tzinfo=BRT)), True
+            nome += "_parcial"
+        destino = gerar(ini, fim, pasta, nome + ".xlsx", parcial)
     except Exception as e:
         traceback.print_exc()
         if not args.sem_aviso:
-            notificar("SIA: relatório de cliques FALHOU", f"Mês {mes}: {str(e)[:120]}".replace("'", ""))
+            notificar("SIA: relatório de cliques FALHOU", f"{args.semana and 'Semana' or 'Mês'}: {str(e)[:120]}".replace("'", ""))
         return 1
     if not args.sem_aviso:
-        notificar("SIA: relatório de cliques pronto", f"Mês {mes} salvo em {os.path.basename(os.path.dirname(destino))}")
+        notificar("SIA: relatório de cliques pronto", f"{rotulo} salvo em {os.path.basename(os.path.dirname(destino))}")
     return 0
 
 

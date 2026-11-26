@@ -25,3 +25,12 @@ def test_limites_do_mes_cobrem_dia_1_ate_o_ultimo_dia_em_brt():
 def test_limites_de_dezembro_viram_janeiro_do_ano_seguinte():
     ini, fim = rc.limites_do_mes("2026-12")
     assert (ini.month, fim.year, fim.month) == (12, 2027, 1)
+
+
+def test_segunda_da_semana_passada():
+    seg16 = datetime(2026, 11, 16, 7, 0, tzinfo=BRT)  # segunda, dia da execução
+    assert rc.segunda_da_semana_passada(seg16) == datetime(2026, 11, 9, tzinfo=BRT)
+    qua18 = datetime(2026, 11, 18, 15, 0, tzinfo=BRT)  # rodando atrasado no meio da semana
+    assert rc.segunda_da_semana_passada(qua18) == datetime(2026, 11, 9, tzinfo=BRT)
+    dom22 = datetime(2026, 11, 22, 23, 0, tzinfo=BRT)  # domingo ainda é a semana de 16/11
+    assert rc.segunda_da_semana_passada(dom22) == datetime(2026, 11, 9, tzinfo=BRT)
