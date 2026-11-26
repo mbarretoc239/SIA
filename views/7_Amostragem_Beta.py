@@ -1169,11 +1169,16 @@ with aba_busca:
             for nu, serie in df_bio_todas.groupby("NU_GUIA")["CD_OPERADOR_ATEND"]
         }
         guias_sem_bio = {nu for nu, info in bio_todas.items() if guia_100pct(info) is not True}
-        df_sem_bio = consolidar_por_guia(df_bio_todas[df_bio_todas["NU_GUIA"].isin(guias_sem_bio)])
+        # Uma linha por guia (a biometria é da guia inteira): com a mesma
+        # especialidade fictícia, consolidar_por_guia junta os procedimentos
+        # de todas elas, e título e contador batem.
+        df_sem_bio = consolidar_por_guia(
+            df_bio_todas[df_bio_todas["NU_GUIA"].isin(guias_sem_bio)].assign(Especialidade="Sem biometria")
+        )
         if not df_sem_bio.empty:
-            df_sem_bio = df_sem_bio.sort_values(["Especialidade", "NU_GUIA"]).reset_index(drop=True)
+            df_sem_bio = df_sem_bio.sort_values("NU_GUIA").reset_index(drop=True)
             with st.expander(
-                f":red[Guias sem biometria completa (risco glosa 480) — {df_sem_bio['NU_GUIA'].nunique()} guia(s)]",
+                f":red[Guias sem biometria completa (risco glosa 480) — {len(df_sem_bio)} guia(s)]",
                 expanded=True,
             ):
                 st.caption("Inclui guias liberadas e não liberadas pela IA. Considera qualquer guia com menos itens biometrados que o total.")
