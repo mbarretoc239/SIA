@@ -296,6 +296,10 @@ with aba_busca:
     if buscar:
         st.session_state["_amostragem_beta_processo"] = processo_digitado.strip()
         _limpar_cache_processo(processo_digitado.strip())
+        # A linha marcada na lista de processos continuava selecionada e
+        # sobrescrevia o processo digitado logo abaixo; trocar a key do
+        # st.dataframe zera essa seleção.
+        st.session_state["_lista_proc_reset"] = st.session_state.get("_lista_proc_reset", 0) + 1
 
     # Configurável em Configurações > Permissões (módulo "amostragem_lista_
     # processos") -- por padrão só Gestor/Admin, mas dá pra abrir exceção
@@ -477,7 +481,8 @@ with aba_busca:
                 st.caption(f"{len(df_lista_filtrada)} de {len(df_processos)} processo(s) -- clique numa linha pra abrir.")
                 evento_lista = st.dataframe(
                     df_lista_filtrada, use_container_width=True, hide_index=True,
-                    on_select="rerun", selection_mode="single-row", key="lista_processos_tabela",
+                    on_select="rerun", selection_mode="single-row",
+                    key=f"lista_processos_tabela_{st.session_state.get('_lista_proc_reset', 0)}",
                     column_config={"Data de entrada": st.column_config.DateColumn(format="DD/MM/YYYY")},
                 )
                 linhas_selecionadas = evento_lista.selection.get("rows") if evento_lista else []
