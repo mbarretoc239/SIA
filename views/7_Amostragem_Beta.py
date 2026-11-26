@@ -1,5 +1,6 @@
 import html
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 from core import marca
@@ -532,6 +533,15 @@ with aba_busca:
         st.stop()
     df = _guias_para_df(guias + guias_liberadas if analise_integral else guias)
 
+    # Biometria de TODAS as guias do processo (pendentes + já liberadas pela
+    # IA), independente de Análise Integral e dos filtros da tela -- base da
+    # contagem do cabeçalho e do expansível "sem biometria" (a partir do dia
+    # 25, guia sem biometria e sem chegada física é glosada, e o auditor
+    # precisa ver todas, estejam ou não na lista de liberação da IA).
+    df_bio_todas = _guias_para_df(guias + guias_liberadas)
+    total_procs_bio = len(df_bio_todas)
+    procs_com_biometria = int((df_bio_todas["CD_OPERADOR_ATEND"].astype(str).str.strip() == OPERADOR_BIOMETRIA).sum())
+
     # Consulta à parte (só quando NÃO é Análise Integral -- nesse caso as
     # liberadas já estão dentro das tabelas principais acima, mostrar de
     # novo aqui seria redundante). Fica antes do "df.empty" abaixo porque um
@@ -649,6 +659,11 @@ with aba_busca:
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
+
+        st.caption(
+            f"Procedimentos: {total_procs_bio} no total — {procs_com_biometria} com biometria, "
+            f"{total_procs_bio - procs_com_biometria} sem biometria"
+        )
 
         if analise_integral:
             st.caption(
@@ -1112,6 +1127,31 @@ with aba_busca:
     # DS_GRUPO nenhum (nem vêm da base IA). Sem sugestão de amostra: é
     # sempre 100%, o auditor precisa checar todas. 046 sempre primeiro
     # (maior gravidade/fraude); as demais só ordenadas pelo código.
+    # Guias sem biometria completa (qualquer x-1/x) -- só a partir do dia 25
+    # de cada mês, quando passam a ser glosadas se também não chegaram
+    # fisicamente. Mostra TODAS, liberadas ou não pela IA, e ignora os
+    # filtros da tela. Mesma regra do filtro "Sem": guia sem dado de
+    # biometria conta como não confirmada (guia_100pct is not True).
+    if datetime.now(ZoneInfo("America/Sao_Paulo")).day >= 25 and not df_bio_todas.empty:
+        bio_todas = {
+            nu: _biometria_guia(serie)
+            for nu, serie in df_bio_todas.groupby("NU_GUIA")["CD_OPERADOR_ATEND"]
+        }
+        guias_sem_bio = {nu for nu, info in bio_todas.items() if guia_100pct(info) is not True}
+        df_sem_bio = consolidar_por_guia(df_bio_todas[df_bio_todas["NU_GUIA"].isin(guias_sem_bio)])
+        if not df_sem_bio.empty:
+            df_sem_bio = df_sem_bio.sort_values(["Especialidade", "NU_GUIA"]).reset_index(drop=True)
+            with st.expander(
+                f":red[Guias sem biometria completa (risco glosa 480) — {df_sem_bio['NU_GUIA'].nunique()} guia(s)]",
+                expanded=True,
+            ):
+                st.caption("Inclui guias liberadas e não liberadas pela IA. Considera qualquer guia com menos itens biometrados que o total.")
+                renderizar_tabela_guias(
+                    df_sem_bio, "Sem biometria", objetivo=len(df_sem_bio),
+                    guias_vistas=guias_vistas, biometria_por_guia=bio_todas,
+                    imagem_por_guia=imagem_por_guia,
+                )
+
     if glosas_5310:
         df_5310 = pd.DataFrame({
             "Especialidade": [str(g["glosa"]) for g in glosas_5310],
