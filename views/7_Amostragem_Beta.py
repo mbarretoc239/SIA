@@ -530,7 +530,17 @@ with aba_busca:
         # etc.) também tiver falhado, cenário raro; melhor parar em
         # silêncio do que alarmar o auditor com detalhe de infra.
         st.stop()
-    df = _guias_para_df(guias + guias_liberadas if analise_integral else guias)
+    # Guia liberada pela IA mas com glosa do REL5310 também precisa ser
+    # auditada (a glosa é administrativa, a IA não a enxerga): entra nas
+    # tabelas por especialidade como se fosse pendente. Na Análise Integral
+    # as liberadas já entram todas. `guias` não muda (o botão 731 e a
+    # consulta de liberadas continuam usando as listas originais).
+    guias_com_glosa_5310 = {str(g["nu_guia"]) for g in glosas_5310}
+    liberadas_com_glosa = [] if analise_integral else [
+        g for g in guias_liberadas if str(g["nu_guia"]) in guias_com_glosa_5310
+    ]
+    ids_liberadas_com_glosa = {id(g) for g in liberadas_com_glosa}
+    df = _guias_para_df(guias + guias_liberadas if analise_integral else guias + liberadas_com_glosa)
 
     # Consulta à parte (só quando NÃO é Análise Integral -- nesse caso as
     # liberadas já estão dentro das tabelas principais acima, mostrar de
@@ -656,7 +666,11 @@ with aba_busca:
                 f"(Análise Integral) — {texto_total_guias} guia(s) no total do processo"
             )
         else:
-            st.caption(f"{len(df)} item(ns) sem liberação pela IA — {texto_total_guias} guia(s) no total do processo")
+            texto_com_glosa = (
+                f" + {len(liberadas_com_glosa)} liberado(s) pela IA mas com glosa (REL5310)"
+                if liberadas_com_glosa else ""
+            )
+            st.caption(f"{len(guias)} item(ns) sem liberação pela IA{texto_com_glosa} — {texto_total_guias} guia(s) no total do processo")
 
         # Aviso no cabeçalho só pra glosa 46 (fraude) -- as demais glosas do
         # REL5310 (10, 25, 69 etc.) ainda ganham expander próprio no
@@ -1079,6 +1093,7 @@ with aba_busca:
             total_procs += sum(
                 1 for g in guias_liberadas
                 if g["ds_grupo"] == esp and str(g["nu_guia"]) in guias_esp
+                and id(g) not in ids_liberadas_com_glosa  # já estão em `df`
             )
 
         if analise_integral:
