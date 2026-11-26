@@ -50,3 +50,11 @@ alter table fila_processos enable row level security;
 alter table fila_processos add column if not exists liberado_motivo text;
 alter table fila_processos add column if not exists liberado_por text;
 alter table fila_processos add column if not exists liberado_em timestamptz;
+
+-- Ordem oficial da fila, a mesma pra todos; só Gestor/Admin movem (fracionária: mover grava 1 linha)
+alter table fila_processos add column if not exists posicao double precision;
+with ordenados as (
+  select processo, row_number() over (order by procedimentos desc nulls last, processo) as n
+  from fila_processos where posicao is null
+)
+update fila_processos f set posicao = o.n from ordenados o where f.processo = o.processo;

@@ -21,6 +21,7 @@ login = str(st.session_state.get("usuario_sigo") or "").upper()
 nome = str(st.session_state.get("auditor_nome") or login)
 
 FILTROS = ["Todos", "Livres", "Meus", "Em andamento", "Concluídos"]
+pode_ordenar = role in fila.ROLES_QUE_ORDENAM
 
 
 def _avisar(tipo: str, texto: str) -> None:
@@ -80,8 +81,9 @@ def _liberacao(linha: dict) -> str:
     return f"{linha.get('liberado_por')} ({fila.hora_brt(linha.get('liberado_em'))}): {linha['liberado_motivo']}"
 
 
-def _tabela(linhas: list) -> pd.DataFrame:
+def _tabela(linhas: list, ordem_oficial: dict) -> pd.DataFrame:
     return pd.DataFrame([{
+        "Ordem": ordem_oficial[l["processo"]],
         "Processo": l["processo"],
         "Prestador": l.get("prestador"),
         "Cidade": l.get("cidade"),
@@ -99,12 +101,30 @@ def _tabela(linhas: list) -> pd.DataFrame:
     } for l in linhas]).astype({"Proced": "Int64", "Guias": "Int64", "S/ biometria": "Int64"})
 
 
-def _painel_do_processo(linha: dict) -> None:
+def _mover(processo: str, chave: str) -> None:
+    destino = st.session_state[chave]
+    if destino is not None:
+        _executar(fila.mover, f"Processo {processo} movido pra posição {destino}.", processo, destino, role)
+
+
+def _painel_do_processo(linha: dict, posicao: int, total: int) -> None:
     processo = linha["processo"]
     estado = fila.situacao(linha)
     quem = linha.get("auditor_nome") or "sem auditor informado"
     with st.container(border=True):
         st.markdown(f"**Processo {processo}** · {linha.get('prestador') or ''}")
+
+        if pode_ordenar:
+            # a chave leva a posição atual pra caixa acompanhar quando a ordem muda
+            chave = f"fila_posicao_{processo}_{posicao}"
+            col_posicao, col_mover, _ = st.columns([1, 1, 2], vertical_alignment="bottom")
+            col_posicao.number_input(
+                "Posição na fila", min_value=1, max_value=total, step=1, value=posicao, key=chave
+            )
+            col_mover.button(
+                "Mover", use_container_width=True, key=f"fila_mover_{processo}",
+                on_click=_mover, args=(processo, chave),
+            )
 
         # processo de outra pessoa: só o aviso de com quem está, sem nenhuma ação
         if not fila.pode_mexer(linha, login):
@@ -206,6 +226,8 @@ def painel() -> None:
         st.info("Nenhum processo na fila.")
         return
 
+    linhas = fila.ordenar(linhas)
+    ordem_oficial = {l["processo"]: i for i, l in enumerate(linhas, start=1)}
     meus_abertos = sum(1 for l in linhas if fila.e_dono(l, login) and fila.situacao(l) == fila.EM_ANDAMENTO)
     concluidos = sum(1 for l in linhas if fila.situacao(l) == fila.CONCLUIDO)
 
@@ -225,22 +247,16 @@ def painel() -> None:
     if busca:
         linhas = [l for l in linhas if busca in f"{l['processo']} {l.get('prestador') or ''}".lower()]
 
-    # os meus em andamento no topo; o resto como na planilha (mais procedimentos primeiro)
-    linhas.sort(key=lambda l: (
-        not (fila.e_dono(l, login) and fila.situacao(l) == fila.EM_ANDAMENTO),
-        -(l.get("procedimentos") or 0),
-        l["processo"],
-    ))
-
     if linhas:
         ordem = [l["processo"] for l in linhas]
         # a seleção da tabela é um índice de linha: se a ordem muda, a tabela é recriada
         # pra um índice antigo nunca apontar pra outro processo
         marca = hashlib.md5("|".join(ordem).encode()).hexdigest()[:10]
-        evento = st.dataframe(
-            _tabela(linhas), use_container_width=True, hide_index=True,
-            on_select="rerun", selection_mode="single-row", key=f"fila_tabela_{marca}",
-        )
+        with st.container(key="fila_lista" if pode_ordenar else "fila_lista_travada"):
+            evento = st.dataframe(
+                _tabela(linhas, ordem_oficial), use_container_width=True, hide_index=True,
+                on_select="rerun", selection_mode="single-row", key=f"fila_tabela_{marca}",
+            )
         escolhidas = evento.selection.get("rows") if evento else []
         if escolhidas and escolhidas[0] < len(ordem):
             st.session_state["_fila_selecionado"] = ordem[escolhidas[0]]
@@ -249,8 +265,22 @@ def painel() -> None:
 
     selecionado = cache.obter(st.session_state.get("_fila_selecionado", ""))
     if selecionado:
-        _painel_do_processo(selecionado)
+        _painel_do_processo(selecionado, ordem_oficial[selecionado["processo"]], len(ordem_oficial))
 
+
+# A tabela do Streamlit não tem opção pra desligar a ordenação pelo cabeçalho: pra quem não
+# ordena, uma camada transparente cobre a linha do cabeçalho (35px) e segura o clique.
+st.markdown(
+    """
+    <style>
+    .st-key-fila_lista_travada [data-testid="stDataFrame"] { position: relative; }
+    .st-key-fila_lista_travada [data-testid="stDataFrame"]::after {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 36px; z-index: 10;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("Fila operacional")
 st.caption(f"Versão beta. A lista se atualiza sozinha a cada {fila.INTERVALO_SEGUNDOS} segundos.")
@@ -271,8 +301,7 @@ if role == "Admin":
                     st.caption(f"Mais {len(avisos) - 10} aviso(s) não exibido(s).")
                 if st.button("Publicar na fila", type="primary", disabled=not registros):
                     try:
-                        novos = db.inserir_fila([{**r, "publicado_por": login} for r in registros])
-                        cache.sincronizar(db, completa=True)
+                        novos = fila.publicar(db, cache, registros, login)
                     except Exception as erro:
                         st.error(f"Não foi possível publicar. {erro}")
                     else:

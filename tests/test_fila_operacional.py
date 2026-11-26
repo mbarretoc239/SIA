@@ -141,3 +141,63 @@ def test_planilha_ignora_repetido_e_avisa_status_desconhecido():
     ))
     assert len(registros) == 1 and registros[0]["status"] is None
     assert len(avisos) == 2
+
+
+def test_5201_manda_pro_banco_so_os_calculados():
+    class Db:
+        def marcar_fila_calculados(self, processos):
+            self.recebidos = processos
+            return 1
+
+    db = Db()
+    registros = [
+        {"ORDEM": "2", "STATUS": "CALCULADO"},
+        {"ORDEM": "1", "STATUS": "CALCULADO"},
+        {"ORDEM": "1", "STATUS": "CALCULADO"},
+        {"ORDEM": "3", "STATUS": "FECHADO"},
+        {"ORDEM": None, "STATUS": "CALCULADO"},
+    ]
+    assert fila.aplicar_relatorio_5201(db, registros) == 1
+    assert db.recebidos == ["1", "2"]
+    assert fila.aplicar_relatorio_5201(Db(), [{"ORDEM": "3", "STATUS": "FECHADO"}]) == 0
+
+
+def _fila_de_tres():
+    db = _DbFalso(*[
+        {"processo": p, "posicao": i, "status": None, "auditor_nome": None, "auditor_login": None}
+        for i, p in enumerate(("a", "b", "c"), start=1)
+    ])
+    cache = fila.CacheFila()
+    cache.sincronizar(db)
+    return db, cache
+
+
+def _ordem(cache):
+    return [l["processo"] for l in fila.ordenar(cache.linhas())]
+
+
+def test_assumir_e_concluir_nao_mudam_a_ordem():
+    db, cache = _fila_de_tres()
+    fila.assumir(db, cache, "c", "ana1", "Ana")
+    fila.concluir(db, cache, "c", "Fechado", "ana1")
+    assert _ordem(cache) == ["a", "b", "c"]
+
+
+@pytest.mark.parametrize("processo,destino,esperado", [
+    ("c", 1, ["c", "a", "b"]),
+    ("a", 3, ["b", "c", "a"]),
+    ("a", 2, ["b", "a", "c"]),
+    ("b", 99, ["a", "c", "b"]),
+])
+def test_gestor_move_o_processo(processo, destino, esperado):
+    db, cache = _fila_de_tres()
+    assert fila.mover(db, cache, processo, destino, "Gestor")[0] is True
+    assert _ordem(cache) == esperado
+
+
+def test_auditor_nao_altera_a_ordem():
+    db, cache = _fila_de_tres()
+    for role in ("Auditor", "CISO", None):
+        with pytest.raises(PermissionError):
+            fila.mover(db, cache, "c", 1, role)
+    assert _ordem(cache) == ["a", "b", "c"]

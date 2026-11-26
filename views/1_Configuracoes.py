@@ -21,6 +21,7 @@ from core.amostragem import (
 )
 from core.cluster_municipios import preparar_registros_cluster, carregar_mapa_cluster
 from core.farol_mensal import carregar_glosas_5310, carregar_processos_ia
+from core.fila_operacional import aplicar_relatorio_5201
 from core.relatorio_5201 import carregar_dados_atuais, ler_relatorio_5201, montar_registros, _norm
 from core.settings import (
     carregar_alinhamentos_cache,
@@ -1368,9 +1369,24 @@ if "importar_planilhas" in abas_por_id:
                                     db.salvar_historico_procedimentos(registros_proc)
                             except Exception:
                                 pass
+                            # Fila operacional: falha aqui não desfaz a importação, mas é avisada
+                            try:
+                                calculados_fila = aplicar_relatorio_5201(db, registros_5201)
+                                aviso_fila = (
+                                    f" Fila operacional: {calculados_fila} processo(s) de Fechado para Calculado."
+                                    if calculados_fila else ""
+                                )
+                            except Exception as erro_fila:
+                                aviso_fila = (
+                                    " A Fila operacional não foi atualizada; reimporte o arquivo "
+                                    f"para tentar de novo ({erro_fila})."
+                                )
                         carregar_dados_atuais.clear()
                         buscar_status_processo_cache.clear()
-                        _flash(f"{total_5201} processo(s) importado(s) em {mes_referencia_5201} com sucesso.")
+                        _flash(
+                            f"{total_5201} processo(s) importado(s) em {mes_referencia_5201} com sucesso."
+                            + aviso_fila
+                        )
                         st.rerun()
                     except Exception as erro:
                         st.error(f"Falha na importação: {erro}")

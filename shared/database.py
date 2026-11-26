@@ -1985,7 +1985,7 @@ class DatabaseManager:
     _FILA_COLUNAS = (
         "processo,prestador,cidade,uf,tipo,procedimentos,guias,status,auditor_nome,"
         "auditor_login,assumido_em,concluido_em,obs_contas,obs_auditoria,sem_biometria,"
-        "liberado_motivo,liberado_por,liberado_em"
+        "liberado_motivo,liberado_por,liberado_em,posicao"
     )
 
     def listar_fila(self, desde: str = None) -> list:
@@ -2019,6 +2019,26 @@ class DatabaseManager:
             raise SupabaseHTTPError(f"Falha ao gravar na fila: HTTP {r.status_code} -- {r.text[:200]}", r.status_code)
         linhas = r.json()
         return linhas[0] if linhas else None
+
+    def marcar_fila_calculados(self, processos: list, lote: int = 200) -> int:
+        """Passa de Fechado pra Calculado os processos informados que estão na
+        fila. Qualquer outra situação (livre, em andamento, Glosado, Consistido)
+        fica como está. Devolve quantos mudaram."""
+        total = 0
+        for i in range(0, len(processos), lote):
+            filtro = ",".join(processos[i:i + lote])
+            r = requests.patch(
+                f"{self.supabase_url}/rest/v1/fila_processos",
+                params={"processo": f"in.({filtro})", "status": "eq.Fechado", "select": "processo"},
+                headers={**self._admin_headers(), "Prefer": "return=representation"},
+                json={"status": "Calculado"}, timeout=30,
+            )
+            if r.status_code != 200:
+                raise SupabaseHTTPError(
+                    f"Falha ao atualizar a fila: HTTP {r.status_code} -- {r.text[:200]}", r.status_code
+                )
+            total += len(r.json())
+        return total
 
     def inserir_fila(self, registros: list) -> int:
         """Acrescenta processos à fila. Processo que já está nela é ignorado (não

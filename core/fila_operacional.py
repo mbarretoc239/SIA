@@ -21,6 +21,7 @@ import streamlit as st
 MODULO = "fila_operacional"
 STATUS_FINAIS = ["Fechado", "Calculado", "Glosado", "Consistido"]
 LIVRE, EM_ANDAMENTO, CONCLUIDO = "Livre", "Em andamento", "Concluído"
+ROLES_QUE_ORDENAM = ("Admin", "Gestor")
 
 INTERVALO_SEGUNDOS = 30
 RECARGA_COMPLETA_SEGUNDOS = 6 * 3600   # rede de segurança (ex.: linha apagada direto no banco)
@@ -164,6 +165,53 @@ def salvar_observacoes(db, cache, processo, campos: dict, login: str):
         db, cache, processo, campos,
         {"or": f"(auditor_nome.is.null,auditor_login.eq.{login.upper()})"},
     )
+
+
+# ---------------------------------------------------------------- ordem da fila
+def ordenar(linhas: list) -> list:
+    """Ordem oficial, igual pra todos. Assumir ou concluir não muda a posição de ninguém."""
+    return sorted(linhas, key=lambda l: (
+        l.get("posicao") is None, l.get("posicao") or 0, -(l.get("procedimentos") or 0), l["processo"],
+    ))
+
+
+def mover(db, cache, processo, nova_posicao: int, role: str):
+    """Leva o processo pro lugar `nova_posicao` (1 = topo). Só Gestor/Admin."""
+    if role not in ROLES_QUE_ORDENAM:
+        raise PermissionError("Só Gestor ou Admin alteram a ordem da fila.")
+    outros = [l for l in ordenar(cache.linhas()) if l["processo"] != processo and l.get("posicao") is not None]
+    if not outros:
+        return True, cache.obter(processo)
+    indice = max(0, min(int(nova_posicao) - 1, len(outros)))
+    if indice == 0:
+        posicao = outros[0]["posicao"] - 1
+    elif indice == len(outros):
+        posicao = outros[-1]["posicao"] + 1
+    else:
+        posicao = (outros[indice - 1]["posicao"] + outros[indice]["posicao"]) / 2
+    return _gravar(db, cache, processo, {"posicao": posicao})
+
+
+def publicar(db, cache, registros: list, login: str) -> int:
+    """Acrescenta processos no fim da fila, na ordem em que vieram na planilha."""
+    cache.sincronizar(db, completa=True)
+    ultima = max((l.get("posicao") or 0 for l in cache.linhas()), default=0)
+    novos = db.inserir_fila([
+        {**r, "publicado_por": login, "posicao": ultima + i} for i, r in enumerate(registros, start=1)
+    ])
+    cache.sincronizar(db, completa=True)
+    return novos
+
+
+# ---------------------------------------------------------------- atualização pela 5201
+def aplicar_relatorio_5201(db, registros: list) -> int:
+    """Calculado na 5201 sobrescreve o Fechado marcado na fila, sem comparar horários:
+    o relatório não traz a hora do cálculo e é baixado quando não há ninguém auditando."""
+    calculados = sorted({
+        str(r.get("ORDEM") or "").strip() for r in registros if r.get("STATUS") == "CALCULADO"
+    })
+    calculados = [p for p in calculados if p.isdigit()]
+    return db.marcar_fila_calculados(calculados) if calculados else 0
 
 
 # ---------------------------------------------------------------- leitura da planilha
