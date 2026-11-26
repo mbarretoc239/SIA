@@ -611,7 +611,14 @@ with aba_busca:
                 )
                 st.dataframe(df_liberadas, use_container_width=True, hide_index=True)
 
-    if df.empty and not glosas_5310:
+    # A partir do dia 25, guia sem biometria precisa aparecer mesmo quando não
+    # sobrou nada pra amostrar (ex.: processo 100% liberado pela IA) -- nem a
+    # falta de guia pendente nem os filtros podem parar a tela antes dela.
+    mostrar_sem_bio = (
+        datetime.now(ZoneInfo("America/Sao_Paulo")).day >= 25 and procs_com_biometria < total_procs_bio
+    )
+
+    if df.empty and not glosas_5310 and not mostrar_sem_bio:
         st.warning(
             f"Nenhuma guia com LIBERAÇÃO = N encontrada para o processo "
             f"'{processo_ativo}' na base importada. Confira o número ou se o "
@@ -626,9 +633,13 @@ with aba_busca:
         # tela aqui, escondendo a glosa do auditor; continua só com a seção
         # de glosas (mais abaixo), sem o sorteio por especialidade (não tem
         # nada da base IA pra sortear).
+        o_que_revisar = (
+            "glosa administrativa no REL5310 (abaixo)" if glosas_5310
+            else "guia sem biometria completa (abaixo)"
+        )
         st.info(
             f"Processo '{processo_ativo}' não tem guia pendente na base IA, mas tem "
-            "glosa administrativa no REL5310 (abaixo) -- revise essas guias."
+            f"{o_que_revisar} -- revise essas guias."
         )
 
     total_guias_processo = guias[0].get("total_guias_processo") if guias else (
@@ -917,6 +928,9 @@ with aba_busca:
         # mas têm NU_GUIA de verdade -- podem ter imagem registrada igual
         # qualquer outra guia).
         guias_para_imagem = set(df["NU_GUIA"].unique().tolist()) | {g["nu_guia"] for g in glosas_5310}
+        if mostrar_sem_bio:
+            # as do expansível "sem biometria", inclusive já liberadas pela IA
+            guias_para_imagem |= set(df_bio_todas["NU_GUIA"].unique().tolist())
         imagem_registros = buscar_imagem_por_guias_cache(tuple(sorted(guias_para_imagem)))
     except TursoIndisponivelError:
         imagem_registros = []
@@ -1048,7 +1062,7 @@ with aba_busca:
     # usada pra decidir o ✓ do badge (core/amostragem.py) -- unificado pra
     # badge e filtro nunca discordarem sobre o que conta como "completo".
     def _aplicar_filtro_guia(df_in, mapa, filtro):
-        if not filtro or filtro == "Todos":
+        if not filtro or filtro == "Todos" or df_in.empty:
             return df_in
         quer_com = filtro == "Com"
 
@@ -1063,12 +1077,13 @@ with aba_busca:
     df_guias = _aplicar_filtro_guia(df_guias, biometria_por_guia, filtro_biometria)
     df_guias = _aplicar_filtro_guia(df_guias, imagem_por_guia, filtro_imagem)
 
-    if df_guias.empty and not (df.empty and glosas_5310):
+    if df_guias.empty and not (df.empty and (glosas_5310 or mostrar_sem_bio)):
         # Processo sem guia na base IA e sem glosa no 5310 já parou lá em
         # cima; chegar aqui vazio só acontece pelo filtro de Biometria/Imagem
         # mesmo (não pelo caso "só tem glosa", tratado à parte).
         st.info("Nenhuma guia bate com os filtros selecionados.")
-        st.stop()
+        if not mostrar_sem_bio:
+            st.stop()
 
     # Mantém df (nível de item) em sincronia com as guias que sobraram após
     # os filtros — senão os totais de procedimentos no Resumo contariam
@@ -1184,7 +1199,7 @@ with aba_busca:
     # fisicamente. Mostra TODAS, liberadas ou não pela IA, e ignora os
     # filtros da tela. Mesma regra do filtro "Sem": guia sem dado de
     # biometria conta como não confirmada (guia_100pct is not True).
-    if datetime.now(ZoneInfo("America/Sao_Paulo")).day >= 25 and not df_bio_todas.empty:
+    if mostrar_sem_bio:
         bio_todas = {
             nu: _biometria_guia(serie)
             for nu, serie in df_bio_todas.groupby("NU_GUIA")["CD_OPERADOR_ATEND"]
