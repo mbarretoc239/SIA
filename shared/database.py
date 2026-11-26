@@ -1980,6 +1980,61 @@ class DatabaseManager:
             por_alinhamento.setdefault(evento["alinhamento_id"], []).append(evento)
         return por_alinhamento
 
+    # --- Fila operacional (tabela fila_processos, ver core/fila_operacional.py) ---
+    # RLS sem policy pra anon: tudo com service_role. Quem chama confere o acesso ao módulo.
+    _FILA_COLUNAS = (
+        "processo,prestador,cidade,uf,tipo,procedimentos,guias,status,auditor_nome,"
+        "auditor_login,assumido_em,concluido_em,obs_contas,obs_auditoria,sem_biometria,"
+        "liberado_motivo,liberado_por,liberado_em"
+    )
+
+    def listar_fila(self, desde: str = None) -> list:
+        """Fila inteira, ou só as linhas alteradas a partir de `desde` (ISO 8601)."""
+        params = {"select": self._FILA_COLUNAS, "order": "processo"}
+        if desde:
+            params["atualizado_em"] = f"gte.{desde}"
+        return self._get_paginado(
+            f"{self.supabase_url}/rest/v1/fila_processos", params=params, headers=self._admin_headers()
+        )
+
+    def buscar_fila_processo(self, processo: str) -> dict | None:
+        linhas = self._get_paginado(
+            f"{self.supabase_url}/rest/v1/fila_processos",
+            params={"select": self._FILA_COLUNAS, "processo": f"eq.{processo}"},
+            headers=self._admin_headers(),
+        )
+        return linhas[0] if linhas else None
+
+    def atualizar_fila(self, processo: str, campos: dict, condicoes: dict = None) -> dict | None:
+        """UPDATE condicional numa linha da fila. Devolve a linha gravada, ou None
+        se a condição não bateu (ex.: outra pessoa assumiu antes) -- a checagem e a
+        gravação são o mesmo comando no banco, sem janela entre uma e outra."""
+        r = requests.patch(
+            f"{self.supabase_url}/rest/v1/fila_processos",
+            params={"processo": f"eq.{processo}", "select": self._FILA_COLUNAS, **(condicoes or {})},
+            headers={**self._admin_headers(), "Prefer": "return=representation"},
+            json=campos, timeout=20,
+        )
+        if r.status_code != 200:
+            raise SupabaseHTTPError(f"Falha ao gravar na fila: HTTP {r.status_code} -- {r.text[:200]}", r.status_code)
+        linhas = r.json()
+        return linhas[0] if linhas else None
+
+    def inserir_fila(self, registros: list) -> int:
+        """Acrescenta processos à fila. Processo que já está nela é ignorado (não
+        apaga quem assumiu nem o status). Devolve quantos entraram."""
+        if not registros:
+            return 0
+        r = requests.post(
+            f"{self.supabase_url}/rest/v1/fila_processos",
+            params={"on_conflict": "processo", "select": "processo"},
+            headers={**self._admin_headers(), "Prefer": "resolution=ignore-duplicates,return=representation"},
+            json=registros, timeout=60,
+        )
+        if r.status_code not in (200, 201):
+            raise SupabaseHTTPError(f"Falha ao publicar na fila: HTTP {r.status_code} -- {r.text[:200]}", r.status_code)
+        return len(r.json())
+
     # --- Operações de Banco (Permissões de Módulos por Role) ---
     def carregar_permissoes_modulos(self):
         # permissoes_modulos tem RLS habilitado sem nenhuma policy — só

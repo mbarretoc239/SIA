@@ -372,6 +372,8 @@ else:
 
     # Permissões Módulos Clínicos (configurável por role em Configurações)
     from core.settings import tem_acesso_modulo
+    if tem_acesso_modulo(permissoes, role, "fila_operacional", usuario_id_atual, excecoes_acesso):
+        paginas.append(st.Page("views/11_Fila_Operacional.py", title="Fila operacional"))
     if tem_acesso_modulo(permissoes, role, "relatorio_5302", usuario_id_atual, excecoes_acesso):
         paginas.append(st.Page("views/2_Relatorio_5302.py", title="Relatório 5302"))
     if tem_acesso_modulo(permissoes, role, "calculadora_glosa", usuario_id_atual, excecoes_acesso):

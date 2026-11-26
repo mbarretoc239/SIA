@@ -3,7 +3,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import streamlit as st
-from core import marca
+from core import fila_operacional, marca
 from core.lupita.mini import botao_flutuante_lupita
 import pandas as pd
 import streamlit.components.v1 as components
@@ -512,6 +512,27 @@ with aba_busca:
     if not processo_ativo:
         st.info("Digite o número do processo e clique em Buscar guias.")
         st.stop()
+
+    # Fila operacional (beta): avisa quem está no processo, pra quem abre por fora da fila.
+    # Lê do cache compartilhado; qualquer falha aqui não pode atrapalhar a Amostragem.
+    if tem_acesso_modulo(_permissoes_pagina, _role_pagina, fila_operacional.MODULO, _usuario_id_pagina, _excecoes_pagina):
+        try:
+            _cache_fila = fila_operacional.cache_da_fila()
+            _cache_fila.sincronizar(st.session_state.db)
+            _na_fila = _cache_fila.obter(processo_ativo)
+        except Exception:
+            _na_fila = None
+        if _na_fila:
+            _situacao_fila = fila_operacional.situacao(_na_fila)
+            _quem_fila = _na_fila.get("auditor_nome") or "sem auditor informado"
+            if _situacao_fila == fila_operacional.LIVRE:
+                st.info("Fila operacional: processo livre. Assuma na tela Fila operacional antes de auditar.")
+            elif _situacao_fila == fila_operacional.CONCLUIDO:
+                st.info(f"Fila operacional: {_na_fila['status']} por {_quem_fila}.")
+            elif fila_operacional.e_dono(_na_fila, st.session_state.get("usuario_sigo", "")):
+                st.info("Fila operacional: processo em andamento com você.")
+            else:
+                st.warning(f"Fila operacional: em auditoria por {_quem_fila}.")
 
     # Análise Integral: processo marcado via import mensal da lista PAR (em
     # Configurações, ver substituir_analise_integral) soma as guias já liberadas pela IA

@@ -115,6 +115,8 @@ MODULOS_CONTROLADOS = {
     "farol_mensal": "Farol Mensal",
     # Lupita (triagem de imagem gerada por IA, views/10_Lupita.py e mini da Amostragem). Sem linha só o Admin.
     "lupita": "Lupita (imagem gerada por IA)",
+    # Quem está em cada processo (views/11_Fila_Operacional.py). Beta: liberada por exceção individual.
+    "fila_operacional": "Fila operacional (beta)",
 }
 
 # Roles cujo acesso aos módulos acima é configurável
