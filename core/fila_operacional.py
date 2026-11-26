@@ -112,12 +112,13 @@ def _gravar(db, cache: CacheFila, processo: str, campos: dict, condicoes: dict |
     return False, atual
 
 
-def _condicao_dono(login: str, gestor: bool) -> dict:
-    """Só quem assumiu mexe no processo; Gestor/Admin mexem em qualquer um."""
-    condicao = {"auditor_nome": "not.is.null"}
-    if not gestor:
-        condicao["auditor_login"] = f"eq.{login}"
-    return condicao
+def pode_mexer(linha: dict, login: str) -> bool:
+    """Processo com auditor é só dele, sem exceção por cargo; sem auditor, qualquer um."""
+    return not linha.get("auditor_nome") or e_dono(linha, login)
+
+
+def _condicao_dono(login: str) -> dict:
+    return {"auditor_login": f"eq.{login.upper()}"}
 
 
 def assumir(db, cache, processo, login: str, nome: str):
@@ -130,23 +131,20 @@ def assumir(db, cache, processo, login: str, nome: str):
     )
 
 
-def concluir(db, cache, processo, status: str, login: str, gestor: bool):
+def concluir(db, cache, processo, status: str, login: str):
     if status not in STATUS_FINAIS:
         raise ValueError(f"Status inválido: {status!r}")
     return _gravar(
         db, cache, processo, {"status": status, "concluido_em": _agora_iso()},
-        {**_condicao_dono(login.upper(), gestor), "status": "is.null"},
+        {**_condicao_dono(login), "status": "is.null"},
     )
 
 
-def reabrir(db, cache, processo, login: str, gestor: bool):
-    return _gravar(
-        db, cache, processo, {"status": None, "concluido_em": None},
-        _condicao_dono(login.upper(), gestor),
-    )
+def reabrir(db, cache, processo, login: str):
+    return _gravar(db, cache, processo, {"status": None, "concluido_em": None}, _condicao_dono(login))
 
 
-def liberar(db, cache, processo, motivo: str, login: str, nome: str, gestor: bool):
+def liberar(db, cache, processo, motivo: str, login: str, nome: str):
     motivo = (motivo or "").strip()
     if not motivo:
         raise ValueError("Informe o motivo da liberação.")
@@ -154,15 +152,18 @@ def liberar(db, cache, processo, motivo: str, login: str, nome: str, gestor: boo
         db, cache, processo,
         {"auditor_login": None, "auditor_nome": None, "assumido_em": None,
          "liberado_motivo": motivo, "liberado_por": nome.upper(), "liberado_em": _agora_iso()},
-        {**_condicao_dono(login.upper(), gestor), "status": "is.null"},
+        {**_condicao_dono(login), "status": "is.null"},
     )
 
 
-def salvar_observacoes(db, cache, processo, campos: dict):
+def salvar_observacoes(db, cache, processo, campos: dict, login: str):
     permitidos = {"obs_contas", "obs_auditoria", "sem_biometria"}
     if set(campos) - permitidos:
         raise ValueError("Campo não editável por aqui.")
-    return _gravar(db, cache, processo, campos)
+    return _gravar(
+        db, cache, processo, campos,
+        {"or": f"(auditor_nome.is.null,auditor_login.eq.{login.upper()})"},
+    )
 
 
 # ---------------------------------------------------------------- leitura da planilha

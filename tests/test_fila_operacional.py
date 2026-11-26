@@ -27,6 +27,11 @@ class _DbFalso:
         if linha is None:
             return None
         for coluna, filtro in (condicoes or {}).items():
+            if coluna == "or":   # só o "(auditor_nome.is.null,auditor_login.eq.X)" das observações
+                dono = filtro.rstrip(")").split("auditor_login.eq.")[1]
+                if linha.get("auditor_nome") is not None and linha.get("auditor_login") != dono:
+                    return None
+                continue
             valor = linha.get(coluna)
             if filtro == "is.null" and valor is not None:
                 return None
@@ -52,34 +57,40 @@ def test_segunda_pessoa_nao_assume_e_ve_quem_esta_com_o_processo():
     assert cache.obter("1")["auditor_nome"] == "ANA"
 
 
-def test_so_o_dono_ou_gestor_conclui_e_libera():
+def test_so_quem_assumiu_mexe_no_processo():
     db, cache = _cenario()
     fila.assumir(db, cache, "1", "ana1", "Ana")
-    assert fila.concluir(db, cache, "1", "Fechado", "bruno1", False)[0] is False
-    assert fila.liberar(db, cache, "1", "não é meu", "bruno1", "Bruno", False)[0] is False
-    assert fila.concluir(db, cache, "1", "Fechado", "ana1", False)[0] is True
+    assert fila.pode_mexer(cache.obter("1"), "bruno1") is False
+    assert fila.concluir(db, cache, "1", "Fechado", "bruno1")[0] is False
+    assert fila.liberar(db, cache, "1", "não é meu", "bruno1", "Bruno")[0] is False
+    assert fila.salvar_observacoes(db, cache, "1", {"obs_contas": "x"}, "bruno1")[0] is False
+    assert fila.salvar_observacoes(db, cache, "1", {"obs_contas": "PAR"}, "ana1")[0] is True
+    assert fila.concluir(db, cache, "1", "Fechado", "ana1")[0] is True
     assert fila.situacao(cache.obter("1")) == fila.CONCLUIDO
-    # concluído não libera nem é assumido de novo; precisa reabrir
-    assert fila.liberar(db, cache, "1", "motivo", "ana1", "Ana", False)[0] is False
-    assert fila.reabrir(db, cache, "1", "gestor1", True)[0] is True
-    assert fila.liberar(db, cache, "1", "direcionado", "gestor1", "Lia", True)[0] is True
+    # concluído continua só dela, e não libera sem reabrir
+    assert fila.reabrir(db, cache, "1", "bruno1")[0] is False
+    assert fila.liberar(db, cache, "1", "motivo", "ana1", "Ana")[0] is False
+    assert fila.reabrir(db, cache, "1", "ana1")[0] is True
+    assert fila.liberar(db, cache, "1", "direcionado", "ana1", "Ana")[0] is True
     assert fila.situacao(cache.obter("1")) == fila.LIVRE
     assert cache.obter("1")["liberado_motivo"] == "direcionado"
-    assert cache.obter("1")["liberado_por"] == "LIA"
+    assert cache.obter("1")["liberado_por"] == "ANA"
+    # livre: qualquer um anota
+    assert fila.salvar_observacoes(db, cache, "1", {"obs_contas": "y"}, "bruno1")[0] is True
 
 
 def test_liberar_sem_motivo_e_recusado():
     db, cache = _cenario()
     fila.assumir(db, cache, "1", "ana1", "Ana")
     with pytest.raises(ValueError):
-        fila.liberar(db, cache, "1", "   ", "ana1", "Ana", False)
+        fila.liberar(db, cache, "1", "   ", "ana1", "Ana")
     assert cache.obter("1")["auditor_nome"] == "ANA"
 
 
 def test_status_fora_da_lista_e_recusado():
     db, cache = _cenario()
     with pytest.raises(ValueError):
-        fila.concluir(db, cache, "1", "Pago", "ana1", False)
+        fila.concluir(db, cache, "1", "Pago", "ana1")
 
 
 def test_cache_consulta_o_banco_no_maximo_uma_vez_por_intervalo():

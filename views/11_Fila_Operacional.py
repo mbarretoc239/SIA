@@ -19,7 +19,6 @@ db = st.session_state.db
 cache = fila.cache_da_fila()
 login = str(st.session_state.get("usuario_sigo") or "").upper()
 nome = str(st.session_state.get("auditor_nome") or login)
-gestor = role in ("Admin", "Gestor")
 
 FILTROS = ["Todos", "Livres", "Meus", "Em andamento", "Concluídos"]
 
@@ -59,7 +58,7 @@ def _salvar_observacoes(processo: str, antes: dict, marca: str) -> None:
     # grava só o que a pessoa mudou, pra não passar por cima do que outra anotou
     alterados = {k: v for k, v in novos.items() if v != antes.get(k)}
     if alterados:
-        _executar(fila.salvar_observacoes, "Observações salvas.", processo, alterados)
+        _executar(fila.salvar_observacoes, "Observações salvas.", processo, alterados, login)
 
 
 def _pedir_motivo(processo: str | None) -> None:
@@ -72,9 +71,7 @@ def _confirmar_liberacao(processo: str) -> None:
         _avisar("warning", "Informe o motivo pra liberar o processo.")
         return
     _pedir_motivo(None)
-    _executar(
-        fila.liberar, f"Processo {processo} voltou a ficar livre.", processo, motivo, login, nome, gestor
-    )
+    _executar(fila.liberar, f"Processo {processo} voltou a ficar livre.", processo, motivo, login, nome)
 
 
 def _liberacao(linha: dict) -> str:
@@ -105,10 +102,20 @@ def _tabela(linhas: list) -> pd.DataFrame:
 def _painel_do_processo(linha: dict) -> None:
     processo = linha["processo"]
     estado = fila.situacao(linha)
-    meu = fila.e_dono(linha, login)
     quem = linha.get("auditor_nome") or "sem auditor informado"
     with st.container(border=True):
         st.markdown(f"**Processo {processo}** · {linha.get('prestador') or ''}")
+
+        # processo de outra pessoa: só o aviso de com quem está, sem nenhuma ação
+        if not fila.pode_mexer(linha, login):
+            if estado == fila.CONCLUIDO:
+                quando = fila.hora_brt(linha.get("concluido_em"))
+                st.info(f"{linha['status']} por {quem}{f' ({quando})' if quando else ''}.")
+            else:
+                desde = fila.hora_brt(linha.get("assumido_em"))
+                st.warning(f"Este processo já está com {quem}{f' desde {desde}' if desde else ''}.")
+            return
+
         if linha.get("liberado_motivo"):
             st.caption("Última liberação")
             st.text(_liberacao(linha))
@@ -119,48 +126,42 @@ def _painel_do_processo(linha: dict) -> None:
                 args=(fila.assumir, f"Processo {processo} está com você.", processo, login, nome),
             )
         elif estado == fila.EM_ANDAMENTO:
-            desde = fila.hora_brt(linha.get("assumido_em"))
-            texto = f"Em auditoria por {quem}{f' desde {desde}' if desde else ''}."
-            if meu:
-                st.caption("Em andamento com você.")
-            else:
-                st.warning(texto)
-            if meu or gestor:
-                col_status, col_concluir, col_liberar = st.columns([2, 1, 1], vertical_alignment="bottom")
-                status = col_status.selectbox(
-                    "Status", fila.STATUS_FINAIS, index=None, placeholder="Escolha ao terminar",
-                    key=f"fila_status_{processo}",
-                )
-                col_concluir.button(
-                    "Concluir", type="primary", disabled=status is None, use_container_width=True,
-                    key=f"fila_concluir_{processo}", on_click=_executar,
-                    args=(fila.concluir, f"Processo {processo} concluído.", processo, status, login, gestor),
-                )
-                col_liberar.button(
-                    "Liberar", use_container_width=True, key=f"fila_liberar_{processo}",
-                    on_click=_pedir_motivo, args=(processo,),
-                )
-                if st.session_state.get("_fila_liberando") == processo:
-                    with st.form(f"fila_liberacao_{processo}", border=False):
-                        st.text_input(
-                            "Motivo da liberação", key=f"fila_motivo_{processo}", max_chars=300,
-                            placeholder="Ex.: processo direcionado para outra pessoa",
-                        )
-                        col_confirmar, col_cancelar, _ = st.columns([1, 1, 2])
-                        col_confirmar.form_submit_button(
-                            "Confirmar liberação", use_container_width=True,
-                            on_click=_confirmar_liberacao, args=(processo,),
-                        )
-                        col_cancelar.form_submit_button(
-                            "Cancelar", use_container_width=True, on_click=_pedir_motivo, args=(None,),
-                        )
+            st.caption("Em andamento com você.")
+            col_status, col_concluir, col_liberar = st.columns([2, 1, 1], vertical_alignment="bottom")
+            status = col_status.selectbox(
+                "Status", fila.STATUS_FINAIS, index=None, placeholder="Escolha ao terminar",
+                key=f"fila_status_{processo}",
+            )
+            col_concluir.button(
+                "Concluir", type="primary", disabled=status is None, use_container_width=True,
+                key=f"fila_concluir_{processo}", on_click=_executar,
+                args=(fila.concluir, f"Processo {processo} concluído.", processo, status, login),
+            )
+            col_liberar.button(
+                "Liberar", use_container_width=True, key=f"fila_liberar_{processo}",
+                on_click=_pedir_motivo, args=(processo,),
+            )
+            if st.session_state.get("_fila_liberando") == processo:
+                with st.form(f"fila_liberacao_{processo}", border=False):
+                    st.text_input(
+                        "Motivo da liberação", key=f"fila_motivo_{processo}", max_chars=300,
+                        placeholder="Ex.: processo direcionado para outra pessoa",
+                    )
+                    col_confirmar, col_cancelar, _ = st.columns([1, 1, 2])
+                    col_confirmar.form_submit_button(
+                        "Confirmar liberação", use_container_width=True,
+                        on_click=_confirmar_liberacao, args=(processo,),
+                    )
+                    col_cancelar.form_submit_button(
+                        "Cancelar", use_container_width=True, on_click=_pedir_motivo, args=(None,),
+                    )
         else:
             quando = fila.hora_brt(linha.get("concluido_em"))
             st.info(f"{linha['status']} por {quem}{f' ({quando})' if quando else ''}.")
-            if (meu or gestor) and linha.get("auditor_nome"):
+            if linha.get("auditor_nome"):
                 st.button(
                     "Reabrir", key=f"fila_reabrir_{processo}", on_click=_executar,
-                    args=(fila.reabrir, f"Processo {processo} reaberto.", processo, login, gestor),
+                    args=(fila.reabrir, f"Processo {processo} reaberto.", processo, login),
                 )
 
         if st.button("Abrir na Amostragem", key=f"fila_abrir_{processo}"):
