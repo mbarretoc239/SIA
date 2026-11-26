@@ -2214,7 +2214,7 @@ class DatabaseManager:
         registro["_mes_referencia"] = linhas[0].get("mes_referencia")
         return registro
 
-    def marcar_status_manual_5201(self, nu_ordem: str, novo_status: str, marcado_por: str = "MATHBC") -> bool:
+    def marcar_status_manual_5201(self, nu_ordem: str, novo_status: str, marcado_por: str = "MATHBC") -> dict | None:
         """Marca manualmente um processo do REL5201 como FECHADO ou
         CALCULADO -- uso interno do Admin pra registrar progresso de
         produtividade antes do próximo import do REL5201 trazer o status
@@ -2237,22 +2237,22 @@ class DatabaseManager:
         url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos"
         params = {
             "ordem": f"eq.{ordem}",
-            "select": "id,payload_cifrado",
+            "select": "id,payload_cifrado,mes_referencia",
             "order": "mes_referencia.desc",
             "limit": "1",
         }
         # nao-paginado: limit=1 explicito (edita 1 processo so)
         response = requests.get(url, headers=self.headers, params=params)
         if not response.ok:
-            return False
+            return None
         linhas = response.json()
         if not linhas:
-            return False
+            return None
 
         try:
             registro = json.loads(self.descriptografar(linhas[0]["payload_cifrado"]))
         except (ValueError, TypeError):
-            return False
+            return None
 
         agora = datetime.now().isoformat()
         registro["STATUS"] = novo_status
@@ -2269,13 +2269,51 @@ class DatabaseManager:
             headers=self._admin_headers(),
             json={"payload_cifrado": novo_payload},
         )
-        return r_update.ok
+        if not r_update.ok:
+            return None
+        registro["_mes_referencia"] = linhas[0].get("mes_referencia")
+        return registro
 
-    def carregar_relatorio_5201(self) -> list:
-        """Busca e decifra o snapshot atual do REL5201. Cada item retornado
-        é o dict original (ORDEM, STATUS, LOGIN_FECHAMENTO etc.) gravado no
-        último upload."""
-        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos?select=payload_cifrado,importado_em,importado_por,mes_referencia"
+    def versoes_relatorio_5201(self) -> dict:
+        """{mes_referencia: (maior_id, total_de_linhas)} -- muda quando o mês é
+        reimportado (linhas apagadas e inseridas de novo). Lê 1 linha por
+        consulta, pra saber o que precisa ser baixado sem baixar o relatório."""
+        url = f"{self.supabase_url}/rest/v1/relatorio_5201_processos"
+        versoes = {}
+        anterior = None
+        while True:
+            params = {"select": "mes_referencia", "order": "mes_referencia.desc.nullslast", "limit": "1"}
+            params["mes_referencia"] = f"lt.{anterior}" if anterior else "not.is.null"
+            # nao-paginado: limit=1 explicito (descobre o proximo mes retido)
+            r = requests.get(url, headers=self.headers, params=params)
+            if not r.ok:
+                raise SupabaseHTTPError(f"Falha ao listar meses do REL5201: HTTP {r.status_code}", r.status_code)
+            linhas = r.json()
+            if not linhas:
+                return versoes
+            anterior = linhas[0]["mes_referencia"]
+            # nao-paginado: limit=1 explicito (o total vem no Content-Range)
+            r = requests.get(
+                url,
+                headers={**self.headers, "Prefer": "count=exact"},
+                params={"mes_referencia": f"eq.{anterior}", "select": "id", "order": "id.desc", "limit": "1"},
+            )
+            if not r.ok:
+                raise SupabaseHTTPError(f"Falha ao conferir o REL5201 de {anterior}: HTTP {r.status_code}", r.status_code)
+            ultima = r.json()
+            total = r.headers.get("Content-Range", "").rpartition("/")[2]
+            versoes[anterior] = (ultima[0]["id"] if ultima else None, total)
+
+    def carregar_relatorio_5201(self, mes_referencia: str = None) -> list:
+        """Busca e decifra o REL5201 -- só `mes_referencia`, ou todos os meses
+        retidos. Cada item retornado é o dict original (ORDEM, STATUS,
+        LOGIN_FECHAMENTO etc.) gravado no último upload."""
+        url = (
+            f"{self.supabase_url}/rest/v1/relatorio_5201_processos"
+            "?select=payload_cifrado,importado_em,importado_por,mes_referencia&order=id.asc"
+        )
+        if mes_referencia:
+            url += f"&mes_referencia=eq.{mes_referencia}"
         linhas = self._get_paginado(url)
 
         registros = []

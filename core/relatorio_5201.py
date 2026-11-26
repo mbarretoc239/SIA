@@ -1,4 +1,6 @@
 import re
+import threading
+import time
 import unicodedata
 import zipfile
 from datetime import date, datetime
@@ -331,6 +333,52 @@ def _datas_gravadas(serie: pd.Series) -> pd.Series:
     return datas
 
 
+class CacheMesesRel5201:
+    """Registros decifrados do REL5201 guardados por mês: só o mês que mudou
+    no banco (reimportação) é baixado de novo. Sem isso cada importação
+    rebaixava também o mês anterior, que não tinha mudado."""
+
+    # Rede de segurança pra alteração que não muda a versão do mês (status
+    # manual feito por outra instância do app, edição direto no banco).
+    VALIDADE_SEGUNDOS = 7 * 86400
+
+    def __init__(self):
+        self._meses = {}  # mês -> (versão, quando baixou, registros)
+        self._trava = threading.Lock()
+
+    def carregar(self, db, agora: float = None) -> list:
+        agora = time.time() if agora is None else agora
+        with self._trava:
+            versoes = db.versoes_relatorio_5201()
+            for mes in set(self._meses) - set(versoes):
+                del self._meses[mes]
+            for mes, versao in versoes.items():
+                guardado = self._meses.get(mes)
+                if guardado and guardado[0] == versao and agora - guardado[1] < self.VALIDADE_SEGUNDOS:
+                    continue
+                self._meses[mes] = (versao, agora, db.carregar_relatorio_5201(mes))
+            return [registro for mes in sorted(self._meses) for registro in self._meses[mes][2]]
+
+    def atualizar(self, registro: dict) -> None:
+        """Aplica um registro alterado pelo próprio app, sem baixar o mês."""
+        with self._trava:
+            guardado = self._meses.get(registro.get("_mes_referencia"))
+            for atual in guardado[2] if guardado else []:
+                if str(atual.get("ORDEM")) == str(registro.get("ORDEM")):
+                    atual.update(registro)
+
+
+@st.cache_resource
+def cache_meses_5201() -> CacheMesesRel5201:
+    return CacheMesesRel5201()
+
+
+def aplicar_status_manual(registro: dict) -> None:
+    """Depois de marcar status na mão: reflete no que está em memória."""
+    cache_meses_5201().atualizar(registro)
+    carregar_dados_atuais.clear()
+
+
 @st.cache_data(ttl=86400)
 def carregar_dados_atuais() -> pd.DataFrame:
     """Busca e decifra o snapshot atual do REL5201 (cacheado por 24h —
@@ -342,11 +390,13 @@ def carregar_dados_atuais() -> pd.DataFrame:
     docs/turso_bloqueado_2026-09-23.md). REL5201 é reimportado no máximo 1x/dia
     e o import já chama .clear() explicitamente (ver views/1_Configuracoes.py)
     -- não há janela real de desatualização; o TTL é só uma rede de segurança
-    caso o .clear() alguma vez não seja chamado."""
+    caso o .clear() alguma vez não seja chamado.
+
+    Quando este cache é refeito, o download passa por CacheMesesRel5201: só
+    os meses que mudaram no banco vêm de novo."""
     from shared.database import DatabaseManager
     db = DatabaseManager()
-    registros = db.carregar_relatorio_5201()
-    return registros_para_df(registros)
+    return registros_para_df(cache_meses_5201().carregar(db))
 
 
 def meses_disponiveis(df: pd.DataFrame) -> list:

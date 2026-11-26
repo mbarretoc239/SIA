@@ -39,6 +39,7 @@ from core.amostragem import (
 )
 from core.relatorio_5201 import (
     STATUS_CORES,
+    aplicar_status_manual,
     carregar_dados_atuais,
     formatar_status_processo,
     meses_disponiveis,
@@ -719,19 +720,21 @@ with aba_busca:
                     )
                     col_fechado, col_calculado = st.columns(2)
                     if col_fechado.button("Fechado", key="btn_marcar_fechado_manual", use_container_width=True):
-                        if st.session_state.db.marcar_status_manual_5201(processo_ativo, "FECHADO"):
+                        marcado = st.session_state.db.marcar_status_manual_5201(processo_ativo, "FECHADO")
+                        if marcado:
                             # carregar_dados_atuais() é cacheado 24h (ver
-                            # core/relatorio_5201.py) -- sem limpar aqui, a
+                            # core/relatorio_5201.py) -- sem aplicar aqui, a
                             # Produtividade continuaria mostrando o status
                             # antigo por até 24h depois de marcar.
-                            carregar_dados_atuais.clear()
+                            aplicar_status_manual(marcado)
                             buscar_status_processo_cache.clear(processo_ativo)
                             st.rerun()
                         else:
                             st.error("Erro ao marcar status.")
                     if col_calculado.button("Calculado", key="btn_marcar_calculado_manual", use_container_width=True):
-                        if st.session_state.db.marcar_status_manual_5201(processo_ativo, "CALCULADO"):
-                            carregar_dados_atuais.clear()
+                        marcado = st.session_state.db.marcar_status_manual_5201(processo_ativo, "CALCULADO")
+                        if marcado:
+                            aplicar_status_manual(marcado)
                             buscar_status_processo_cache.clear(processo_ativo)
                             st.rerun()
                         else:
