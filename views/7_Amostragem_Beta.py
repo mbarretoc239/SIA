@@ -248,6 +248,18 @@ _botao_flutuante_atalhos()
 botao_flutuante_lupita(st.session_state.db, st.session_state.get("usuario_sigo", ""), st.session_state.get("role_interno"), st.session_state.get("usuario_id"))
 
 
+def renderizar_linha_campos(campos: list) -> None:
+    """Campos "Rótulo: valor" lado a lado no cabeçalho do processo, quebrando
+    pra linha de baixo só quando não couber (st.columns espremeria os rótulos).
+    `valor` é HTML já escapado."""
+    itens = "".join(f"<span style='white-space:nowrap'><strong>{rotulo}:</strong> {valor}</span>" for rotulo, valor in campos)
+    st.markdown(
+        "<div style='display:flex; flex-wrap:wrap; justify-content:space-between; "
+        f"align-items:center; gap:8px 12px; padding-bottom:12px; font-size:0.9rem'>{itens}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def _guias_para_df(guias: list) -> pd.DataFrame:
     """Converte o retorno do Supabase pro formato esperado por
     consolidar_por_guia/marcar_amostra (Especialidade, CD_PROCEDIMENTO,
@@ -623,13 +635,31 @@ with aba_busca:
     total_guias_exibir = qt_guias_rel if qt_guias_rel is not None else total_guias_processo
     texto_total_guias = str(total_guias_exibir) if total_guias_exibir is not None else "—"
 
+    texto_pct_bio = (
+        f"{procs_com_biometria / total_procs_bio * 100:.1f}%".replace(".", ",")
+        if total_procs_bio else "—"
+    )
+    campos_biometria = [
+        ("%Biom", texto_pct_bio),
+        ("Proceds", str(total_procs_bio)),
+        ("Proceds s/ biom", str(total_procs_bio - procs_com_biometria)),
+    ]
+
     texto_risco_prestador = None
     prestador_ativo = None
 
     with st.container(border=True):
         col_proc, col_integral = st.columns([3, 2])
         with col_proc:
-            renderizar_botao_copiar_processo(processo_ativo)
+            # Cluster de município (A/B/C/D, planilha do BI) -- cruza pelo
+            # par cidade/UF do REL5201 (ver core/cluster_municipios.py). "—"
+            # se o REL5201 não trouxer cidade/UF ou o município não estiver
+            # na planilha de clusterização importada.
+            cluster_texto = None
+            if info_status is not None:
+                info_cluster = cluster_do_processo(info_status.get("cidade"), info_status.get("uf"))
+                cluster_texto = info_cluster["cluster"] if info_cluster else "—"
+            renderizar_botao_copiar_processo(processo_ativo, cluster=cluster_texto)
         with col_integral:
             if analise_integral:
                 st.error("PRESTADOR PAR", icon="🔎")
@@ -675,11 +705,6 @@ with aba_busca:
                         else:
                             st.error("Erro ao marcar status.")
 
-        st.caption(
-            f"Procedimentos: {total_procs_bio} no total — {procs_com_biometria} com biometria, "
-            f"{total_procs_bio - procs_com_biometria} sem biometria"
-        )
-
         if analise_integral:
             st.caption(
                 f"{len(guias)} item(ns) sem liberação + {len(guias_liberadas)} já liberado(s) pela IA "
@@ -700,33 +725,19 @@ with aba_busca:
 
         if info_status is None:
             st.caption("Processo não encontrado no último relatório REL5201 importado (aba Produtividade).")
+            renderizar_linha_campos(campos_biometria)
         else:
-            col_status, col_auditor, col_tipo, col_pct, col_cluster = st.columns(5)
-
             cor_status = STATUS_CORES.get(info_status["status"], STATUS_CORES["_outro"])
-            with col_status:
-                st.markdown(
-                    f"**Status:** {pilula(info_status['status_label'], cor_texto=cor_status)}",
-                    unsafe_allow_html=True,
-                )
-            with col_auditor:
-                auditor_texto = info_status["auditor"] or "—"
-                desde = f" (desde {info_status['data_fmt']})" if info_status["data_fmt"] else ""
-                st.markdown(f"**Auditor:** {auditor_texto}{desde}")
-            with col_tipo:
-                st.markdown(f"**Tipo de processo:** {info_status.get('execucao') or '—'}")
-            with col_pct:
-                pct_ia = info_status.get("pct_liberacao_ia")
-                texto_pct = f"{pct_ia}%".replace(".", ",") if pct_ia is not None else "—"
-                st.markdown(f"**Porcentagem de IA:** {texto_pct}")
-            with col_cluster:
-                # Cluster de município (A/B/C/D, planilha do BI) -- cruza
-                # pelo par cidade/UF do REL5201 (ver
-                # core/cluster_municipios.py). "—" tanto se o REL5201 não
-                # trouxer cidade/UF quanto se o município não estiver na
-                # planilha de clusterização importada.
-                info_cluster = cluster_do_processo(info_status.get("cidade"), info_status.get("uf"))
-                st.markdown(f"**Cluster:** {info_cluster['cluster'] if info_cluster else '—'}")
+            auditor_texto = info_status["auditor"] or "—"
+            desde = f" (desde {info_status['data_fmt']})" if info_status["data_fmt"] else ""
+            pct_ia = info_status.get("pct_liberacao_ia")
+            texto_pct = f"{pct_ia}%".replace(".", ",") if pct_ia is not None else "—"
+            renderizar_linha_campos([
+                ("Status", pilula(html.escape(str(info_status["status_label"])), cor_texto=cor_status)),
+                ("Auditor", html.escape(f"{auditor_texto}{desde}")),
+                ("Tipo", html.escape(str(info_status.get("execucao") or "—"))),
+                ("%IA", html.escape(texto_pct)),
+            ] + campos_biometria)
 
             if info_status["situacao"] == "em_analise":
                 st.caption("⚠️ Confira antes de duplicar o trabalho — processo já em análise.")

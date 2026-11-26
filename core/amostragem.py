@@ -1566,12 +1566,17 @@ def renderizar_tabela_guias(df_guias: pd.DataFrame, titulo_descritivo: str, obje
     components.html(html_tabela, height=min(altura, 540), scrolling=True)
 
 
-def renderizar_botao_copiar_processo(processo) -> None:
+def renderizar_botao_copiar_processo(processo, cluster: str | None = None) -> None:
     """Botão "Processo: X" que copia o número ao clicar -- mesmo padrão dos
     botões de NU_GUIA em renderizar_tabela_guias, só que sem o rastreio de
     "vista" (não se aplica ao processo em si). Existe porque é fácil perder
-    o número do processo ao trocar de tela/copiar outra coisa por cima."""
+    o número do processo ao trocar de tela/copiar outra coisa por cima.
+    `cluster`, se informado, aparece ao lado do botão."""
     processo_esc = html.escape(str(processo))
+    html_cluster = (
+        f'<span class="cluster-processo"><b>Cluster:</b> {html.escape(str(cluster))}</span>'
+        if cluster is not None else ""
+    )
     html_botao = f"""
     <style>
         body {{
@@ -1580,6 +1585,7 @@ def renderizar_botao_copiar_processo(processo) -> None:
             display: flex; align-items: center;
         }}
         .rotulo-processo {{ font-weight: 600; margin-right: 8px; }}
+        .cluster-processo {{ margin-left: 24px; }}
         .copy-btn-processo {{
             background: transparent;
             border: 1px solid rgba(125,125,125,0.5);
@@ -1600,6 +1606,7 @@ def renderizar_botao_copiar_processo(processo) -> None:
     </style>
     <span class="rotulo-processo">Processo:</span>
     <button class="copy-btn-processo" id="btn-processo" title="Clique para copiar">{processo_esc}</button>
+    {html_cluster}
     <script>
         document.getElementById('btn-processo').addEventListener('click', () => {{
             navigator.clipboard.writeText('{processo_esc}').then(() => {{
